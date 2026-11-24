@@ -1227,6 +1227,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     private async Task DisposeDebuggingAsync()
     {
         await Debugger.DisposeAsync().ConfigureAwait(false);
+        DebugSessions?.Dispose();
         if (DebugEdits is not null)
         {
             await DebugEdits.DisposeAsync().ConfigureAwait(false);

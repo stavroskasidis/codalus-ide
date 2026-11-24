@@ -321,6 +321,51 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     [Fact]
+    public async Task A_launch_the_codalus_debugger_timed_out_on_starts_again()
+    {
+        // A review of 1.0 on macOS: "the first time I tried this I got a crash". The Codalus debugger gives a launched
+        // program's runtime 30 seconds, then ends it and fails the launch, and the session ended there: the first start
+        // of a program just built (scanned by macOS, in a VM) can take longer, and the next is quick. Its code now starts
+        // the session again, saying why, as netcoredbg's timeout does.
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        var done = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        debug.Ended += (_, code) => done.TrySetResult(code);
+        var launch = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["failStarts"] = 2, ["startsFile"] = _starts, ["clrStartTimesOut"] = true });
+
+        await debug.LaunchAdapterAsync("Scripted", Adapter(), launch, Timeout());
+
+        Assert.Equal(7, await done.Task.WaitAsync(Timeout()));
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.Equal(2, text.Split("program's .NET runtime didn't start in 30 seconds").Length - 1);
+        Assert.Contains("starting again (2 of 3)", text, StringComparison.Ordinal);
+        Assert.Contains("starting again (3 of 3)", text, StringComparison.Ordinal);
+        Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
+        Assert.Equal("2", File.ReadAllText(_starts));
+        Assert.Equal(DebugState.Idle, debug.State);
+    }
+
+    [Fact]
+    public async Task A_launch_the_codalus_debugger_timed_out_on_every_time_fails_with_its_reason()
+    {
+        await using var debug = new DebugService(() => null);
+        var launch = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["failStarts"] = DebugService.StartupAttempts, ["startsFile"] = _starts, ["clrStartTimesOut"] = true });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAdapterAsync("Scripted", Adapter(), launch, Timeout()));
+
+        Assert.Contains("program's .NET runtime didn't start in 30 seconds", error.Message, StringComparison.Ordinal);
+        Assert.True(DebugAdapter.IsClrStartTimeout(error.InnerException!));
+        Assert.Equal(DebugService.StartupAttempts.ToString(System.Globalization.CultureInfo.InvariantCulture), File.ReadAllText(_starts));
+        Assert.Equal(DebugState.Idle, debug.State);
+    }
+
+    [Fact]
     public void The_check_for_programs_left_running_tells_a_program_from_another_process_with_its_id()
     {
         // Windows CI, run 43706913240: the check found a process by the id of a program the scripted adapter had killed,

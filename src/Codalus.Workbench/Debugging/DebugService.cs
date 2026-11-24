@@ -49,7 +49,18 @@ public interface IStopExplainer
 public sealed record DebugModule(string Id, string Name, string? Path, string? SymbolStatus, bool? IsOptimized, bool? IsUserCode, int Order);
 
 /// <summary>A line of debugger output: <see cref="Category"/> is <c>stdout</c>, <c>stderr</c>, <c>console</c> (the debugger's own) or <c>important</c>.</summary>
-public sealed record DebugOutput(string Category, string Text);
+public sealed record DebugOutput(string Category, string Text)
+{
+    /// <summary>
+    /// The debugger's own account of the session (its adapter's log, its starts, what failed, why it ended), which a
+    /// session's log keeps (<see cref="DebugSessionLog"/>); not the program's output, a logpoint's message or what the
+    /// program writes to the debugger, which may hold its data.
+    /// </summary>
+    public bool IsDiagnostic { get; init; }
+
+    /// <summary>A <c>console</c> line of the debugger's own (<see cref="IsDiagnostic"/>).</summary>
+    public static DebugOutput Diagnostic(string text) => new("console", text) { IsDiagnostic = true };
+}
 
 /// <summary>
 /// Debug sessions on netcoredbg (ADR 0007): launch or attach, breakpoints (with client-side hit counts and logpoints),
@@ -306,7 +317,7 @@ public sealed class DebugService : IAsyncDisposable
         AnnounceAdapter(reason);
         if (reason is null && RunsAsX64OnAppleSilicon(plan) && plan.StartsWithoutStartupHooks)
         {
-            Output?.Invoke(this, new DebugOutput("console", NoStartupHooksNote));
+            Output?.Invoke(this, DebugOutput.Diagnostic(NoStartupHooksNote));
         }
 
         return reason is null;
@@ -350,7 +361,7 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>The Debug Console's first line under the Codalus debugger: the adapter, or why it isn't (M54).</summary>
     private void AnnounceAdapter(string? fallback) =>
-        Output?.Invoke(this, new DebugOutput("console", fallback is null
+        Output?.Invoke(this, DebugOutput.Diagnostic(fallback is null
             ? "Debugging with the Codalus debugger.\n"
             : $"Debugging with netcoredbg: {fallback}, which the Codalus debugger doesn't debug yet.\n"));
 
@@ -520,6 +531,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>The session ended (the exit code when the program exited).</summary>
     public event EventHandler<int?>? Ended;
 
+    /// <summary>A session's start failed, with why (what the start then throws): its log says so (<see cref="DebugSessionLog"/>).</summary>
+    public event EventHandler<string>? StartFailed;
+
     // ------------------------------------------------------------------ start and stop
 
     /// <summary>
@@ -600,7 +614,7 @@ public sealed class DebugService : IAsyncDisposable
             catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
             {
                 UpdateProcess(part.Index, p => p with { Ended = true });
-                Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
+                Output?.Invoke(this, DebugOutput.Diagnostic($"[{part.Name}] Could not start: {ex.Message}\n"));
             }
         }
     }
@@ -698,7 +712,7 @@ public sealed class DebugService : IAsyncDisposable
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
         {
             UpdateProcess(part.Index, p => p with { Ended = true });
-            Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"[{part.Name}] Could not start: {ex.Message}\n"));
             return false;
         }
     }
@@ -757,7 +771,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         UpdateProcess(part.Index, p => p with { Id = null });
-        Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] {StartingAgain(attempt)}"));
+        Output?.Invoke(this, DebugOutput.Diagnostic($"[{part.Name}] {StartingAgain(attempt)}"));
         return true;
     }
 
@@ -770,7 +784,7 @@ public sealed class DebugService : IAsyncDisposable
             var window = launch.Console == DebugConsoleKind.Window;
             if (launch.Console == DebugConsoleKind.Terminal)
             {
-                Output?.Invoke(this, new DebugOutput("console", "The integrated terminal isn't available for .NET Framework programs under the debugger: the program's console is the Debug Console.\n"));
+                Output?.Invoke(this, DebugOutput.Diagnostic("The integrated terminal isn't available for .NET Framework programs under the debugger: the program's console is the Debug Console.\n"));
             }
 
             return new LaunchPart(
@@ -807,7 +821,7 @@ public sealed class DebugService : IAsyncDisposable
             };
             if (launch.Console is DebugConsoleKind.Terminal or DebugConsoleKind.Window && console is null)
             {
-                Output?.Invoke(this, new DebugOutput("console", (inWindow ? "A console window" : "The integrated terminal") + " isn't available here: the program's console is the Debug Console.\n"));
+                Output?.Invoke(this, DebugOutput.Diagnostic((inWindow ? "A console window" : "The integrated terminal") + " isn't available here: the program's console is the Debug Console.\n"));
             }
 
             return new LaunchPart(
@@ -873,7 +887,7 @@ public sealed class DebugService : IAsyncDisposable
                     });
             }
 
-            Output?.Invoke(this, new DebugOutput("console", (window ? "A console window" : "The integrated terminal") + " isn't available here: the program's console is the Debug Console.\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic((window ? "A console window" : "The integrated terminal") + " isn't available here: the program's console is the Debug Console.\n"));
         }
 
         return new LaunchPart(
@@ -929,7 +943,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (TimeoutException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"{name} didn't load within {timeout.TotalSeconds:0} seconds; the program goes on, and early breakpoints may be missed.\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"{name} didn't load within {timeout.TotalSeconds:0} seconds; the program goes on, and early breakpoints may be missed.\n"));
         }
         finally
         {
@@ -997,7 +1011,7 @@ public sealed class DebugService : IAsyncDisposable
         if (watch.Elapsed > TimeSpan.FromSeconds(2))
         {
             // Where a release that waited went (dotnet watch's restart followed late, or never: CI run 40920415026).
-            Output?.Invoke(this, new DebugOutput("console", string.Create(CultureInfo.InvariantCulture,
+            Output?.Invoke(this, DebugOutput.Diagnostic(string.Create(CultureInfo.InvariantCulture,
                 $"Releasing the server took {watch.Elapsed.TotalSeconds:0.0} s: preparing {prepared.TotalSeconds:0.0} s, detaching {(detached - prepared).TotalSeconds:0.0} s, ending the session {(watch.Elapsed - detached).TotalSeconds:0.0} s.\n")));
         }
     }
@@ -1242,7 +1256,7 @@ public sealed class DebugService : IAsyncDisposable
                 return;
             }
 
-            Output?.Invoke(this, new DebugOutput("console", StartingAgain(attempt)));
+            Output?.Invoke(this, DebugOutput.Diagnostic(StartingAgain(attempt)));
         }
     }
 
@@ -1267,10 +1281,15 @@ public sealed class DebugService : IAsyncDisposable
     /// 5-second answer is: nothing here waits for its program, so after the command timeout a start made again would
     /// leave behind there the program netcoredbg is still starting, and wait out the 15 seconds again each time.
     /// </para>
+    /// <para>
+    /// The Codalus debugger's launch that ran past one of its 30-second start limits (<see cref="DebugAdapter.IsClrStartTimeout"/>)
+    /// starts again too: it ended the program itself. A program's first start after its build can be that slow (on
+    /// macOS, the first launch of a new executable is scanned; a review of 1.0 met it in a VM), and the next is quick.
+    /// </para>
     /// </summary>
     /// <param name="local">The adapter runs on this machine (<see cref="LocalAdapter"/>).</param>
     internal static bool IsStartupTimeout(Exception ex, bool local) =>
-        DebugAdapter.IsStartupTimeout(ex) && (local || !DebugAdapter.IsCommandTimeout(ex));
+        (DebugAdapter.IsStartupTimeout(ex) && (local || !DebugAdapter.IsCommandTimeout(ex))) || DebugAdapter.IsClrStartTimeout(ex);
 
     /// <summary>
     /// One start of the session: the adapter, the launch or attach, the configuration. False when netcoredbg timed out
@@ -1298,7 +1317,7 @@ public sealed class DebugService : IAsyncDisposable
             // session ran to its end, Linux CI run 41641994303).
             var started = adapter;
             adapter.EventReceived += e => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(e, started);
-            adapter.Log += (_, line) => Output?.Invoke(this, new DebugOutput("console", line + "\n"));
+            adapter.Log += (_, line) => Output?.Invoke(this, DebugOutput.Diagnostic(line + "\n"));
             _adapter = adapter;
             _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(started), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
 
@@ -1342,12 +1361,19 @@ public sealed class DebugService : IAsyncDisposable
         {
             // Its events and its end are no longer the session's: the next attempt's adapter takes over.
             Volatile.Write(ref abandoned.Value, true);
+            if (DebugAdapter.IsClrStartTimeout(ex))
+            {
+                // The Codalus debugger ended the program and says which limit it ran past (netcoredbg's answer says nothing).
+                Output?.Invoke(this, DebugOutput.Diagnostic(ex.Message + "\n"));
+            }
+
             _ = launching?.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             await AbandonAttemptAsync(adapter, attached, processes).ConfigureAwait(false);
             return false;
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
+            StartFailed?.Invoke(this, ex is DapException dap ? $"{dap.Command}: {dap.Message}" : $"{ex.GetType().Name}: {ex.Message}");
             if (adapter is not null)
             {
                 if (attached || !IsStartupTimeout(ex, LocalAdapter(adapter) is not null) || !KillWithProgram(adapter))
@@ -1511,11 +1537,11 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
-        Output?.Invoke(this, new DebugOutput("console", $"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) was still running 5 s after the debugger ended it: it is ended with the processes it started.\n"));
+        Output?.Invoke(this, DebugOutput.Diagnostic($"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) was still running 5 s after the debugger ended it: it is ended with the processes it started.\n"));
         KillProgram(processId);
         if (!await EndedWithinAsync(processId, TimeSpan.FromSeconds(10)).ConfigureAwait(false))
         {
-            Output?.Invoke(this, new DebugOutput("console", $"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) is still running.\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) is still running.\n"));
         }
     }
 
@@ -1569,7 +1595,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Preparing the detach: {ex.Message} (after {clock.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s)\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Preparing the detach: {ex.Message} (after {clock.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s)\n"));
         }
     }
 
@@ -1670,7 +1696,7 @@ public sealed class DebugService : IAsyncDisposable
         // its process before it had sent them (fixed: DapServer.SendEndAsync); TODO(issue): why netcoredbg did.
         if (!_exitReported && !_stopRequested && !_attached)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"The debugger ended the session without reporting the program's exit code{(adapter.Closed.IsCompleted ? ", its connection closed" : string.Empty)} ({adapter.Describe()}).\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"The debugger ended the session without reporting the program's exit code{(adapter.Closed.IsCompleted ? ", its connection closed" : string.Empty)} ({adapter.Describe()}).\n"));
         }
 
         await _session.CancelAsync().ConfigureAwait(false);
@@ -1678,7 +1704,7 @@ public sealed class DebugService : IAsyncDisposable
         foreach (var breakpoint in Breakpoints.All.Where(b => b.Enabled && Breakpoints.StateOf(b) is { Verified: false }))
         {
             var message = Breakpoints.StateOf(breakpoint)?.Message;
-            Output?.Invoke(this, new DebugOutput("console", $"The breakpoint at {breakpoint.Path}, line {breakpoint.Line.ToString(CultureInfo.InvariantCulture)} was never bound{(message is null ? "." : ": " + message)}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"The breakpoint at {breakpoint.Path}, line {breakpoint.Line.ToString(CultureInfo.InvariantCulture)} was never bound{(message is null ? "." : ": " + message)}\n"));
         }
 
         CurrentStop = null;
@@ -1843,7 +1869,7 @@ public sealed class DebugService : IAsyncDisposable
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
             _runTo = null;
-            Output?.Invoke(this, new DebugOutput("console", $"Run to Cursor failed: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Run to Cursor failed: {ex.Message}\n"));
             return;
         }
 
@@ -1866,7 +1892,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Breakpoints could not be set: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Breakpoints could not be set: {ex.Message}\n"));
         }
     }
 
@@ -2434,7 +2460,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Exception settings could not be applied: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Exception settings could not be applied: {ex.Message}\n"));
         }
     }
 
@@ -2456,7 +2482,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Breakpoints could not be set: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Breakpoints could not be set: {ex.Message}\n"));
         }
     }
 
@@ -2531,7 +2557,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Function breakpoints could not be set: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Function breakpoints could not be set: {ex.Message}\n"));
         }
     }
 
@@ -2580,7 +2606,7 @@ public sealed class DebugService : IAsyncDisposable
                 _exitCode = exited.ExitCode;
                 _exitReported = true;
                 var program = _adapter is CompoundDebugAdapter { Independent: true } programs ? $"[{programs.PartNames[0]}] " : string.Empty;
-                Output?.Invoke(this, new DebugOutput("console", $"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
+                Output?.Invoke(this, DebugOutput.Diagnostic($"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
                 break;
             case DapEvents.Terminated:
                 _ = Task.Run(() => EndAsync(source));
@@ -2714,7 +2740,7 @@ public sealed class DebugService : IAsyncDisposable
             Threads = await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false);
             if (frames.Length == 0 && stopped.Reason == "pause")
             {
-                Output?.Invoke(this, new DebugOutput("console", $"Paused in external code: none of the program's {Threads.Count.ToString(CultureInfo.InvariantCulture)} threads is running .NET code (it may still be starting, or be running only native code). Continue, and Break All again to see its code.\n"));
+                Output?.Invoke(this, DebugOutput.Diagnostic($"Paused in external code: none of the program's {Threads.Count.ToString(CultureInfo.InvariantCulture)} threads is running .NET code (it may still be starting, or be running only native code). Continue, and Break All again to see its code.\n"));
             }
 
             SelectedThreadId = threadId;
@@ -2729,7 +2755,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Could not read the stopped program's state: {ex.Message}\n"));
+            Output?.Invoke(this, DebugOutput.Diagnostic($"Could not read the stopped program's state: {ex.Message}\n"));
         }
     }
 

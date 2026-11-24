@@ -249,7 +249,9 @@ Where netcoredbg still debugs, and the Debug Console says why:
 - on Apple silicon, the **x64 build**, for programs that run as x64 under Rosetta 2 (.NET 5 and earlier);
 - on Windows, the **32-bit build**, for .NET Framework programs built for x86 or with `Prefer32Bit` ([.NET Framework](net-framework.md#debugging-on-windows)).
 
-If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder: each session writes its log there, to attach to a report.
+**A slow start starts again.** The Codalus debugger gives a program 30 seconds to start and its .NET runtime 30 seconds to report. The first start of a program you've just built can be slower than that, mostly on macOS, which checks a new executable the first time it runs, and in a virtual machine. When it is, the debugger ends the program, and the Debug Console says which limit it ran past and that the session is starting again (up to 3 tries). The next start is usually quick.
+
+**Each session's log is kept.** The debugger's own messages of the last 10 sessions are saved in the `debugger` folder under the logs folder ([Troubleshooting](troubleshooting.md)), each with the time since the session began: the steps of its start, what it ran into and why it ended. They don't hold your program's output or its variables. Report a Problem attaches the end of the latest one. For the debugger's whole exchange with the IDE, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder: each session writes its full log there, to attach to a report.
 
 ### Expressions
 
