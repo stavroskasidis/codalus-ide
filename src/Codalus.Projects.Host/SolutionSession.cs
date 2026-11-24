@@ -516,10 +516,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     }
 
     /// <summary>The project configuration the active solution configuration maps to (MSBuild spells "Any CPU" "AnyCPU").</summary>
-    private (string Configuration, string Platform) ProjectConfiguration(string projectPath)
+    private (string Configuration, string Platform) ProjectConfiguration(string projectPath) => ProjectConfiguration(projectPath, null);
+
+    /// <summary>As <see cref="ProjectConfiguration(string)"/>, the solution's projects looked up in <paramref name="solutionProjects"/> (<see cref="SolutionProjectsByPath"/>).</summary>
+    private (string Configuration, string Platform) ProjectConfiguration(string projectPath, IReadOnlyDictionary<string, SolutionProjectModel>? solutionProjects)
     {
         var (configuration, platform) = (Active.Configuration, Active.Platform);
-        if (_model?.SolutionProjects.FirstOrDefault(p => s_pathComparer.Equals(Full(System.IO.Path.GetDirectoryName(Path)!, p.FilePath), projectPath)) is { } project)
+        var project = solutionProjects is not null
+            ? solutionProjects.GetValueOrDefault(projectPath)
+            : _model?.SolutionProjects.FirstOrDefault(p => s_pathComparer.Equals(Full(System.IO.Path.GetDirectoryName(Path)!, p.FilePath), projectPath));
+        if (project is not null)
         {
             var mapped = project.GetProjectConfiguration(Active.Configuration, Active.Platform);
             configuration = mapped.Item1 ?? configuration;
@@ -527,6 +533,19 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
 
         return (configuration, platform.Replace(" ", string.Empty, StringComparison.Ordinal));
+    }
+
+    /// <summary>The solution's projects by full path, for one batch's lookups (the first of a path, as the list's search finds).</summary>
+    private Dictionary<string, SolutionProjectModel> SolutionProjectsByPath()
+    {
+        var map = new Dictionary<string, SolutionProjectModel>(s_pathComparer);
+        var directory = System.IO.Path.GetDirectoryName(Path)!;
+        foreach (var project in _model?.SolutionProjects ?? [])
+        {
+            map.TryAdd(Full(directory, project.FilePath), project);
+        }
+
+        return map;
     }
 
     /// <summary>
@@ -603,6 +622,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             _forcedDesignTime.ExceptWith(forced);
         }
 
+        // Once for the batch: the solution's projects by path (each project's configuration looked up the whole list),
+        // and the files outside the solution its cached command lines name (every project's reference packs).
+        var solutionProjects = SolutionProjectsByPath();
+        var outside = new ExistenceMemo();
         foreach (var path in batch)
         {
             if (!_evaluated.TryGetValue(path, out var project) || project.Info.State != ProjectStates.Loaded)
@@ -613,7 +636,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             var frameworks = project.Info.TargetFrameworks;
             var framework = frameworks.Length <= 1 ? null
                 : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
-            var (configuration, platform) = ProjectConfiguration(path);
+            var (configuration, platform) = ProjectConfiguration(path, solutionProjects);
 
             // The assets file this batch's result is known to come from: the evaluation's, which its cache key holds. The
             // file's date now, newer once a restore wrote it before its evaluation was done, said a result taken from the
@@ -630,7 +653,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 {
                     misses.Add($"{System.IO.Path.GetFileName(path)}: asked for");
                 }
-                else if (DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory, out var miss) is { } hit)
+                else if (DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory, outside, out var miss) is { } hit)
                 {
                     cached.Add(hit);
                     continue;

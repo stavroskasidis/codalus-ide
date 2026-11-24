@@ -57,7 +57,14 @@ internal static class DesignTimeCache
         TryRead(directory, entry, key, solutionDirectory, out _);
 
     /// <summary>As <see cref="TryRead(string?, string, string, string)"/>; <paramref name="miss"/> says why there was no hit.</summary>
-    public static CompilerInputsInfo? TryRead(string? directory, string entry, string key, string solutionDirectory, out string? miss)
+    public static CompilerInputsInfo? TryRead(string? directory, string entry, string key, string solutionDirectory, out string? miss) =>
+        TryRead(directory, entry, key, solutionDirectory, null, out miss);
+
+    /// <summary>
+    /// As <see cref="TryRead(string?, string, string, string, out string?)"/>, the files outside the solution checked
+    /// once for a batch of projects through <paramref name="outside"/>: every project names the same reference packs.
+    /// </summary>
+    public static CompilerInputsInfo? TryRead(string? directory, string entry, string key, string solutionDirectory, ExistenceMemo? outside, out string? miss)
     {
         miss = null;
         if (!Enabled)
@@ -76,7 +83,7 @@ internal static class DesignTimeCache
         {
             miss = "inputs changed";
         }
-        else if (MissingInput(cached.Inputs, solutionDirectory) is { } missing)
+        else if (MissingInput(cached.Inputs, solutionDirectory, outside) is { } missing)
         {
             miss = "missing " + missing;
         }
@@ -118,7 +125,8 @@ internal static class DesignTimeCache
     {
         try
         {
-            return File.Exists(path) && JsonSerializer.Deserialize(File.ReadAllText(path), DesignTimeCacheJsonContext.Default.DesignTimeCacheFile) is { Schema: Schema } file
+            // The UTF-8 bytes as they are, not transcoded to a string first: a project's file holds every entry's command line.
+            return File.Exists(path) && JsonSerializer.Deserialize(File.ReadAllBytes(path), DesignTimeCacheJsonContext.Default.DesignTimeCacheFile) is { Schema: Schema } file
                 ? file
                 : null;
         }
@@ -162,17 +170,21 @@ internal static class DesignTimeCache
     }
 
     /// <summary>The first file of <see cref="InputsExist"/> that is missing, or null.</summary>
-    private static string? MissingInput(CompilerInputsInfo inputs, string solutionDirectory)
+    private static string? MissingInput(CompilerInputsInfo inputs, string solutionDirectory, ExistenceMemo? outside = null)
     {
         var directory = Path.GetDirectoryName(inputs.Path)!;
+        var root = Path.TrimEndingDirectorySeparator(solutionDirectory) + Path.DirectorySeparatorChar;
         string Full(string path) => Path.GetFullPath(Path.Combine(directory, path.Trim('"')));
-        bool Under(string path, string folder) => path.StartsWith(Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        bool Under(string path) => path.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+
+        // The solution's own files are checked each time (a build writes them); files outside it once per batch.
+        bool Exists(string path) => outside is not null && !Under(path) ? outside.Exists(path) : File.Exists(path);
         foreach (var argument in inputs.Arguments)
         {
             if (Option(argument) is { } option)
             {
                 var (name, value) = option;
-                if (name is "analyzer" or "a" && List(value).Select(Full).FirstOrDefault(f => !File.Exists(f)) is { } analyzer)
+                if (name is "analyzer" or "a" && List(value).Select(Full).FirstOrDefault(f => !Exists(f)) is { } analyzer)
                 {
                     return analyzer;
                 }
@@ -182,16 +194,16 @@ internal static class DesignTimeCache
                     foreach (var reference in List(value))
                     {
                         var file = Full(reference[(reference.IndexOf('=', StringComparison.Ordinal) + 1)..]);
-                        if (!Under(file, solutionDirectory) && !File.Exists(file))
+                        if (!Under(file) && !Exists(file))
                         {
                             return file;
                         }
                     }
                 }
             }
-            else if (!File.Exists(Full(argument)))
+            else if (Full(argument) is var source && !Exists(source))
             {
-                return Full(argument);
+                return source;
             }
         }
 
@@ -226,3 +238,14 @@ internal sealed record DesignTimeCacheEntry(string Key, CompilerInputsInfo Input
 [JsonSerializable(typeof(DesignTimeCacheFile))]
 [JsonSourceGenerationOptions(WriteIndented = false)]
 internal sealed partial class DesignTimeCacheJsonContext : JsonSerializerContext;
+
+/// <summary>
+/// Whether files exist, each asked once: one batch of design-time cache reads, whose projects name the same reference
+/// packs and packages. Made per batch, so a restore or a cleaned package folder between batches is seen.
+/// </summary>
+internal sealed class ExistenceMemo
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _known = new(StringComparer.Ordinal);
+
+    public bool Exists(string path) => _known.GetOrAdd(path, File.Exists);
+}
