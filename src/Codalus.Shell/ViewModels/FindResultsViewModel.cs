@@ -837,26 +837,23 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
                         continue;
                     }
 
-                    if (text.Contains('\0', StringComparison.Ordinal))
+                    if (text.Contains('\0', StringComparison.Ordinal) || !MayMatch(regex, text, options.UseRegex))
                     {
-                        continue; // binary
+                        continue; // binary, or the text doesn't hold the words
                     }
 
                     var found = false;
-                    var lineNumber = 0;
-                    foreach (var line in text.Split('\n'))
+                    ForEachLine(text, (lineNumber, line) =>
                     {
-                        lineNumber++;
-                        if (MatchLine(file, lineNumber, line.TrimEnd('\r'), regex) is { } row)
+                        if (!regex.IsMatch(line) || MatchLine(file, lineNumber + 1, line.ToString(), regex) is not { } row)
                         {
-                            batch.Add(row);
-                            found = true;
-                            if (++lines >= MaxMatches)
-                            {
-                                break;
-                            }
+                            return true;
                         }
-                    }
+
+                        batch.Add(row);
+                        found = true;
+                        return ++lines < MaxMatches;
+                    });
 
                     if (found)
                     {
@@ -906,19 +903,58 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         BaseSummary = $"Occurrences replaced: {occurrences}    Changed lines: {rows.Count}    Files changed: {files}";
     }
 
+    /// <summary>A line of a text: its zero-based index and its characters without the line break (<c>\r\n</c> or <c>\n</c>).</summary>
+    internal delegate bool LineVisitor(int index, ReadOnlySpan<char> line);
+
+    /// <summary>
+    /// Visits the lines of <paramref name="text"/> as <c>Split('\n')</c> numbers them (a trailing newline ends with an
+    /// empty line), each without its trailing <c>\r</c>s, until <paramref name="visit"/> returns false; no string per line.
+    /// </summary>
+    internal static void ForEachLine(string text, LineVisitor visit)
+    {
+        var start = 0;
+        for (var index = 0; ; index++)
+        {
+            var newline = text.IndexOf('\n', start);
+            var end = newline < 0 ? text.Length : newline;
+            if (!visit(index, text.AsSpan(start, end - start).TrimEnd('\r')) || newline < 0)
+            {
+                return;
+            }
+
+            start = newline + 1;
+        }
+    }
+
+    /// <summary>
+    /// Whether a file's text may hold a match, asked once of the whole text for a search of words (no regular
+    /// expression, which may span lines where the line-by-line search wouldn't): most files of a search don't.
+    /// </summary>
+    internal static bool MayMatch(Regex regex, string text, bool isRegex)
+    {
+        if (isRegex)
+        {
+            return true;
+        }
+
+        try
+        {
+            return regex.IsMatch(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return true; // a whole file over the per-line limit: searched line by line
+        }
+    }
+
     /// <summary>A row for <paramref name="line"/> when it matches: its trimmed text with every match highlighted.</summary>
     internal static FindResultRow? MatchLine(string path, int lineNumber, string line, Regex regex)
     {
         Match? first = null;
-        var highlights = new List<int>();
+        List<int>? highlights = null;
         const int MaxShown = 400;
-        var indent = line.Length - line.TrimStart().Length;
-        var shown = line.Trim();
-        if (shown.Length > MaxShown)
-        {
-            shown = shown[..MaxShown] + "…";
-        }
-
+        var indent = 0;
+        var shown = string.Empty;
         foreach (Match match in regex.Matches(line))
         {
             if (match.Length == 0)
@@ -926,10 +962,21 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
                 continue; // an empty match (^, \b…) finds nothing to show
             }
 
-            first ??= match;
+            if (first is null)
+            {
+                first = match;
+                highlights = [];
+                indent = line.Length - line.TrimStart().Length;
+                shown = line.Trim();
+                if (shown.Length > MaxShown)
+                {
+                    shown = shown[..MaxShown] + "…";
+                }
+            }
+
             for (var i = Math.Max(0, match.Index - indent); i < Math.Min(match.Index - indent + match.Length, Math.Min(shown.Length, MaxShown)); i++)
             {
-                highlights.Add(i);
+                highlights!.Add(i);
             }
         }
 
