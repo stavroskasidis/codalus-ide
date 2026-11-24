@@ -306,12 +306,66 @@ internal sealed class DiagnosticsService : IDisposable
     /// (its dependent version, references and the analysis scope), so the next pass skips it.
     /// </summary>
     private sealed record ProjectPass(
-        VersionStamp Version,
+        PassVersion Version,
         IReadOnlyList<MetadataReference> References,
         IReadOnlyList<AnalyzerReference> Analyzers,
         string Scope,
         int Documents,
-        IReadOnlyList<(string Path, Diagnostic[] Items)> Found);
+        IReadOnlyList<(string Path, Diagnostic[] Items)> Found)
+    {
+        /// <summary>What the project's source generators wrote, when it compiled in the pass and others reference it.</summary>
+        public string? Generated { get; init; }
+    }
+
+    /// <summary>
+    /// When a project's diagnostics are the same as in the last pass: its dependent version (anything below it changed,
+    /// method bodies included), or else its own version with the semantic versions of the projects it references. A
+    /// method body edited in a project changes neither for the projects above it: Roslyn's semantic version moves
+    /// only with what isn't in a member's body (declarations, constants, attributes), and its project's options.
+    /// </summary>
+    private sealed record PassVersion(VersionStamp Dependent, string Own);
+
+    private static async Task<PassVersion> VersionOfAsync(Project project, CancellationToken cancellationToken)
+    {
+        var own = new System.Text.StringBuilder()
+            .Append(project.Version).Append('|')
+            .Append(await project.GetLatestDocumentVersionAsync(cancellationToken).ConfigureAwait(false));
+        foreach (var config in project.AnalyzerConfigDocuments)
+        {
+            own.Append("|c").Append(await config.GetTextVersionAsync(cancellationToken).ConfigureAwait(false));
+        }
+
+        foreach (var reference in project.ProjectReferences.OrderBy(r => r.ProjectId.Id))
+        {
+            own.Append("|r").Append(reference.ProjectId.Id).Append(string.Join(',', reference.Aliases)).Append(reference.EmbedInteropTypes);
+            if (project.Solution.GetProject(reference.ProjectId) is { } below)
+            {
+                own.Append('=').Append(await below.GetDependentSemanticVersionAsync(cancellationToken).ConfigureAwait(false));
+            }
+        }
+
+        return new PassVersion(await project.GetDependentVersionAsync(cancellationToken).ConfigureAwait(false), own.ToString());
+    }
+
+    /// <summary>A digest of the documents a project's generators wrote (null without any).</summary>
+    private static async Task<string?> GeneratedOfAsync(Project project, CancellationToken cancellationToken)
+    {
+        var documents = await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false);
+        var hash = new System.HashCode();
+        var any = false;
+        foreach (var document in documents.OrderBy(d => d.HintName, StringComparer.Ordinal))
+        {
+            any = true;
+            hash.Add(document.HintName, StringComparer.Ordinal);
+            var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var b in text.GetChecksum())
+            {
+                hash.Add(b);
+            }
+        }
+
+        return any ? $"{documents.Count()}:{hash.ToHashCode()}" : null;
+    }
 
     private Dictionary<ProjectId, ProjectPass> _passes = [];
 
@@ -369,15 +423,24 @@ internal sealed class DiagnosticsService : IDisposable
         var hasDependents = solution.Projects.SelectMany(p => p.ProjectReferences).Select(r => r.ProjectId).ToHashSet();
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2), CancellationToken = cancellationToken };
         var results = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>();
-        var versions = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, VersionStamp>();
+        var versions = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, PassVersion>();
+
+        // Kept because only method bodies changed below them: checked again if a generator below wrote something else.
+        var bodiesBelow = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, byte>();
         await Parallel.ForEachAsync(projects, parallel, async (project, token) =>
         {
-            var version = versions[project.Id] = await project.GetDependentVersionAsync(token).ConfigureAwait(false);
+            var version = versions[project.Id] = await VersionOfAsync(project, token).ConfigureAwait(false);
             var scope = ScopeFor(project);
-            if (previous.TryGetValue(project.Id, out var cached) && cached.Version == version && cached.Scope == scope
+            if (previous.TryGetValue(project.Id, out var cached) && (cached.Version.Dependent == version.Dependent || cached.Version.Own == version.Own) && cached.Scope == scope
                 && cached.References.SequenceEqual(project.MetadataReferences) && cached.Analyzers.SequenceEqual(project.AnalyzerReferences))
             {
-                results[project.Id] = cached; // unchanged since the last pass, with everything it references
+                // Unchanged since the last pass, with everything it references, or what changed below were bodies.
+                if (cached.Version.Dependent != version.Dependent)
+                {
+                    bodiesBelow[project.Id] = 0;
+                }
+
+                results[project.Id] = cached with { Version = version };
                 Interlocked.Increment(ref reused);
                 return;
             }
@@ -420,7 +483,7 @@ internal sealed class DiagnosticsService : IDisposable
             timings.Add((project.Name, System.Diagnostics.Stopwatch.GetElapsedTime(compiling).TotalMilliseconds));
         }).ConfigureAwait(false);
 
-        await Parallel.ForEachAsync(toCompile, parallel, async (project, token) =>
+        async ValueTask AnalyzeAsync(Project project, CancellationToken token)
         {
             var version = versions[project.Id];
             if (await project.GetCompilationAsync(token).ConfigureAwait(false) is not { } compilation)
@@ -465,7 +528,10 @@ internal sealed class DiagnosticsService : IDisposable
                 }
             }
 
-            results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found);
+            results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found)
+            {
+                Generated = hasDependents.Contains(project.Id) ? await GeneratedOfAsync(project, token).ConfigureAwait(false) : null,
+            };
             if (!provisional.Contains(project.Id) && keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder)
             {
                 // For the next session (M34c): the diagnostics and, for a project others reference, its reference assembly.
@@ -473,7 +539,41 @@ internal sealed class DiagnosticsService : IDisposable
                 LanguageStateCache.Write(folder, new LanguageStateCache.Entry(LanguageStateCache.Schema, key, scope, project.DocumentIds.Count,
                     [.. found.Select(f => new LanguageStateCache.FileDiagnostics(f.Item1, f.Item2))]) { ReferenceKey = reference ? key : null, OwnKey = reference ? keys.OwnKey(project.Id) : null });
             }
-        }).ConfigureAwait(false);
+        }
+
+        await Parallel.ForEachAsync(toCompile, parallel, AnalyzeAsync).ConfigureAwait(false);
+
+        // A project kept because only bodies changed below it compiles after all where a generator below wrote
+        // something else: generated code (from a body, say) can change what the project sees.
+        if (!bodiesBelow.IsEmpty)
+        {
+            _log($"Solution diagnostics: {bodiesBelow.Count} project(s) kept, only method bodies changed below them.");
+            var generatorChanged = toCompile.Select(p => p.Id)
+                .Where(id => !(previous.TryGetValue(id, out var before) && results.TryGetValue(id, out var now) && before.Generated == now.Generated))
+                .ToHashSet();
+            if (generatorChanged.Count > 0)
+            {
+                var graph = solution.GetProjectDependencyGraph();
+                var again = bodiesBelow.Keys.Where(id => graph.GetProjectsThatThisProjectTransitivelyDependsOn(id).Overlaps(generatorChanged))
+                    .Select(analysis.GetProject).OfType<Project>().ToList();
+                if (again.Count > 0)
+                {
+                    reused -= again.Count;
+                    if (reusedImages.Count > 0)
+                    {
+                        provisional.UnionWith(again.Select(p => p.Id).Where(id => graph.GetProjectsThatThisProjectTransitivelyDependsOn(id).Overlaps(reusedImages)));
+                    }
+
+                    _log($"Solution diagnostics: {again.Count} of them compiled after all: a generator below them wrote something else.");
+                    toCompile.AddRange(again);
+                    await Parallel.ForEachAsync(again, parallel, async (project, token) =>
+                    {
+                        await project.GetCompilationAsync(token).ConfigureAwait(false);
+                        await AnalyzeAsync(project, token).ConfigureAwait(false);
+                    }).ConfigureAwait(false);
+                }
+            }
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
         var foundFiles = new Dictionary<string, Diagnostic[]>(Paths.Comparer);

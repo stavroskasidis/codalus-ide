@@ -155,6 +155,33 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_body_edited_below_keeps_the_projects_above_and_a_declaration_edited_compiles_them()
+    {
+        // Top divides by Base's constant minus one: 1 / (1 - 1) is an error (CS0020), 1 / (2 - 1) isn't.
+        const string limits = "namespace Base; public static class Limits { public const int Size = 1; public static int Twice(int x) { return x * 2; } }";
+        Write("Base/Limits.cs", limits);
+        Write("Top/Use.cs", "namespace Top; static class Use { const int Ratio = 1 / (Base.Limits.Size - 1); static void M() { int unused = 1; } }");
+        Directory.CreateDirectory(Path.Combine(_root, "Base", "obj"));
+        Directory.CreateDirectory(Path.Combine(_root, "Top", "obj"));
+        var source = Path.Combine(_root, "Base", "Limits.cs");
+        var use = Path.Combine(_root, "Top", "Use.cs");
+        await using var session = await SessionAsync(source, [Project("Base", ["Limits.cs"]), Project("Top", ["Use.cs"], ["Base"])]);
+        await session.ReadyAsync();
+        await LanguageFixture.WaitUntilAsync(() => session.Has(use, "CS0020"), TimeSpan.FromSeconds(60), () => Describe(session));
+
+        // A method body: Top keeps its diagnostics without compiling.
+        var uri = DocumentUris.FromPath(source);
+        await session.Client.DidChangeTextAsync(uri, 2, () => limits.Replace("return x * 2;", "return x + x;", StringComparison.Ordinal), Ct);
+        await LanguageFixture.WaitUntilAsync(() => session.Logged("1 project(s) kept, only method bodies changed below them."), TimeSpan.FromSeconds(60), () => Describe(session));
+        Assert.True(session.Has(use, "CS0020"));
+        Assert.True(session.Has(use, "CS0219"));
+
+        // A constant's value is a declaration: Top compiles again and the error goes.
+        await session.Client.DidChangeTextAsync(uri, 3, () => limits.Replace("Size = 1;", "Size = 2;", StringComparison.Ordinal).Replace("return x * 2;", "return x + x;", StringComparison.Ordinal), Ct);
+        await LanguageFixture.WaitUntilAsync(() => !session.Has(use, "CS0020") && session.Has(use, "CS0219"), TimeSpan.FromSeconds(60), () => Describe(session));
+    }
+
+    [Fact]
     public void CS4014_on_a_call_into_another_project_is_left_out_in_methods_that_are_not_async()
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
