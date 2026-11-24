@@ -218,6 +218,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     // The folder view (see LoadFoldersAsync): each listed folder's own listing, one level, by folder. The workspace folder
     // and the expanded folders are listed; a collapsed folder keeps its last listing until the workspace closes.
     private readonly Dictionary<string, FolderListing> _folders = new(SolutionService.PathComparer);
+
+    /// <summary>Changes with every write of <see cref="_folders"/>: the folder view's tree is built again only then.</summary>
+    private int _foldersVersion;
+
+    /// <summary>The folder view's last tree, with the solution, listings and language it was built from.</summary>
+    private (SolutionInfo Solution, int Folders, string Language, ExplorerNode Root)? _folderViewMemo;
     private readonly HashSet<string> _folderQueue = new(SolutionService.PathComparer);
     private HashSet<string>? _folderBatch; // the folders of the batch on its way: one at a time, the queue waits for it
     private int _folderGeneration; // the workspace closed or the solution view shown: the batch on its way is stale
@@ -440,6 +446,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         foreach (var folder in _folders.Where(f => _folderStandIns.Contains(f.Value)).Select(f => f.Key).ToList())
         {
             _folders.Remove(folder);
+            _foldersVersion++;
         }
 
         _folderStandIns.Clear();
@@ -673,6 +680,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         StopFolderListings();
         _folders.Clear();
+        _foldersVersion++;
         _folderStandIns.Clear();
         _folderRoot = null;
     }
@@ -804,6 +812,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 var standIn = new FolderListing([], false);
                 if (_folders.TryAdd(folder, standIn))
                 {
+                    _foldersVersion++;
                     _folderStandIns.Add(standIn); // listed again once the build host restarts (OnHostRestarted)
                     changed = true;
                 }
@@ -816,6 +825,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 }
 
                 _folders[folder] = listing!;
+                _foldersVersion++;
                 changed = true;
             }
         }
@@ -870,6 +880,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             if (System.IO.Path.GetDirectoryName(folder) is not { } parent || !_folders.TryGetValue(parent, out var listing) || !listing.HasFolder(folder))
             {
                 _folders.Remove(folder);
+                _foldersVersion++;
             }
         }
     }
@@ -1645,6 +1656,23 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The folder view's tree: built again only when the folder, a listing or the display language changed since the
+    /// last one (each refresh, a project's change or a status read built the whole listed tree again).
+    /// </summary>
+    private ExplorerNode FolderViewRoot(SolutionInfo solution)
+    {
+        var language = System.Globalization.CultureInfo.CurrentUICulture.Name;
+        if (_folderViewMemo is { } last && ReferenceEquals(last.Solution, solution) && last.Folders == _foldersVersion && last.Language == language)
+        {
+            return last.Root;
+        }
+
+        var root = SolutionTree.Build(solution, _shell.Solutions.Projects, null, new ExplorerOptions { FolderListings = _folders }, _treeCache);
+        _folderViewMemo = (solution, _foldersVersion, language, root);
+        return root;
+    }
+
     /// <summary>The tree was built again (tests count them: an expansion or a reveal doesn't).</summary>
     internal int Builds { get; private set; }
 
@@ -1668,13 +1696,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             }
         }
 
-        SetRoot(solutions.Solution is { } solution
-            ? SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
+        SetRoot(solutions.Solution is not { } solution ? null
+            : IsFolderView && solution.IsFolder ? FolderViewRoot(solution)
+            : SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
             {
                 DiskEntries = _showAllFiles ? _disk : null,
                 FolderListings = IsFolderView ? _folders : null,
-            }, _treeCache)
-            : null);
+            }, _treeCache));
         OnPropertyChanged(nameof(HasSolution));
         var reveal = TakePendingReveal();
         if (_root is not null && _filter.Trim() is { Length: > 0 } filter)
