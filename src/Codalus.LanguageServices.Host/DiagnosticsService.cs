@@ -391,6 +391,66 @@ internal sealed class DiagnosticsService : IDisposable
     /// </summary>
     private async Task BackgroundPassAsync(CancellationToken cancellationToken)
     {
+        // A pass cancelled by an edit keeps what it had finished: each project's entry stands for its version only, so
+        // the next pass takes those whose versions didn't change instead of compiling them again.
+        var progress = new PassProgress(Interlocked.Increment(ref _passSequence));
+        try
+        {
+            await RunPassAsync(progress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            KeepFinished(progress);
+            throw;
+        }
+    }
+
+    /// <summary>A running pass's results so far, and the projects of them that are provisional (#208).</summary>
+    private sealed class PassProgress(long sequence)
+    {
+        public long Sequence { get; } = sequence;
+
+        public System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>? Results { get; set; }
+
+        public HashSet<ProjectId>? Provisional { get; set; }
+    }
+
+    private long _passSequence;
+
+    /// <summary>The pass whose results <see cref="_passes"/> holds (a cancelled pass's never replace a newer one's).</summary>
+    private long _passesFrom;
+
+    private void KeepFinished(PassProgress progress)
+    {
+        if (progress.Results is not { IsEmpty: false } results)
+        {
+            return;
+        }
+
+        var provisional = progress.Provisional ?? [];
+        lock (_gate)
+        {
+            if (_passesFrom > progress.Sequence)
+            {
+                return;
+            }
+
+            var merged = new Dictionary<ProjectId, ProjectPass>(_passes);
+            foreach (var (id, pass) in results)
+            {
+                if (!provisional.Contains(id))
+                {
+                    merged[id] = pass;
+                }
+            }
+
+            _passes = merged;
+            _passesFrom = progress.Sequence;
+        }
+    }
+
+    private async Task RunPassAsync(PassProgress progress, CancellationToken cancellationToken)
+    {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var reused = 0;
         var persisted = 0;
@@ -434,7 +494,7 @@ internal sealed class DiagnosticsService : IDisposable
         var keys = usePersisted || correcting ? _workspace.Keys() : null;
         var hasDependents = solution.Projects.SelectMany(p => p.ProjectReferences).Select(r => r.ProjectId).ToHashSet();
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2), CancellationToken = cancellationToken };
-        var results = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>();
+        var results = progress.Results = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>();
         var versions = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, PassVersion>();
 
         // Kept because only method bodies changed below them: checked again if a generator below wrote something else.
@@ -482,7 +542,7 @@ internal sealed class DiagnosticsService : IDisposable
         // project that does, may be wrong where that change altered its public surface: shown now, kept for nothing,
         // and checked again from source by the next pass.
         var reusedImages = ReferenceEquals(analysis, solution) ? [] : _analysis.Images.Where(i => i.Value.Origin == AnalysisSolution.ReusedOrigin).Select(i => i.Key).ToHashSet();
-        var provisional = new HashSet<ProjectId>();
+        var provisional = progress.Provisional = new HashSet<ProjectId>();
         if (reusedImages.Count > 0)
         {
             var graph = solution.GetProjectDependencyGraph();
@@ -622,6 +682,7 @@ internal sealed class DiagnosticsService : IDisposable
         lock (_gate)
         {
             _passes = new Dictionary<ProjectId, ProjectPass>(results.Where(r => !provisional.Contains(r.Key)));
+            _passesFrom = progress.Sequence;
             _checkAgain.UnionWith(provisional);
             if (usePersisted)
             {
