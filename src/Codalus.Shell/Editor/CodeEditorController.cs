@@ -1414,8 +1414,10 @@ public sealed partial class CodeEditorController : IDisposable
             {
                 ShowCompletion(text);
             }
-            else if (_completion is null && (char.IsLetter(c) || c == '_'))
+            else if (_completion is null && (char.IsLetter(c) || c == '_') && !IsWordCharacterAt(Editor.CaretOffset))
             {
+                // Only a letter that starts a word asks (Roslyn's rule, as the classic IDE): one typed right before a
+                // word ("v" before "InitializeComponent") is an edit of that word, not the start of a new one.
                 // A server that had nothing complete for this word isn't asked again while it grows (as VS Code).
                 if (WordStart(Editor.CaretOffset) != _noCompletionWordStart || Model.Version != _noCompletionVersion + 1)
                 {
@@ -1579,6 +1581,8 @@ public sealed partial class CodeEditorController : IDisposable
 
             var window = NewCompletionPopup(start, caret);
             window.CloseWhenCaretAtBeginning = triggerCharacter is null || triggerCharacter == ".";
+            window.RequestedAt = position;
+            window.TailLength = TailLength(list.ItemDefaults?.EditRange, position, caret);
             Task<LanguageServices.Protocol.CompletionItem> Resolve(LanguageServices.Protocol.CompletionItem item) =>
                 item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet
                     ? Task.FromResult(item) // our snippets: nothing to resolve
@@ -1602,9 +1606,9 @@ public sealed partial class CodeEditorController : IDisposable
             void Select()
             {
                 // Filters by the typed text and picks the best match (CompletionData.Priority breaks ties).
-                if (caret > start && Editor.CaretOffset >= caret)
+                if ((caret > start || window.TailLength > 0) && Editor.CaretOffset >= caret)
                 {
-                    window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+                    window.CompletionList.SelectItem(window.FilterText(Editor.CaretOffset));
                 }
 
                 if (window.CompletionList.SelectedItem is null && list.Items.FirstOrDefault(i => i.Preselect == true) is { } preselected)
@@ -1614,6 +1618,12 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             Select();
+            if (window.TailLength > 0 && window.CompletionList.CurrentList.Count == 0)
+            {
+                // Nothing matches the word with its rest: the list doesn't show, and typing goes on as typing.
+                window.Close();
+                return;
+            }
 
             // Again once the list is laid out: a selection made before its template applied doesn't stick (M34a).
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -1629,6 +1639,25 @@ public sealed partial class CodeEditorController : IDisposable
             Report(ex);
         }
     }
+
+    /// <summary>
+    /// How much of the word after the caret the list's range covers (the server asked in the middle of a word replaces
+    /// its rest, as Roslyn does), clamped to the caret's line: 0 when the range ends at the request's position.
+    /// </summary>
+    private int TailLength(LanguageServices.Protocol.Range? range, Position requestedAt, int caret)
+    {
+        if (range is not { } r || r.End.Line != requestedAt.Line || r.End.Character <= requestedAt.Character)
+        {
+            return 0;
+        }
+
+        var line = Model.Text.GetLineByOffset(caret);
+        return Math.Min(r.End.Character - requestedAt.Character, line.EndOffset - caret);
+    }
+
+    /// <summary>Whether the character at <paramref name="offset"/> is part of a word (a letter, a digit or "_").</summary>
+    private bool IsWordCharacterAt(int offset) =>
+        offset < Model.Text.TextLength && Model.Text.GetCharAt(offset) is var c && (char.IsLetterOrDigit(c) || c == '_');
 
     /// <summary>The embedded language's completion at the caret (HTML at a Razor file's markup); nothing elsewhere or when it fails.</summary>
     private async Task<(EmbeddedRequest? Request, LanguageServices.Protocol.CompletionList? List)> EmbeddedCompletionAsync(int offset, Position position, CompletionContext context, CancellationToken cancellationToken)
@@ -1693,17 +1722,22 @@ public sealed partial class CodeEditorController : IDisposable
     internal CompletionData NewCompletionData(LanguageServices.Protocol.CompletionItem item, Func<LanguageServices.Protocol.CompletionItem, Task<LanguageServices.Protocol.CompletionItem>> resolve, string commitCharacters = "") =>
         new(item, resolve, Commit) { CommitCharacters = commitCharacters.ToHashSet() };
 
-    /// <summary>Opens the completion list over [<paramref name="start"/>, the caret) with these items, filtered by the typed text (tests).</summary>
-    internal void OpenCompletion(int start, IEnumerable<CompletionData> items)
+    /// <summary>
+    /// Opens the completion list over [<paramref name="start"/>, the caret) with these items, filtered by the typed text
+    /// (tests); as a server's list asked for at <paramref name="requestedAt"/> whose range is <paramref name="range"/>.
+    /// </summary>
+    internal void OpenCompletion(int start, IEnumerable<CompletionData> items, LanguageServices.Protocol.Range? range = null, Position? requestedAt = null)
     {
         var window = NewCompletionPopup(start, Editor.CaretOffset);
+        window.RequestedAt = requestedAt;
+        window.TailLength = requestedAt is { } request ? TailLength(range, request, Editor.CaretOffset) : 0;
         foreach (var item in items)
         {
             window.CompletionList.CompletionData.Add(item);
         }
 
         OpenCompletion(window);
-        window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+        window.CompletionList.SelectItem(window.FilterText(Editor.CaretOffset));
     }
 
     /// <summary>
@@ -1735,6 +1769,13 @@ public sealed partial class CodeEditorController : IDisposable
     private LateResolve? _lateResolve;
 
     /// <summary>
+    /// The offset now of a completion edit's end, a position in the document as it was when the list was asked for: one
+    /// after the request's position moved with the typing since (<see cref="CompletionSpan.OffsetOf"/>).
+    /// </summary>
+    private int EndOffsetOf(Position end, ISegment segment) =>
+        Math.Min(Model.Text.TextLength, segment is CompletionSpan span && span.OffsetOf(end) is { } moved ? moved : Model.OffsetAt(end));
+
+    /// <summary>
     /// Commits a completion item without waiting for the language service (M56: the UI thread waited up to 300 ms for a
     /// resolve on every commit character): with the resolve prefetched while the item was selected if it has arrived, else
     /// with the item's own text; a resolve that arrives later applies its edits only while the document is as the commit
@@ -1754,7 +1795,7 @@ public sealed partial class CodeEditorController : IDisposable
             if (snippet.TextEdit is { } edit)
             {
                 start = Model.OffsetAt(edit.Range.Start);
-                length = Math.Max(0, Math.Max(segment.EndOffset, Model.OffsetAt(edit.Range.End)) - start);
+                length = Math.Max(0, Math.Max(segment.EndOffset, EndOffsetOf(edit.Range.End, segment)) - start);
             }
 
             SnippetEngine.Insert(Editor.TextArea, body, start, length, SnippetVariables(Configuration));
@@ -1765,7 +1806,8 @@ public sealed partial class CodeEditorController : IDisposable
         using (document.RunUpdate())
         {
             // The item's edit replaces its range, which may start before the word being typed (CSS's "::after" over
-            // "::af"), through what was typed since the request.
+            // "::af"), through what was typed since the request, and the rest of the word it covers after the caret,
+            // measured from where the typing left it (CompletionSpan).
             var textEdit = resolved?.TextEdit ?? data.Item.TextEdit;
             var text = textEdit?.NewText ?? data.Item.InsertText ?? data.Item.Label;
             var replaceStart = segment.Offset;
@@ -1773,7 +1815,7 @@ public sealed partial class CodeEditorController : IDisposable
             if (textEdit is { } itemEdit && Model.OffsetAt(itemEdit.Range.Start) is var editStart && editStart <= segment.Offset)
             {
                 replaceStart = editStart;
-                replaceLength = Math.Max(segment.EndOffset, Model.OffsetAt(itemEdit.Range.End)) - editStart;
+                replaceLength = Math.Max(segment.EndOffset, EndOffsetOf(itemEdit.Range.End, segment)) - editStart;
             }
 
             document.Replace(replaceStart, replaceLength, text);

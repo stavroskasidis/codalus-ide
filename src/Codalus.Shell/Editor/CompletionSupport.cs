@@ -70,3 +70,31 @@ public sealed class CompletionData(LspCompletionItem item, Func<LspCompletionIte
 
     public override string ToString() => Label;
 }
+
+/// <summary>
+/// What a completion commits over: the typed text and, after it, the rest of the word that the list's range covers when
+/// it was asked for in the middle of a word (Roslyn's span, as the classic IDE replaces it). The list's ranges are in the
+/// document as it was when it was asked for (<paramref name="requestedAt"/>): what was typed since went in at the caret,
+/// so a range end at or after that position lies as far past the typed text (<see cref="OffsetOf"/>).
+/// </summary>
+public sealed class CompletionSpan(int offset, int typedLength, int tailLength, Position? requestedAt) : ISegment
+{
+    public int Offset { get; } = offset;
+
+    /// <summary>The typed text and the rest of the word after it.</summary>
+    public int Length { get; } = typedLength + tailLength;
+
+    public int EndOffset => Offset + Length;
+
+    /// <summary>The end of the typed text (the caret, as the list follows it).</summary>
+    public int TypedEnd => Offset + typedLength;
+
+    /// <summary>
+    /// The offset now of a position at or after the request's on its line, or null for any other position (one before
+    /// it, or on another line, which the typing didn't move).
+    /// </summary>
+    public int? OffsetOf(Position position) =>
+        requestedAt is { } request && position.Line == request.Line && position.Character >= request.Character
+            ? TypedEnd + (position.Character - request.Character)
+            : null;
+}
