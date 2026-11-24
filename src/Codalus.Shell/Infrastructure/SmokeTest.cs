@@ -1308,6 +1308,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("winforms.properties", "0.6", winFormsPropertiesTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
         }
 
+        // 1.1: a Visual Basic form in the designer (ADR 0073, Visual Basic forms), through the real host.
+        const string winFormsVisualBasicTitle = "The Visual Basic app's OrderForm.vb opens in the Windows Forms designer with every statement applied; a Button from the Toolbox is Button1, a Friend WithEvents field in OrderForm.Designer.vb; its default event is a handler with a Handles clause in OrderForm.vb; undone";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.visualBasic", "1.1", winFormsVisualBasicTitle, WinFormsVisualBasicStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.visualBasic", "1.1", winFormsVisualBasicTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); reading and writing Visual Basic forms, and the shell's side against a fake designer host, are tested on every OS.");
+        }
+
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
         const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
         if (OperatingSystem.IsWindows())
@@ -3226,6 +3237,67 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// dispatcher is free: the next step's open of the same form found the designer still open and used it, and the
     /// answer then closed it under that step (Windows smoke, runs 43484474099 and 43489637316: winforms.properties).
     /// </summary>
+    /// <summary>
+    /// A Visual Basic form in the shipped app's designer (ADR 0073, Visual Basic forms; a user reported VB forms didn't
+    /// open in it): the Visual Basic app opened, OrderForm.vb loaded by the real designer host with every statement
+    /// applied, a Button from the Toolbox written as the classic IDE writes it in Visual Basic, and its default event a
+    /// Handles clause in OrderForm.vb; both files undone and saved.
+    /// </summary>
+    private async Task WinFormsVisualBasicStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "WindowsDesktop");
+        await shell.OpenSolutionAsync(Path.Combine(target, "WinFormsVbApp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Visual Basic Windows Forms solution is open (its packages restored)", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 1 }, "the language host has loaded the Visual Basic project", 300).ConfigureAwait(true);
+
+        var form = Path.Combine(target, "WinFormsVbApp", "OrderForm.vb");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.vb opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer builds the app, loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        Check(designer!.Problems is null, "every statement applied: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "ExpressRadioButton" && c.Parent == "ShippingGroupBox"), "the form's controls are on the surface, nested");
+
+        var code = designer.DesignerCode!;
+        var original = code.Text.Text;
+        shell.Layout.ShowToolWindow(ViewModels.ToolboxViewModel.ToolWindowId, focus: false);
+        var button = shell.Toolbox.Items.FirstOrDefault(i => i.Type == "System.Windows.Forms.Button");
+        Check(button is not null && shell.Toolbox.IsAvailable, "the Toolbox has the Button");
+        shell.Toolbox.Armed = button;
+        var root = designer.Root!;
+        // The form's free space under the notes, left of its buttons.
+        await designer.CreateAsync(button!.Type, root.ClientX + 20, root.ClientY + 252).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("        Button1 = New Button()", StringComparison.Ordinal) && code.Text.Text.Contains("    Friend WithEvents Button1 As Button", StringComparison.Ordinal)
+            && code.Text.Text.Contains("        Controls.Add(Button1)", StringComparison.Ordinal), "the new button is Visual Basic in OrderForm.Designer.vb: " + designer.Status);
+        shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-visual-basic.png");
+
+        var added = designer.Find("Button1");
+        Check(added is not null, "Button1 is on the surface");
+        await designer.DefaultEventAsync(added!.X + 5, added.Y + 5).ConfigureAwait(true);
+        await WaitAsync(() => shell.ActiveEditor?.Model.Path == form, "the handler shows in OrderForm.vb", 60).ConfigureAwait(true);
+        var formCode = shell.ActiveEditor!.Model;
+        Check(formCode.Text.Text.Contains("Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click", StringComparison.Ordinal),
+            "the default event's handler has a Handles clause: " + formCode.Text.Text);
+
+        while (formCode.Text.UndoStack.CanUndo)
+        {
+            formCode.Text.UndoStack.Undo();
+        }
+
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes the designer file back to the original");
+        await shell.SaveAllAsync().ConfigureAwait(true);
+        shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
+    }
+
     private async Task DesignerClosedAsync(ViewModels.WinFormsDesignerDocument designer) =>
         await WaitAsync(() => !shell.Layout.Documents.Contains(designer), () => "the designer closes: " + designer.Status, 60).ConfigureAwait(true);
 

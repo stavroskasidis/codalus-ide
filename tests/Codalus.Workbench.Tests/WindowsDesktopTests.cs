@@ -94,6 +94,34 @@ public sealed class WindowsDesktopTests
     }
 
     [Fact]
+    public void Visual_Basic_windows_forms_items_are_its_own_with_their_designer_files()
+    {
+        var vbForms = new ItemTemplateProject("VB", IsWinForms: true);
+        var csForms = new ItemTemplateProject("C#", IsWinForms: true);
+        var vbConsole = new ItemTemplateProject("VB");
+        foreach (var name in new[] { "vbwinformsform", "vbwinformsusercontrol" })
+        {
+            var template = ItemTemplates.BuiltIn.Single(t => t.ShortName == name);
+            Assert.True(ItemTemplates.AppliesTo(template, vbForms), name);
+            Assert.False(ItemTemplates.AppliesTo(template, csForms), name);
+            Assert.False(ItemTemplates.AppliesTo(template, vbConsole), name);
+        }
+
+        Assert.False(ItemTemplates.AppliesTo(ItemTemplates.BuiltIn.Single(t => t.ShortName == "winformsform"), vbForms));
+
+        // As the classic IDE's Visual Basic templates: in the root namespace, InitializeComponent called by the DesignerGenerated class's constructor.
+        var form = ItemTemplates.BuiltIn.Single(t => t.ShortName == "vbwinformsform");
+        var context = new ItemTemplateContext("SettingsForm", "WinFormsVbApp.Settings");
+        Assert.Equal(["SettingsForm.Designer.vb"], form.CompanionNames("SettingsForm.vb"));
+        Assert.Equal("Public Class SettingsForm\n\nEnd Class\n", form.Content!(context));
+        var designer = form.Companions.Single().Content(context);
+        Assert.StartsWith("<Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>\nPartial Class SettingsForm\n    Inherits System.Windows.Forms.Form\n", designer, StringComparison.Ordinal);
+        Assert.Contains("    Private Sub InitializeComponent()\n", designer, StringComparison.Ordinal);
+        Assert.Contains("        Text = \"SettingsForm\"\n", designer, StringComparison.Ordinal);
+        Assert.Contains("Inherits System.Windows.Forms.UserControl", ItemTemplates.BuiltIn.Single(t => t.ShortName == "vbwinformsusercontrol").Companions.Single().Content(context), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Markup_compiler_errors_land_in_their_xaml_files()
     {
         var error = new BuildDiagnosticInfo(BuildSeverities.Error, "MC3072", "The property 'Bogus' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2006/xaml/presentation'.",

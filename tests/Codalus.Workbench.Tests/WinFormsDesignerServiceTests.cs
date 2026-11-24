@@ -97,6 +97,18 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal(Sample("OrderForm.cs"), WinFormsDesignerService.CodeFileOf(Sample("OrderForm.Designer.cs")));
         Assert.Equal(Sample("OrderForm.cs"), WinFormsDesignerService.CodeFileOf(Sample("OrderForm.cs")));
         Assert.Null(WinFormsDesignerService.CodeFileOf(Sample("Program.cs")));
+
+        // Visual Basic's: OrderForm.vb with OrderForm.Designer.vb (its Sub InitializeComponent()).
+        static string Vb(params string[] path) => Path.Combine([DiagnosticsFixture.Metadata("CodalusRepoRoot"), "samples", "WindowsDesktop", "WinFormsVbApp", .. path]);
+        Assert.True(service.HasDesigner(Vb("OrderForm.vb")));
+        Assert.True(service.HasDesigner(Vb("Controls", "BadgeControl.vb")));
+        Assert.False(service.HasDesigner(Vb("OrderForm.Designer.vb")));
+        Assert.False(service.HasDesigner(Vb("Program.vb")));
+        Assert.False(service.HasDesigner(Vb("My Project", "Resources.Designer.vb")));
+        Assert.Equal(Vb("OrderForm.vb"), WinFormsDesignerService.CodeFileOf(Vb("OrderForm.Designer.vb")));
+        Assert.Equal(Vb("OrderForm.Designer.vb"), WinFormsDesignerService.DesignerFileOf(Vb("OrderForm.vb")));
+        Assert.True(WinFormsDesignerService.IsDesignerFile("Form1.designer.vb"));
+        Assert.False(WinFormsDesignerService.IsDesignerFile("Form1.Designer.fs"));
     }
 
     [Fact]

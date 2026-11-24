@@ -177,6 +177,8 @@ public static class ItemTemplates
         // Windows Forms (M40a): the code with its Designer.cs, as the designer writes it.
         WinForms("winformsform", "Form (Windows Forms)", "A Windows Forms form with its designer file.", "Form1", "Form", isForm: true),
         WinForms("winformsusercontrol", "User Control (Windows Forms)", "A Windows Forms user control with its designer file.", "UserControl1", "UserControl", isForm: false),
+        VisualBasicWinForms("vbwinformsform", "Form (Windows Forms)", "A Windows Forms form with its designer file.", "Form1", "Form", isForm: true),
+        VisualBasicWinForms("vbwinformsusercontrol", "User Control (Windows Forms)", "A Windows Forms user control with its designer file.", "UserControl1", "UserControl", isForm: false),
         General("css", "Style Sheet", "A CSS style sheet.", "StyleSheet1", ".css", _ => "body {\n}\n", "Web", tags: ["Web"]),
         General("javascript", "JavaScript File", "A JavaScript file.", "JavaScript1", ".js", _ => string.Empty, "Web", tags: ["Web"]),
         General("typescript", "TypeScript File", "A TypeScript file.", "TypeScript1", ".ts", _ => string.Empty, "Web", tags: ["Web"]),
@@ -246,6 +248,31 @@ public static class ItemTemplates
                 + "    private void InitializeComponent()\n    {\n        components = new System.ComponentModel.Container();\n        AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;\n"
                 + (isForm ? $"        ClientSize = new System.Drawing.Size(800, 450);\n        Text = \"{c.Name}\";\n" : string.Empty)
                 + "    }\n\n    #endregion\n}\n"))],
+        };
+
+    /// <summary>
+    /// A Visual Basic form or user control (ADR 0073, Visual Basic forms): its code and the Designer.vb the designer reads
+    /// and writes, as the classic IDE's Visual Basic templates write them for .NET (in the project's root namespace; the
+    /// <c>DesignerGenerated</c> class's constructor calls InitializeComponent).
+    /// </summary>
+    private static ItemTemplate VisualBasicWinForms(string shortName, string name, string description, string defaultName, string baseType, bool isForm) =>
+        new(name, shortName, "Windows Forms", description, defaultName, ".vb")
+        {
+            Languages = ["VB"],
+            Tags = ["WinForms"],
+            Content = c => $"Public Class {c.Name}\n\nEnd Class\n",
+            Companions = [new(".Designer.vb", c =>
+                "<Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>\n"
+                + $"Partial Class {c.Name}\n    Inherits System.Windows.Forms.{baseType}\n\n"
+                + $"    '{baseType} overrides dispose to clean up the component list.\n    <System.Diagnostics.DebuggerNonUserCode()>\n"
+                + "    Protected Overrides Sub Dispose(disposing As Boolean)\n        Try\n            If disposing AndAlso components IsNot Nothing Then\n"
+                + "                components.Dispose()\n            End If\n        Finally\n            MyBase.Dispose(disposing)\n        End Try\n    End Sub\n\n"
+                + "    'Required by the Windows Form Designer\n    Private components As System.ComponentModel.IContainer\n\n"
+                + "    'NOTE: The following procedure is required by the Windows Form Designer\n    'It can be modified using the Windows Form Designer.\n"
+                + "    'Do not modify it using the code editor.\n    <System.Diagnostics.DebuggerStepThrough()>\n"
+                + "    Private Sub InitializeComponent()\n        components = New System.ComponentModel.Container()\n        AutoScaleMode = AutoScaleMode.Font\n"
+                + (isForm ? $"        ClientSize = New Size(800, 450)\n        Text = \"{c.Name}\"\n" : string.Empty)
+                + "    End Sub\n\nEnd Class\n")],
         };
 
     /// <summary>A C# file with the context's namespace, file scoped when the language version allows it.</summary>

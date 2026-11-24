@@ -5,12 +5,45 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Codalus.LanguageServices.Host.WinForms;
 
+/// <summary>Writes designer statements and values in a designer file's language, in the style of the file.</summary>
+internal interface IDesignerCodeGenerator
+{
+    /// <summary>A statement's lines (with its indentation and line break; three lines for a section comment).</summary>
+    string Statement(DesignerStatement statement, string? sectionRule = null);
+
+    /// <summary>A local's declaration (M41b), as InitializeComponent declares a <c>ListViewItem</c>.</summary>
+    string LocalDeclaration(string name, DesignerValue value);
+
+    /// <summary>A section comment for <paramref name="name"/>.</summary>
+    string Section(string name, string sectionRule);
+
+    /// <summary>A component's field: <c>private Button button1;</c>, <c>Friend WithEvents Button1 As Button</c> (without indentation or line break).</summary>
+    string Field(string name, string type);
+
+    /// <summary>A type by the file's style.</summary>
+    string Type(string fullName);
+
+    /// <summary>A value, as the file's style writes it.</summary>
+    string Value(DesignerValue value);
+
+    /// <summary>A string literal.</summary>
+    string StringLiteral(string text);
+}
+
+/// <summary>The generator for a model's language.</summary>
+internal static class DesignerCodeGenerators
+{
+    public static IDesignerCodeGenerator For(DesignerModel model, string indent, string newLine) => model.Language == DesignerLanguages.VisualBasic
+        ? new VisualBasicDesignerCodeGenerator(model, indent, newLine)
+        : new DesignerCodeGenerator(model, indent, newLine);
+}
+
 /// <summary>
 /// Writes designer statements and values as C# (M41a, ADR 0073), in the style of the file: the classic IDE for .NET
 /// (no <c>this.</c>, types shortened through the file's usings and namespace, <c>A.X | A.Y</c>, method groups) or for
 /// .NET Framework (<c>this.</c>, full type names, CodeDOM's parenthesized casts, <c>new System.EventHandler(this.M)</c>).
 /// </summary>
-internal sealed class DesignerCodeGenerator(DesignerModel model, string indent, string newLine)
+internal sealed class DesignerCodeGenerator(DesignerModel model, string indent, string newLine) : IDesignerCodeGenerator
 {
     private static readonly Dictionary<string, string> s_keywords = new(StringComparer.Ordinal)
     {
@@ -28,8 +61,9 @@ internal sealed class DesignerCodeGenerator(DesignerModel model, string indent, 
     private string FullClassName => model.Namespace is null ? model.ClassName : model.Namespace + "." + model.ClassName;
 
     /// <summary>A statement's lines (with its indentation and line break; three lines for a section comment).</summary>
-    public string Statement(DesignerStatement statement, string sectionRule = "// ")
+    public string Statement(DesignerStatement statement, string? sectionRule = null)
     {
+        sectionRule ??= "// ";
         var code = statement.Kind switch
         {
             DesignerStatementKinds.Section => null,
@@ -55,6 +89,10 @@ internal sealed class DesignerCodeGenerator(DesignerModel model, string indent, 
 
     /// <summary>A section comment for <paramref name="name"/>.</summary>
     public string Section(string name, string sectionRule) => Statement(new DesignerStatement { Kind = DesignerStatementKinds.Section, Target = name }, sectionRule);
+
+    public string Field(string name, string type) => $"private {Type(type)} {name};";
+
+    public string StringLiteral(string text) => SymbolDisplay.FormatLiteral(text, quote: true);
 
     private string Create(DesignerStatement statement)
     {

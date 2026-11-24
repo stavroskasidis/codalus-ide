@@ -1,7 +1,4 @@
 using Codalus.LanguageServices.Protocol;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Codalus.LanguageServices.Host.WinForms;
@@ -155,7 +152,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         return result;
     }
 
-    private static DesignerCodeGenerator Generator(DesignerSource source) => new(source.Model, source.Indent, source.NewLine);
+    private static IDesignerCodeGenerator Generator(DesignerSource source) => DesignerCodeGenerators.For(source.Model, source.Indent, source.NewLine);
 
     // ------------------------------------------------------------------ which statements are a component's
 
@@ -267,20 +264,10 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         return start;
     }
 
-    /// <summary>The start of the line holding InitializeComponent's closing brace (after the old style's blank line, if any).</summary>
-    private static int BodyEnd(DesignerSource source)
-    {
-        var body = source.Method.Body!;
-        if (body.Statements.LastOrDefault() is { } last)
-        {
-            return DesignerReader.LinesOf(source.Text, last.Span).End;
-        }
+    /// <summary>After the last statement, else the start of the line that closes InitializeComponent.</summary>
+    private static int BodyEnd(DesignerSource source) => source.BodyEnd;
 
-        return source.Text.Lines.GetLineFromPosition(body.CloseBraceToken.SpanStart).Start;
-    }
-
-    private static int BodyStart(DesignerSource source) =>
-        source.Statements.Count > 0 ? source.Statements[0].Lines.Start : source.Text.Lines.GetLineFromPosition(source.Method.Body!.OpenBraceToken.Span.End).EndIncludingLineBreak;
+    private static int BodyStart(DesignerSource source) => source.BodyStart;
 
     // ------------------------------------------------------------------ properties
 
@@ -293,9 +280,9 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             {
                 changes.Add(new TextChange(existing.Lines, string.Empty));
             }
-            else if (existing.Syntax is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax assignment })
+            else if (existing.Value is { } assigned)
             {
-                changes.Add(new TextChange(assignment.Right.Span, Generator(source).Value(value)));
+                changes.Add(new TextChange(assigned, Generator(source).Value(value)));
             }
 
             return;
@@ -349,20 +336,15 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         }
 
         // The field, after the last component's.
-        var fieldIndent = Indentation(source.Text, source.Method.SpanStart);
-        var field = $"{fieldIndent}private {generator.Type(type)} {name};{source.NewLine}";
-        var lastField = source.Fields.Where(f => source.Names.Contains(f.Key)).Select(f => f.Value).OrderBy(f => f.SpanStart).LastOrDefault();
+        var field = $"{source.FieldIndent}{generator.Field(name, type)}{source.NewLine}";
+        var lastField = source.Fields.Where(f => source.Names.Contains(f.Key)).Select(f => f.Value).OrderBy(f => f.Declaration.Start).LastOrDefault();
         if (lastField is not null)
         {
-            changes.Add(new TextChange(new TextSpan(DesignerReader.LinesOf(source.Text, lastField.Span).End, 0), field));
-        }
-        else if (EndRegionAfter(source) is { } endRegion)
-        {
-            changes.Add(new TextChange(new TextSpan(endRegion, 0), source.NewLine + field));
+            changes.Add(new TextChange(new TextSpan(DesignerReader.LinesOf(source.Text, lastField.Declaration).End, 0), field));
         }
         else
         {
-            changes.Add(new TextChange(new TextSpan(source.Text.Lines.GetLineFromPosition(source.Class.CloseBraceToken.SpanStart).Start, 0), source.NewLine + field));
+            changes.Add(new TextChange(new TextSpan(source.FirstFieldPoint, 0), source.NewLine + field));
         }
 
         // The creation, after the last one.
@@ -397,28 +379,6 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         }
 
         return text;
-    }
-
-    private static string Indentation(SourceText text, int position)
-    {
-        var line = text.Lines.GetLineFromPosition(position);
-        var content = line.ToString();
-        return content[..(content.Length - content.TrimStart().Length)];
-    }
-
-    /// <summary>After the <c>#endregion</c> line that follows InitializeComponent, if there is one.</summary>
-    private static int? EndRegionAfter(DesignerSource source)
-    {
-        var next = source.Method.GetLastToken().GetNextToken();
-        foreach (var trivia in next.LeadingTrivia)
-        {
-            if (trivia.IsKind(SyntaxKind.EndRegionDirectiveTrivia))
-            {
-                return source.Text.Lines.GetLineFromPosition(trivia.SpanStart).EndIncludingLineBreak;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>
@@ -531,11 +491,11 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             }
         }
 
-        foreach (var field in removed.Where(source.Fields.ContainsKey).Select(n => source.Fields[n]).Distinct())
+        foreach (var field in removed.Where(source.Fields.ContainsKey).Select(n => source.Fields[n]).DistinctBy(f => f.Declaration))
         {
-            if (field.Declaration.Variables.All(v => removed.Contains(v.Identifier.Text)))
+            if (field.Declared.All(removed.Contains))
             {
-                changes.Add(new TextChange(DesignerReader.LinesOf(source.Text, field.Span), string.Empty));
+                changes.Add(new TextChange(DesignerReader.LinesOf(source.Text, field.Declaration), string.Empty));
             }
         }
 
@@ -587,12 +547,14 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
     /// </summary>
     private void Rename(DesignerSource source, List<TextChange> changes, string name, string newName)
     {
-        if (!SyntaxFacts.IsValidIdentifier(newName) || SyntaxFacts.GetKeywordKind(newName) != SyntaxKind.None)
+        if (!DesignerIdentifiers.IsValid(source.Language, newName))
         {
             throw new InvalidOperationException($"{newName} isn't a valid name.");
         }
 
-        if (source.Names.Contains(newName) || source.Fields.ContainsKey(newName))
+        // Visual Basic's names ignore case: Button1 can become BUTTON1, but not another component's name.
+        var caseOnly = !string.Equals(name, newName, StringComparison.Ordinal) && source.NameComparer.Equals(name, newName);
+        if (!caseOnly && (source.Names.Contains(newName) || source.Fields.ContainsKey(newName)))
         {
             throw new InvalidOperationException($"{source.Model.ClassName} already has a member named {newName}.");
         }
@@ -607,32 +569,28 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             file.RenameComponent(name, newName);
         }
 
+        var generator = Generator(source);
+
         // The keys the code uses: resources.ApplyResources(x, "name"), resources.GetObject("name.Image").
-        foreach (var invocation in source.Method.Body!.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        foreach (var (method, key, literal) in source.ResourceKeys)
         {
-            if (invocation.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "resources" }, Name.Identifier.Text: var method }
-                && invocation.ArgumentList.Arguments.LastOrDefault()?.Expression is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression } literal
-                && literal.Token.ValueText is var key
-                && ((method == "ApplyResources" && key == name) || (method is "GetObject" or "GetString" && key.StartsWith(name + ".", StringComparison.Ordinal))))
+            if ((method == "ApplyResources" && key == name) || (method is "GetObject" or "GetString" && key.StartsWith(name + ".", StringComparison.Ordinal)))
             {
-                changes.Add(new TextChange(literal.Span, SymbolDisplay.FormatLiteral(newName + key[name.Length..], quote: true)));
+                changes.Add(new TextChange(literal, generator.StringLiteral(newName + key[name.Length..])));
             }
         }
 
-        if (source.Fields.TryGetValue(name, out var field) && field.Declaration.Variables.FirstOrDefault(v => v.Identifier.Text == name) is { } variable)
+        if (source.Fields.TryGetValue(name, out var field))
         {
-            changes.Add(new TextChange(variable.Identifier.Span, newName));
+            changes.Add(new TextChange(field.Identifier, newName));
         }
 
-        foreach (var identifier in source.Method.Body!.DescendantNodes().OfType<IdentifierNameSyntax>().Where(i => i.Identifier.Text == name))
+        foreach (var (used, span) in source.NameUses)
         {
-            // button1, this.button1 (not Foo.button1, a member of something else).
-            if (identifier.Parent is MemberAccessExpressionSyntax access && access.Name == identifier && access.Expression is not ThisExpressionSyntax)
+            if (source.NameComparer.Equals(used, name))
             {
-                continue;
+                changes.Add(new TextChange(span, newName));
             }
-
-            changes.Add(new TextChange(identifier.Identifier.Span, newName));
         }
 
         foreach (var statement in source.Statements)
@@ -642,14 +600,13 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             {
                 var line = source.Text.Lines.GetLineFromPosition(statement.Lines.Start).LineNumber + 1;
                 var middle = source.Text.Lines[line];
-                var at = middle.ToString().IndexOf("// ", StringComparison.Ordinal) + 3;
+                var at = middle.ToString().IndexOf(source.SectionPrefix, StringComparison.Ordinal) + source.SectionPrefix.Length;
                 changes.Add(new TextChange(new TextSpan(middle.Start + at, name.Length), newName));
             }
             else if (s is { Kind: DesignerStatementKinds.Assign, Member: "Name", Value: { Kind: DesignerValueKinds.Literal, Type: "string" } literal }
-                     && s.Target is var target && (target == name || target == newName) && literal.Value == name
-                     && statement.Syntax is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax assignment })
+                     && s.Target is var target && (target == name || target == newName) && literal.Value == name && statement.Value is { } assigned)
             {
-                changes.Add(new TextChange(assignment.Right.Span, SymbolDisplay.FormatLiteral(newName, quote: true)));
+                changes.Add(new TextChange(assigned, generator.StringLiteral(newName)));
             }
         }
     }
@@ -666,7 +623,8 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             Target = edit.Component,
             Member = eventName,
             Handler = handler,
-            Value = source.Model.QualifiedNames || source.Model.Statements.Any(s => s is { Kind: DesignerStatementKinds.Event, Value: not null })
+            // C#'s .NET Framework style creates the delegate (+= new EventHandler(this.M)); Visual Basic's AddHandler names the method.
+            Value = source.Language == DesignerLanguages.CSharp && (source.Model.QualifiedNames || source.Model.Statements.Any(s => s is { Kind: DesignerStatementKinds.Event, Value: not null }))
                 ? new DesignerValue { Kind = DesignerValueKinds.New, Type = edit.DelegateType ?? "System.EventHandler", Arguments = [] }
                 : null,
         };
@@ -722,9 +680,9 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             {
                 changes.Add(new TextChange(existing.Lines, string.Empty));
             }
-            else if (existing.Syntax is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax { ArgumentList.Arguments: [_, var value] } })
+            else if (existing.Arguments is [_, var value])
             {
-                changes.Add(new TextChange(value.Span, Generator(source).Value(edit.Value)));
+                changes.Add(new TextChange(value, Generator(source).Value(edit.Value)));
             }
 
             return;
