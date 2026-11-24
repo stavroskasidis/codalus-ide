@@ -21,7 +21,7 @@ namespace Codalus.LanguageServices.Host;
 internal static class LanguageStateCache
 {
     /// <summary>Changes whenever what is stored, or what the key covers, changes.</summary>
-    public const int Schema = 2;
+    public const int Schema = 3;
 
     public const string StateFile = "codalus.language.json";
     public const string ReferenceFile = "codalus.language.ref.dll";

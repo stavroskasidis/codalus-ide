@@ -429,10 +429,17 @@ internal sealed class DiagnosticsService : IDisposable
             }
 
             var scope = ScopeFor(project);
-            var diagnostics = compilation.GetDiagnostics(token).Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, compilation, token)).ToList();
+            List<RoslynDiagnostic> diagnostics;
             if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
             {
-                diagnostics.AddRange(await analyzers.GetAnalyzerDiagnosticsAsync(token).ConfigureAwait(false));
+                // One bind for the compiler's and the analyzers' diagnostics (their compilation binds the project again
+                // otherwise), with the project's suppressors applied to both, as the build does.
+                var all = await analyzers.GetAllDiagnosticsAsync(token).ConfigureAwait(false);
+                diagnostics = [.. all.Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, analyzers.Compilation, token))];
+            }
+            else
+            {
+                diagnostics = [.. compilation.GetDiagnostics(token).Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, compilation, token))];
             }
 
             var found = new List<(string, Diagnostic[])>();
@@ -505,7 +512,7 @@ internal sealed class DiagnosticsService : IDisposable
         {
             // Only files whose diagnostics changed: unchanged projects keep the same diagnostics (the same instances).
             changed = [.. _background.Keys.Union(foundFiles.Keys, Paths.Comparer)
-                .Where(p => !(_background.TryGetValue(p, out var before) && foundFiles.TryGetValue(p, out var after) && before.SequenceEqual(after)))];
+                .Where(p => !(_background.TryGetValue(p, out var before) && foundFiles.TryGetValue(p, out var after) && before.SequenceEqual(after, DiagnosticComparer.Instance)))];
             _background.Clear();
             foreach (var (path, diagnostics) in foundFiles)
             {
@@ -634,12 +641,28 @@ internal sealed class DiagnosticsService : IDisposable
             reportSuppressedDiagnostics: false)));
     }
 
+    // Converted first, then told apart: each message is formatted once (a span and its range name the same place).
     private static Diagnostic[] Convert(IEnumerable<RoslynDiagnostic> diagnostics, SyntaxTree tree) =>
         [.. diagnostics
             .Where(d => !d.IsSuppressed && d.Location.IsInSource && d.Location.SourceTree == tree)
             .Where(d => d.Severity != RoslynSeverity.Hidden || d.Descriptor.CustomTags.Contains(WellKnownDiagnosticTags.Unnecessary))
-            .DistinctBy(d => (d.Id, d.Location.SourceSpan, d.GetMessage(System.Globalization.CultureInfo.CurrentCulture)))
-            .Select(Convert)];
+            .Select(Convert)
+            .DistinctBy(d => (d.Code, d.Range, d.Message))];
+
+    /// <summary>
+    /// Diagnostics compared by value, their tags too: the record compares the tags' arrays by reference, so a file with
+    /// a deprecated or unnecessary item was published again after every pass that compiled its project.
+    /// </summary>
+    internal sealed class DiagnosticComparer : IEqualityComparer<Diagnostic>
+    {
+        public static readonly DiagnosticComparer Instance = new();
+
+        public bool Equals(Diagnostic? x, Diagnostic? y) =>
+            ReferenceEquals(x, y) || (x is not null && y is not null && (x with { Tags = null }) == (y with { Tags = null })
+                && (x.Tags ?? []).AsSpan().SequenceEqual(y.Tags ?? []));
+
+        public int GetHashCode(Diagnostic obj) => (obj with { Tags = null }).GetHashCode();
+    }
 
     private static Diagnostic Convert(RoslynDiagnostic diagnostic)
     {
