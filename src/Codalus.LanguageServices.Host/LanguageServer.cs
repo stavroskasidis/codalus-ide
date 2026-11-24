@@ -419,7 +419,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         }
         else
         {
-            _xamlDiagnostics.OthersChanged();
+            _xamlDiagnostics.OthersChanged(path);
         }
     }
 

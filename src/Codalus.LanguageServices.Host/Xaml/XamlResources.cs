@@ -12,7 +12,10 @@ internal sealed record XamlResourceKey(string Key, string Kind, string File);
 /// </summary>
 internal sealed record XamlResourceScope(IReadOnlyList<XamlResourceKey> Keys, bool Complete)
 {
-    public bool Contains(string key) => Keys.Any(k => k.Key == key);
+    // Asked for every StaticResource of the file: a set, not a scan of every key each time.
+    private readonly HashSet<string> _keys = new(Keys.Select(k => k.Key), StringComparer.Ordinal);
+
+    public bool Contains(string key) => _keys.Contains(key);
 }
 
 /// <summary>
@@ -86,9 +89,9 @@ internal static class XamlResources
 
         foreach (var owner in documents.Keys.Where(p => !visible.Contains(p)).ToList())
         {
-            if (Closure(owner).Contains(self))
+            if (Closure(owner) is var merged && merged.Contains(self))
             {
-                visible.UnionWith(Closure(owner));
+                visible.UnionWith(merged);
             }
         }
 
