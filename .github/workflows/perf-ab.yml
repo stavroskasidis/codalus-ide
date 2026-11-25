@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest] # the open_tracked bisect, macOS again (run 45564475595's Linux job runs on): everyday only
+        os: [ubuntu-latest, macos-latest] # open_tracked's confirmation: A, the fix (C = c5a78ea3), and the fix without syntactic colors (C1)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 330
     env:
@@ -48,10 +48,10 @@ jobs:
         run: |
           set -euo pipefail
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-          # V1 no syntactic colors, V2 CodeLens one at a time, V3 inlay hints waiting for the margin, V4 416df18f reverted.
+          # C = the PR with the open_tracked fix (c5a78ea3), C1 = C without syntactic colors.
           # macOS's bash is 3.2: no associative arrays.
-          ref() { case "$1" in A) echo "$BASELINE" ;; B) echo 7c1e1c7f ;; V1) echo 2abc6bd8 ;; V2) echo 5577801e ;; V3) echo 6430c655 ;; V4) echo d683e39f ;; esac; }
-          for v in A B V1 V2 V3 V4; do
+          ref() { case "$1" in A) echo "$BASELINE" ;; C) echo c5a78ea3 ;; C1) echo 7f6356de ;; esac; }
+          for v in A C C1; do
             git worktree add "../tree-$v" "$(ref "$v")"
             (cd "../tree-$v" && dotnet publish src/Codalus.Shell -c Release -r "$rid" -o "$GITHUB_WORKSPACE/ab/$v")
           done
@@ -76,11 +76,11 @@ jobs:
           # macOS has no coreutils timeout (run 45516575948 ran no scenario there): the job's own limit stands in.
           limit() { if command -v timeout > /dev/null; then timeout "$@"; elif command -v gtimeout > /dev/null; then gtimeout "$@"; else shift; "$@"; fi; }
           round=0
-          # Each variant once per round, the order rotated each round, 6 rounds.
-          order=(A B V1 V2 V3 V4)
-          for r in 0 1 2 3 4 5; do
-            for k in 0 1 2 3 4 5; do
-              variant=${order[$(( (k + r) % 6 ))]}
+          # Each variant once per round, the order rotated each round, 10 rounds.
+          order=(A C C1)
+          for r in 0 1 2 3 4 5 6 7 8 9; do
+            for k in 0 1 2; do
+              variant=${order[$(( (k + r) % 3 ))]}
               round=$((round + 1))
               export CODALUS_BENCH_SHELL_DIR="$GITHUB_WORKSPACE/ab/$variant"
               out="ab-results/$variant/round$round"
@@ -113,13 +113,13 @@ jobs:
                       samples.setdefault(("rpcbench", r["payload"] + "_alloc_kb"), []).append(r["allocated_bytes_per_round_trip"] / 1024)
               return samples
           a = load("A")
-          variants = {v: load(v) for v in ["B", "V1", "V2", "V3", "V4"]}
-          print(f"## M66 open_tracked bisect on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
-          print("A = develop's head, B = the PR's head; V1 no syntactic colors, V2 CodeLens one at a time, V3 inlay hints waiting for the margin, V4 416df18f reverted. Medians over 6 rotated rounds, change from A.\n")
+          variants = {v: load(v) for v in ["C", "C1"]}
+          print(f"## M66 open_tracked confirmation on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
+          print("A = develop's head, C = the PR with the open_tracked fix (c5a78ea3), C1 = C without syntactic colors. Medians over 10 rotated rounds, change from A.\n")
           def mad(xs):
               m = statistics.median(xs)
               return statistics.median([abs(x - m) for x in xs])
-          names = ["B", "V1", "V2", "V3", "V4"]
+          names = ["C", "C1"]
           print("| Metric | A | " + " | ".join(names) + " |")
           print("|---|---|" + "---|" * len(names))
           for key in sorted(a, key=lambda k: str(k[1])):
