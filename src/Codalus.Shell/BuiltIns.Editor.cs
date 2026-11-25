@@ -340,7 +340,7 @@ internal static partial class BuiltIns
         Add("editor.action.marker.prev", "Go to Previous Problem", "Editor", Ui(() => shell.GoToProblem(-1)), Editor);
         Add("workbench.action.navigateToLastEditLocation", "Go to Last Edit Location", "Go", Ui(shell.GoToLastEditAsync));
         Add("editor.action.toggleFold", "Toggle Outlining Expansion", "Editor", OnEditor(c => c.ToggleFoldAtCaret()), Editor);
-        Add("editor.action.foldAll", "Collapse to Definitions", "Editor", OnEditor(c => c.SetAllFolded(true)), Editor);
+        Add("editor.action.foldAll", "Collapse to Definitions", "Editor", OnEditor(c => c.CollapseToDefinitions()), Editor);
         Add("editor.action.unfoldAll", "Expand All Outlining", "Editor", OnEditor(c => c.SetAllFolded(false)), Editor);
         Add("editor.action.find", "Find", "Edit", OnEditor(c => OpenSearch(c, replace: false)), Editor);
         Add("editor.action.replace", "Replace", "Edit", OnEditor(c => OpenSearch(c, replace: true)), Editor);

@@ -4,6 +4,8 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using AvaloniaEdit.Folding;
+using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
 
 namespace Codalus.Shell.Tests;
@@ -434,5 +436,67 @@ public sealed class LanguageTests
         var indent = json.Editor.Options.IndentationString;
         Assert.EndsWith("\n[\n" + indent + "\n]", json.Model.Text.Text, StringComparison.Ordinal);
         Assert.Equal(json.Model.Text.TextLength - 2, json.Editor.CaretOffset);
+    }
+
+    [AvaloniaFact]
+    public async Task Collapse_to_definitions_folds_members_and_keeps_their_type_open()
+    {
+        await using var f = ShellFixture.Create();
+        const string Code = """
+            using System;
+            using System.Threading;
+
+            namespace Contoso.Services;
+
+            public sealed class OrderService
+            {
+                private readonly int _retries = 3;
+
+                public bool Place(string user)
+                {
+                    return user.Length > _retries;
+                }
+
+                #region Helpers
+                public void Reset()
+                {
+                    Console.WriteLine();
+                }
+                #endregion
+            }
+            """;
+        var editor = await OpenAsync(f, "OrderService.txt", Code);
+        await ShellFixture.PumpUntil(() => editor.Folding.AllFoldings.Any(), seconds: 10);
+
+        // Without member foldings (indentation here, or another language server) it collapses everything.
+        await f.ExecuteAsync("editor.action.foldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.True(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+
+        // The C# host's ranges (0-based lines): the type, its members, the usings, a region.
+        int Line(string marker) => editor.Model.Text.GetLineByOffset(Code.IndexOf(marker, StringComparison.Ordinal)).LineNumber - 1;
+        editor.ApplyFoldings(
+        [
+            new FoldingRange(Line("using System;"), Line("using System.Threading;")) { Kind = FoldingKinds.Imports, CollapsedText = "using …" },
+            new FoldingRange(Line("public sealed class"), Line("#endregion") + 1),
+            new FoldingRange(Line("public bool Place"), Line("return user") + 1) { Kind = FoldingKinds.Member },
+            new FoldingRange(Line("#region"), Line("#endregion")) { Kind = FoldingKinds.Region, CollapsedText = "Helpers" },
+            new FoldingRange(Line("public void Reset"), Line("Console.WriteLine") + 1) { Kind = FoldingKinds.Member },
+        ]);
+        FoldingSection At(string marker) => editor.Folding.AllFoldings.Single(s => editor.Model.Text.GetLineByOffset(s.StartOffset).LineNumber - 1 == Line(marker));
+
+        // A type collapsed before (as the bug left it) opens again; so does the region that holds a member.
+        At("public sealed class").IsFolded = true;
+        At("#region").IsFolded = true;
+        await f.ExecuteAsync("editor.action.foldAll");
+        Assert.False(At("public sealed class").IsFolded);
+        Assert.False(At("#region").IsFolded);
+        Assert.True(At("using System;").IsFolded);
+        Assert.True(At("public bool Place").IsFolded);
+        Assert.True(At("public void Reset").IsFolded);
+
+        await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
     }
 }

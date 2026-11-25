@@ -973,6 +973,10 @@ public sealed partial class CodeEditorController : IDisposable
                 if (!cancellationToken.IsCancellationRequested && version0 == Model.Version && !_disposed)
                 {
                     _folding.UpdateFoldings(local, -1);
+                    foreach (var section in _folding.AllFoldings)
+                    {
+                        section.Tag = null; // no kinds: Collapse to Definitions folds everything
+                    }
                 }
 
                 return;
@@ -997,6 +1001,7 @@ public sealed partial class CodeEditorController : IDisposable
     {
         var document = Model.Text;
         var foldings = new List<NewFolding>();
+        var kinds = new Dictionary<(int Start, int End), string>();
         foreach (var range in ranges)
         {
             if (range.StartLine + 1 > document.LineCount || range.EndLine + 1 > document.LineCount || range.EndLine <= range.StartLine)
@@ -1007,16 +1012,26 @@ public sealed partial class CodeEditorController : IDisposable
             var startLine = document.GetLineByNumber(range.StartLine + 1);
             var endLine = document.GetLineByNumber(range.EndLine + 1);
             var start = Math.Min(startLine.EndOffset, startLine.Offset + (range.StartCharacter ?? startLine.Length));
-            if (range.Kind is "comment" or "imports" or "region")
+            if (range.Kind is FoldingKinds.Comment or FoldingKinds.Imports or FoldingKinds.Region)
             {
                 start = startLine.Offset + (startLine.Length - document.GetText(startLine.Offset, startLine.Length).TrimStart().Length); // fold the whole first line
             }
 
             foldings.Add(new NewFolding(start, endLine.EndOffset) { Name = range.CollapsedText ?? "…" });
+            if (range.Kind is { } kind)
+            {
+                kinds.TryAdd((start, endLine.EndOffset), kind);
+            }
         }
 
         foldings.Sort((a, b) => a.StartOffset.CompareTo(b.StartOffset));
         _folding.UpdateFoldings(LanguageFeatures.CapFoldings(foldings, Folded()), -1);
+
+        // Each section keeps its range's kind (sections move with edits; a kept section takes its new range's kind).
+        foreach (var section in _folding.AllFoldings)
+        {
+            section.Tag = kinds.GetValueOrDefault((section.StartOffset, section.EndOffset));
+        }
     }
 
     /// <summary>Where the collapsed foldings are: kept when the foldings are capped.</summary>
@@ -1036,13 +1051,49 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    /// <summary>Collapses (true) or expands (false) every folding; Ctrl+M Ctrl+O / Ctrl+M Ctrl+L.</summary>
+    /// <summary>Collapses (true) or expands (false) every folding; Ctrl+M Ctrl+L expands.</summary>
     public void SetAllFolded(bool folded)
     {
         foreach (var folding in _folding.AllFoldings)
         {
             folding.IsFolded = folded;
         }
+    }
+
+    /// <summary>
+    /// Collapse to Definitions (Ctrl+M Ctrl+O), as the classic IDE does: when the language server marks members
+    /// (<see cref="FoldingKinds.Member"/>, the C# and Visual Basic hosts), it collapses members, <c>using</c> groups and
+    /// comments, and expands the namespaces, types and regions that hold them, so the definitions show. Without members
+    /// (another server, or folding by indentation) it collapses every folding.
+    /// </summary>
+    public void CollapseToDefinitions()
+    {
+        var all = _folding.AllFoldings.ToList();
+        if (!all.Any(f => f.Tag is FoldingKinds.Member))
+        {
+            SetAllFolded(true);
+            return;
+        }
+
+        // AllFoldings is sorted by start; the foldings nest, so the first definition starting inside a folding ends inside it.
+        var definitions = all.Where(IsDefinition).Select(f => f.StartOffset).ToList();
+        foreach (var folding in all)
+        {
+            if (IsDefinition(folding))
+            {
+                folding.IsFolded = true;
+                continue;
+            }
+
+            var next = definitions.BinarySearch(folding.StartOffset);
+            next = next < 0 ? ~next : next;
+            if (next < definitions.Count && definitions[next] < folding.EndOffset)
+            {
+                folding.IsFolded = false;
+            }
+        }
+
+        static bool IsDefinition(FoldingSection folding) => folding.Tag is FoldingKinds.Member or FoldingKinds.Imports or FoldingKinds.Comment;
     }
 
     // ------------------------------------------------------------------ diagnostics
