@@ -9,7 +9,9 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <summary>
 /// Folding ranges from the syntax tree (Roslyn's block structure service is internal): namespaces, types, members,
 /// accessors, multi-line lambdas and initializers, <c>#region</c> blocks, groups of <c>using</c> directives, and
-/// comment blocks. A range starts on the line where its declaration begins and ends at its closing brace.
+/// comment blocks. A range starts on the line where its declaration begins and ends at its closing brace. Members and
+/// accessors are of kind <c>member</c>: Collapse to Definitions folds them (with <c>using</c> groups and comments), as
+/// the classic IDE does, and leaves namespaces, types, regions and local functions open.
 /// </summary>
 internal static class FoldingFeature
 {
@@ -56,11 +58,13 @@ internal static class FoldingFeature
                     break;
                 case BaseMethodDeclarationSyntax { Body: not null } or BaseMethodDeclarationSyntax { ExpressionBody: not null }:
                 case PropertyDeclarationSyntax or IndexerDeclarationSyntax or EventDeclarationSyntax:
+                    Add(HeaderStart(node), node.Span.End, FoldingKinds.Member);
+                    break;
                 case LocalFunctionStatementSyntax:
                     Add(HeaderStart(node), node.Span.End);
                     break;
                 case AccessorDeclarationSyntax { Body: not null } accessor:
-                    Add(HeaderStart(accessor), accessor.Span.End);
+                    Add(HeaderStart(accessor), accessor.Span.End, FoldingKinds.Member);
                     break;
                 case AnonymousFunctionExpressionSyntax { Block: { } block }:
                     Add(block.OpenBraceToken.SpanStart, block.Span.End);
@@ -91,7 +95,7 @@ internal static class FoldingFeature
             if (region.GetRelatedDirectives().OfType<EndRegionDirectiveTriviaSyntax>().FirstOrDefault() is { } end)
             {
                 var label = region.EndOfDirectiveToken.LeadingTrivia.ToString().Trim();
-                Add(region.SpanStart, end.Span.End, "region", label.Length > 0 ? label : "#region");
+                Add(region.SpanStart, end.Span.End, FoldingKinds.Region, label.Length > 0 ? label : "#region");
             }
         }
 
@@ -128,7 +132,7 @@ internal static class FoldingFeature
             };
             if (usings.Count > 1)
             {
-                add(usings[0].SpanStart, usings[^1].Span.End, "imports", "using …");
+                add(usings[0].SpanStart, usings[^1].Span.End, FoldingKinds.Imports, "using …");
             }
         }
     }
@@ -143,7 +147,7 @@ internal static class FoldingFeature
         {
             if (runStart is { } start && runCount > 1)
             {
-                add(start, runEnd, "comment", runLabel);
+                add(start, runEnd, FoldingKinds.Comment, runLabel);
             }
 
             runStart = null;
@@ -180,11 +184,11 @@ internal static class FoldingFeature
                         ? doc.Content.OfType<XmlElementSyntax>().FirstOrDefault(e => e.StartTag.Name.LocalName.Text == "summary")?.Content.ToString()
                         : null;
                     var collapsed = summary is null ? "/// …" : "/// " + string.Join(' ', summary.Replace("///", string.Empty, StringComparison.Ordinal).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)) + " …";
-                    add(trivia.SpanStart, docEnd, "comment", collapsed);
+                    add(trivia.SpanStart, docEnd, FoldingKinds.Comment, collapsed);
                     break;
                 case SyntaxKind.MultiLineCommentTrivia:
                     Flush();
-                    add(trivia.SpanStart, trivia.Span.End, "comment", "/* … */");
+                    add(trivia.SpanStart, trivia.Span.End, FoldingKinds.Comment, "/* … */");
                     break;
                 case SyntaxKind.WhitespaceTrivia:
                 case SyntaxKind.EndOfLineTrivia:

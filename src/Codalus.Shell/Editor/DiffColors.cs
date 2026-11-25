@@ -2,9 +2,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
-using TextMateSharp.Grammars;
-using TextMateSharp.Registry;
-using TextMateSharp.Themes;
+using Tint;
 
 namespace Codalus.Shell.Editor;
 
@@ -62,16 +60,13 @@ public sealed class SourceTokens(SourceToken[][] lines)
 /// Tokenizes whole texts with their language's TextMate grammar off the UI thread (#86: the diff document's sides and
 /// the merge editor's panes). C# and Visual Basic take the editor's token types (<see cref="GrammarColorizer.TypeOf"/>,
 /// drawn in <see cref="EditorTheme"/>, as Add New Item's preview colors them); other languages take their TextMate
-/// theme's colors, as the editor colors them. It has a registry of its own, since the shared one is the UI thread's.
+/// theme's colors, as the editor colors them. Each text gets a tokenizer of its own from the shared registry (which
+/// compiles each grammar once): a tokenizer isn't thread-safe, the registry's tokenizers can be made from any thread.
 /// </summary>
 public sealed class GrammarTokenizer(TextMateSupport textMate)
 {
     /// <summary>Longer lines are left plain, as the editor leaves them.</summary>
     private const int MaxLineLength = 5000;
-
-    private readonly Lock _sync = new();
-    private Registry? _registry;
-    private IRawTheme? _registryTheme;
 
     /// <summary>Whether a language is colored with the editor's token types (C# and Visual Basic) rather than a TextMate theme.</summary>
     public static bool UsesEditorColors(string? languageId) => languageId is "csharp" or "vb";
@@ -89,57 +84,21 @@ public sealed class GrammarTokenizer(TextMateSupport textMate)
 
         var editorColors = UsesEditorColors(languageId);
         var theme = editorColors ? null : textMate.ThemeFor(themeId);
-        return await Task.Run(
-            () =>
-            {
-                // One text at a time: the registry and its grammars aren't thread-safe.
-                lock (_sync)
-                {
-                    return Tokenize(text, scope, theme, editorColors, cancellationToken);
-                }
-            },
-            cancellationToken).ConfigureAwait(false);
+        return await Task.Run(() => Tokenize(text, scope, theme, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
-    private SourceTokens? Tokenize(string text, string scope, IRawTheme? theme, bool editorColors, CancellationToken cancellationToken)
+    private SourceTokens? Tokenize(string text, string scope, Theme? theme, CancellationToken cancellationToken)
     {
-        IGrammar? grammar;
-        Theme? colors = null;
-        try
-        {
-            if (_registry is null || (theme is not null && !ReferenceEquals(theme, _registryTheme)))
-            {
-                _registry = new Registry(textMate);
-                _registryTheme = null;
-            }
-
-            if (theme is not null)
-            {
-                if (!ReferenceEquals(theme, _registryTheme))
-                {
-                    _registry.SetTheme(theme);
-                    _registryTheme = theme;
-                }
-
-                colors = _registry.GetTheme();
-            }
-
-            grammar = _registry.LoadGrammar(scope);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
-        {
-            textMate.Log?.Invoke($"TextMate: the grammar {scope} could not be loaded: {ex.Message}");
-            return null;
-        }
-
-        if (grammar is null)
+        // Without a theme (C# and Visual Basic), the tokens' scopes give the editor's token types.
+        if (textMate.TokenizerForScope(scope, theme) is not { } tokenizer)
         {
             return null;
         }
 
+        tokenizer.TimeBudget = TimeSpan.FromMilliseconds(200);
         var lines = Workbench.Git.LineDiff.Lines(text);
         var result = new SourceToken[lines.Length][];
-        IStateStack? state = null;
+        var state = StateStack.Initial;
         var tokens = new List<SourceToken>();
         for (var i = 0; i < lines.Length; i++)
         {
@@ -158,41 +117,33 @@ public sealed class GrammarTokenizer(TextMateSupport textMate)
 
             try
             {
-                if (editorColors)
+                foreach (var token in tokenizer.TokenizeLine(line, state, out state))
                 {
-                    var tokenized = grammar.TokenizeLine(line, state, TimeSpan.FromMilliseconds(200));
-                    state = tokenized.RuleStack;
-                    foreach (var token in tokenized.Tokens)
+                    var start = Math.Min(token.Start, line.Length);
+                    var end = Math.Min(token.End, line.Length);
+                    if (end <= start)
                     {
-                        var start = Math.Min(token.StartIndex, line.Length);
-                        var end = Math.Min(token.EndIndex, line.Length);
-                        if (end > start && GrammarColorizer.TypeOf(token.Scopes) is { } type)
+                        continue;
+                    }
+
+                    if (theme is null)
+                    {
+                        if (GrammarColorizer.TypeOf(token.Scopes.GetScopeNames()) is { } type)
                         {
                             tokens.Add(new SourceToken(start, end - start, type, 0));
                         }
                     }
-                }
-                else
-                {
-                    var tokenized = grammar.TokenizeLine2(line, state, TimeSpan.FromMilliseconds(200));
-                    state = tokenized.RuleStack;
-                    var data = tokenized.Tokens;
-                    for (var k = 0; k + 1 < data.Length; k += 2)
+                    else if (token.Foreground > 0 && token.Foreground != theme.Defaults.ForegroundId && Parse(theme.ColorMap.GetColor(token.Foreground)) is { } argb)
                     {
-                        var start = Math.Min(data[k], line.Length);
-                        var end = k + 2 < data.Length ? Math.Min(data[k + 2], line.Length) : line.Length;
-                        var foreground = TextMateSharp.Internal.Grammars.EncodedTokenAttributes.GetForeground(data[k + 1]);
-                        if (end > start && foreground > 1 && colors?.GetColor(foreground) is { } hex && Parse(hex) is { } argb)
-                        {
-                            tokens.Add(new SourceToken(start, end - start, -1, argb));
-                        }
+                        tokens.Add(new SourceToken(start, end - start, -1, argb));
                     }
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
             {
                 // A grammar that fails on a line leaves it plain and starts the next one afresh.
-                state = null;
+                tokens.Clear();
+                state = StateStack.Initial;
             }
 
             result[i] = [.. tokens];

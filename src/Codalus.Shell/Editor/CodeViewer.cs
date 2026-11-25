@@ -20,18 +20,19 @@ namespace Codalus.Shell.Editor;
 /// Framework's debug view, an HTTP response. It has no language service of its own: C# and Visual Basic take the editor's
 /// colors from their grammar (<see cref="EditorColors"/>), other languages their TextMate colors.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The grammar's colorizer lives while the viewer is attached: it's disposed on detach and by Release.")]
 public sealed class CodeViewer : UserControl
 {
     private readonly IEditorServices _services;
     private readonly RangeHighlight _highlight = new();
     private readonly LongLineCutter _longLines;
-    private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
+    private TintColorizer? _grammar;
     private GrammarColorizer? _grammarColors;
     private string? _scope;
     private bool _attached;
 
     /// <summary>Whether the grammar's colors are installed (tests).</summary>
-    internal bool HasGrammar => _textMate is not null;
+    internal bool HasGrammar => _grammar is not null;
 
     public CodeViewer(IEditorServices services, EditorFont font)
     {
@@ -98,8 +99,7 @@ public sealed class CodeViewer : UserControl
     /// </summary>
     public void ShowPlain(string text)
     {
-        _textMate?.Dispose();
-        _textMate = null;
+        RemoveGrammar();
         _scope = null;
         RemoveGrammarColors();
         // The length first: the document's text is made a string for the comparison.
@@ -121,8 +121,7 @@ public sealed class CodeViewer : UserControl
         if (Editor.Document.TextLength != text.Length || Editor.Document.Text != text)
         {
             Editor.Document = new TextDocument(text);
-            _textMate?.Dispose();
-            _textMate = null;
+            RemoveGrammar();
             _scope = null;
         }
 
@@ -135,8 +134,7 @@ public sealed class CodeViewer : UserControl
         {
             RemoveGrammarColors();
             _scope = scope;
-            _textMate?.Dispose();
-            _textMate = null;
+            RemoveGrammar();
             InstallGrammar();
         }
         else
@@ -171,8 +169,7 @@ public sealed class CodeViewer : UserControl
 
     private void ShowWithEditorColors(string languageId)
     {
-        _textMate?.Dispose();
-        _textMate = null;
+        RemoveGrammar();
         _scope = null;
         if (_grammarColors is null)
         {
@@ -182,16 +179,19 @@ public sealed class CodeViewer : UserControl
         }
 
         _grammarColors.Theme = _services.Theme;
-        if (_services.TextMate.GrammarFor(languageId) is { } grammar)
+        // The same text shown again (a peek or a result view's refresh): its tokens stand. Keyed by the grammar's scope:
+        // each TokenizerFor is a new tokenizer.
+        var tokenized = (Editor.Document, Editor.Document.Version, _services.TextMate.GrammarScopeFor(languageId), _grammarColors);
+        if (Equals(_tokenized, tokenized))
         {
-            // The same text shown again (a peek or a result view's refresh): its tokens stand.
-            var tokenized = (Editor.Document, Editor.Document.Version, grammar, _grammarColors);
-            if (!Equals(_tokenized, tokenized))
-            {
-                _grammarColors.Tokenize(Editor.Document, grammar);
-                _tokenized = tokenized;
-                Tokenizations++;
-            }
+            return;
+        }
+
+        if (tokenized.Item3 is not null && _services.TextMate.TokenizerFor(languageId) is { } tokenizer)
+        {
+            _grammarColors.Tokenize(Editor.Document, tokenizer);
+            _tokenized = tokenized;
+            Tokenizations++;
         }
         else
         {
@@ -200,13 +200,13 @@ public sealed class CodeViewer : UserControl
         }
     }
 
-    /// <summary>What the grammar colors were last made for: the document, its version, the grammar and the colorizer.</summary>
+    /// <summary>What the grammar colors were last made for: the document, its version, the grammar's scope and the colorizer.</summary>
     private object? _tokenized;
 
     /// <summary>How many times the text was tokenized (tests).</summary>
     internal int Tokenizations { get; private set; }
 
-    /// <summary>The cut of long lines after the colorizers (a grammar's installs itself last): nothing draws past it.</summary>
+    /// <summary>The cut of long lines after the colorizers (a grammar's is added last): nothing draws past it.</summary>
     private void KeepLongLinesLast()
     {
         var transformers = Editor.TextArea.TextView.LineTransformers;
@@ -214,6 +214,16 @@ public sealed class CodeViewer : UserControl
         {
             transformers.Remove(_longLines);
             transformers.Add(_longLines);
+        }
+    }
+
+    private void RemoveGrammar()
+    {
+        if (_grammar is { } grammar)
+        {
+            _grammar = null;
+            Editor.TextArea.TextView.LineTransformers.Remove(grammar);
+            grammar.Dispose();
         }
     }
 
@@ -228,7 +238,7 @@ public sealed class CodeViewer : UserControl
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
-        _textMate?.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
+        _grammar?.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
         if (_grammarColors is not null)
         {
             _grammarColors.Theme = _services.Theme;
@@ -240,35 +250,31 @@ public sealed class CodeViewer : UserControl
     public void Release()
     {
         _services.ThemeChanged -= OnThemeChanged;
-        _textMate?.Dispose();
-        _textMate = null;
+        RemoveGrammar();
         _longLines.Detach();
     }
 
     /// <summary>
-    /// The grammar's colors, while the viewer is in a window: TextMate's tokenizer thread waits for work for as long as
-    /// they are installed, and holds the viewer (and its window and shell) meanwhile. A viewer whose owner never releases
-    /// it (a tool window's: Code Definition, an HTTP response) kept it after its window closed.
+    /// The grammar's colors, while the viewer is in a window: a viewer whose owner never releases it (a tool window's:
+    /// Code Definition, an HTTP response) doesn't keep tokenizing (nor its lines' states) after its window closed.
     /// </summary>
     private void InstallGrammar()
     {
-        if (_textMate is not null || _scope is not { } scope || !_attached)
+        if (_grammar is not null || _scope is not { } scope || !_attached)
         {
             return;
         }
 
         try
         {
-            _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
-            _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
-            _textMate.SetGrammar(scope);
+            _grammar = new TintColorizer(Editor.TextArea.TextView, _services.TextMate, scope, _services.TextMate.ThemeFor(_services.Theme.Id), _services.Log);
+            Editor.TextArea.TextView.LineTransformers.Add(_grammar);
             KeepLongLinesLast();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _services.Log("TextMate: " + ex.Message);
-            _textMate?.Dispose();
-            _textMate = null;
+            RemoveGrammar();
         }
     }
 
@@ -283,8 +289,7 @@ public sealed class CodeViewer : UserControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _attached = false;
-        _textMate?.Dispose();
-        _textMate = null;
+        RemoveGrammar();
         base.OnDetachedFromVisualTree(e);
     }
 

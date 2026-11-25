@@ -424,7 +424,7 @@ public sealed record DocumentHighlight(Range Range, int Kind);
 
 public sealed record FoldingRangeParams(TextDocumentIdentifier TextDocument);
 
-/// <summary><see cref="Kind"/> is <c>comment</c>, <c>imports</c>, <c>region</c> or null.</summary>
+/// <summary><see cref="Kind"/> is one of <see cref="FoldingKinds"/> or null.</summary>
 public sealed record FoldingRange(int StartLine, int EndLine)
 {
     public int? StartCharacter { get; init; }
@@ -434,6 +434,21 @@ public sealed record FoldingRange(int StartLine, int EndLine)
     public string? Kind { get; init; }
 
     public string? CollapsedText { get; init; }
+}
+
+/// <summary>
+/// A <see cref="FoldingRange"/>'s kinds: LSP's <c>comment</c>, <c>imports</c> and <c>region</c>, and Codalus's own
+/// <c>member</c> (a method's, property's, event's or accessor's body), which Collapse to Definitions folds.
+/// </summary>
+public static class FoldingKinds
+{
+    public const string Comment = "comment";
+
+    public const string Imports = "imports";
+
+    public const string Region = "region";
+
+    public const string Member = "member";
 }
 
 public sealed record SemanticTokensParams(TextDocumentIdentifier TextDocument);

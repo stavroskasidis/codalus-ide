@@ -474,8 +474,9 @@ jobs:
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
           dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
       - name: Stack traces for a smoke test failure (dotnet-stack)
-        # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
-        if: runner.os != 'Windows'
+        # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is;
+        # and its own when its UI thread stops answering (SmokeTest.Hangs.cs). Windows' too: its runner went silent in
+        # profiler.memory with the UI thread apparently held, and nothing named the call (run 45434861768).
         run: dotnet tool install -g dotnet-stack || true
       # The smoke's live output, as the test jobs' (.github/actions/live-output): its console and memory samples off the
       # runner about once a minute. A macOS smoke runner went silent 36 to 38 minutes into this step and left neither log

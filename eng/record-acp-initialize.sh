@@ -18,9 +18,9 @@ ssh="${2:-}"
 # The pinned packages, as src/Codalus.Workbench/Ai/Acp/AcpAgentCatalog.cs has them.
 case "$template" in
   claude) package="@agentclientprotocol/claude-agent-acp"; version="0.110.0"; args=() ;;
-  codex) package="@agentclientprotocol/codex-acp"; version="2.10.0"; args=() ;;
-  gemini) package="@google/gemini-cli"; version="0.70.0"; args=(--acp) ;;
-  copilot) package="@github/copilot"; version="1.0.114"; args=(--acp) ;;
+  codex) package="@agentclientprotocol/codex-acp"; version="2.12.0"; args=() ;;
+  gemini) package="@google/gemini-cli"; version="0.71.1"; args=(--acp) ;;
+  copilot) package="@github/copilot"; version="1.0.115"; args=(--acp) ;;
   pi) package="pi-acp"; version="0.0.35"; args=() ;;
   *) echo "Unknown template: $template" >&2; exit 2 ;;
 esac

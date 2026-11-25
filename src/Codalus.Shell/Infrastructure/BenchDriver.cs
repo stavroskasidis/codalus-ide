@@ -48,6 +48,12 @@ internal sealed partial class BenchDriver(Window window, ShellHost shell)
             return;
         }
 
+        if (shell.Options.Bench == "grammars")
+        {
+            await GrammarsAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (shell.Options.Bench == "everyday")
         {
             await EverydayAsync().ConfigureAwait(true);

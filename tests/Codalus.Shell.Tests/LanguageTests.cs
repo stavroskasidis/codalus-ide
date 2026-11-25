@@ -4,6 +4,8 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using AvaloniaEdit.Folding;
+using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
 
 namespace Codalus.Shell.Tests;
@@ -30,6 +32,25 @@ public sealed class LanguageTests
         return visual is null
             ? []
             : [.. visual.Elements.Select(e => e.TextRunProperties.ForegroundBrush is ISolidColorBrush brush ? brush.Color.ToString() : "?")];
+    }
+
+    [AvaloniaFact]
+    public async Task An_edit_tokenizes_again_the_lines_whose_state_it_changed()
+    {
+        await using var f = ShellFixture.Create();
+        var lines = string.Join('\n', Enumerable.Range(0, 300).Select(i => $"a{i} {{ color: red; }}")) + "\n";
+        var css = await OpenAsync(f, "site.css", lines);
+        await ShellFixture.PumpUntil(css.GrammarComplete, seconds: 20, describe: css.DescribeGrammar);
+        bool InComment(int line) => css.GrammarScopesAt(line, 1)?.Contains("comment.block.css") == true;
+        Assert.False(InComment(300));
+
+        // A comment opened on the first line runs to the end of the file; closed on the second, the lines after it come back.
+        css.Editor.Document.Insert(0, "/* ");
+        await ShellFixture.PumpUntil(() => InComment(300) && css.GrammarComplete(), seconds: 20, describe: css.DescribeGrammar);
+        css.Editor.Document.Insert(css.Editor.Document.GetLineByNumber(2).Offset, "*/\n");
+        await ShellFixture.PumpUntil(() => !InComment(301) && css.GrammarComplete(), seconds: 20, describe: css.DescribeGrammar);
+        Assert.True(InComment(1));
+        Assert.Equal(css.Editor.Document.LineCount, css.Grammar?.LineCount);
     }
 
     [AvaloniaFact]
@@ -434,5 +455,67 @@ public sealed class LanguageTests
         var indent = json.Editor.Options.IndentationString;
         Assert.EndsWith("\n[\n" + indent + "\n]", json.Model.Text.Text, StringComparison.Ordinal);
         Assert.Equal(json.Model.Text.TextLength - 2, json.Editor.CaretOffset);
+    }
+
+    [AvaloniaFact]
+    public async Task Collapse_to_definitions_folds_members_and_keeps_their_type_open()
+    {
+        await using var f = ShellFixture.Create();
+        const string Code = """
+            using System;
+            using System.Threading;
+
+            namespace Contoso.Services;
+
+            public sealed class OrderService
+            {
+                private readonly int _retries = 3;
+
+                public bool Place(string user)
+                {
+                    return user.Length > _retries;
+                }
+
+                #region Helpers
+                public void Reset()
+                {
+                    Console.WriteLine();
+                }
+                #endregion
+            }
+            """;
+        var editor = await OpenAsync(f, "OrderService.txt", Code);
+        await ShellFixture.PumpUntil(() => editor.Folding.AllFoldings.Any(), seconds: 10);
+
+        // Without member foldings (indentation here, or another language server) it collapses everything.
+        await f.ExecuteAsync("editor.action.foldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.True(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+
+        // The C# host's ranges (0-based lines): the type, its members, the usings, a region.
+        int Line(string marker) => editor.Model.Text.GetLineByOffset(Code.IndexOf(marker, StringComparison.Ordinal)).LineNumber - 1;
+        editor.ApplyFoldings(
+        [
+            new FoldingRange(Line("using System;"), Line("using System.Threading;")) { Kind = FoldingKinds.Imports, CollapsedText = "using …" },
+            new FoldingRange(Line("public sealed class"), Line("#endregion") + 1),
+            new FoldingRange(Line("public bool Place"), Line("return user") + 1) { Kind = FoldingKinds.Member },
+            new FoldingRange(Line("#region"), Line("#endregion")) { Kind = FoldingKinds.Region, CollapsedText = "Helpers" },
+            new FoldingRange(Line("public void Reset"), Line("Console.WriteLine") + 1) { Kind = FoldingKinds.Member },
+        ]);
+        FoldingSection At(string marker) => editor.Folding.AllFoldings.Single(s => editor.Model.Text.GetLineByOffset(s.StartOffset).LineNumber - 1 == Line(marker));
+
+        // A type collapsed before (as the bug left it) opens again; so does the region that holds a member.
+        At("public sealed class").IsFolded = true;
+        At("#region").IsFolded = true;
+        await f.ExecuteAsync("editor.action.foldAll");
+        Assert.False(At("public sealed class").IsFolded);
+        Assert.False(At("#region").IsFolded);
+        Assert.True(At("using System;").IsFolded);
+        Assert.True(At("public bool Place").IsFolded);
+        Assert.True(At("public void Reset").IsFolded);
+
+        await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
     }
 }

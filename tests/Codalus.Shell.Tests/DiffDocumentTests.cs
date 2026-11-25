@@ -77,6 +77,27 @@ public sealed class DiffDocumentTests
     private static int ColumnOf(string text, int line, string word) =>
         text.Split('\n')[line - 1].IndexOf(word, StringComparison.Ordinal);
 
+    /// <summary>
+    /// The token type drawn at a pane's 1-based line and 0-based character, and on a miss what was drawn there: the line's
+    /// tokens with their types, and which side the language service's tokens replaced. Once, on Linux (a local
+    /// validation, 2026-11-25; docs/ci-flakes.md), the index side's <c>class</c> was drawn as <c>namespace</c> (type 0),
+    /// and passed 40 of 40 alone and under load.
+    /// </summary>
+    private static void AssertType(int expected, DiffView view, DiffViewModel vm, DiffPaneSide side, string paneText, int line, int character)
+    {
+        var actual = view.ColoredTypeAt(side, line, character);
+        if (actual == expected)
+        {
+            return;
+        }
+
+        static string Name(int type) => (uint)type < (uint)TokenTypes.All.Length ? TokenTypes.All[type] : type.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var colors = side == DiffPaneSide.Old ? vm.OldColors : vm.NewColors;
+        var text = (uint)(line - 1) < (uint)paneText.Split('\n').Length ? paneText.Split('\n')[line - 1] : "(no such line)";
+        var drawn = string.Join(", ", (colors?.Line(line - 1).ToArray() ?? []).Select(t => $"{t.Start}+{t.Length} {Name(t.Type)}"));
+        Assert.Fail($"The {side} side's line {line}, character {character}, was drawn as {Name(actual)}, not {Name(expected)}. The line: '{text}'. Its tokens (the file's line {line}, which a side-by-side pane's line is before any filler): {drawn}. The language service's tokens replaced the {(vm.OpenSideIsOld is { } old ? (old ? "old" : "new") : "neither")} side.");
+    }
+
     [Fact]
     public void The_diff_settings_default_to_side_by_side()
     {
@@ -104,11 +125,11 @@ public sealed class DiffDocumentTests
         var left = view.LeftText;
         var right = view.RightText;
         var classLine = LineOf(left, "public static class");
-        Assert.Equal(s_keyword, view.ColoredTypeAt(DiffPaneSide.Old, classLine, ColumnOf(left, classLine, "class")));
-        Assert.Equal(s_comment, view.ColoredTypeAt(DiffPaneSide.Old, LineOf(left, "// Says hello."), 6));
+        AssertType(s_keyword, view, vm, DiffPaneSide.Old, left, classLine, ColumnOf(left, classLine, "class"));
+        AssertType(s_comment, view, vm, DiffPaneSide.Old, left, LineOf(left, "// Says hello."), 6);
         var added = LineOf(right, "Count => 3");
-        Assert.Equal(s_keyword, view.ColoredTypeAt(DiffPaneSide.New, added, ColumnOf(right, added, "int")));
-        Assert.Equal(s_comment, view.ColoredTypeAt(DiffPaneSide.New, LineOf(right, "to someone"), 6));
+        AssertType(s_keyword, view, vm, DiffPaneSide.New, right, added, ColumnOf(right, added, "int"));
+        AssertType(s_comment, view, vm, DiffPaneSide.New, right, LineOf(right, "to someone"), 6);
         Assert.True(view.LineColors(DiffPaneSide.Old, classLine) >= 2, "the index side's class line is drawn in one color");
         Assert.True(view.LineColors(DiffPaneSide.New, added) >= 2, "the working tree's added line is drawn in one color");
 

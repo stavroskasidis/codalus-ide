@@ -65,10 +65,9 @@
     <!-- The headless mode (codalus mcp with a folder, M60b): the shell without a window, on the platform the UI tests use. -->
     <PackageReference Include="Avalonia.Headless" />
     <PackageReference Include="Avalonia.AvaloniaEdit" />
-    <PackageReference Include="AvaloniaEdit.TextMate" />
-    <!-- Referenced directly to take a newer version than AvaloniaEdit.TextMate's (Directory.Packages.props). -->
-    <PackageReference Include="TextMateSharp" />
-    <PackageReference Include="TextMateSharp.Grammars" />
+    <PackageReference Include="Tint" />
+    <PackageReference Include="Tint.Grammars" />
+    <PackageReference Include="Tint.Themes" />
     <PackageReference Include="Dock.Avalonia" />
     <PackageReference Include="Dock.Model.Mvvm" />
     <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
@@ -95,6 +94,8 @@
     <AvaloniaResource Include="..\..\assets\logo\png\codalus-128.png" Link="Assets\codalus-128.png" />
     <!-- Built-in snippets, one file per language (M12b). -->
     <EmbeddedResource Include="Editor\Snippets\*.json" LogicalName="Codalus.Shell.Snippets.%(Filename).json" />
+    <!-- VS Code's language configurations for the bundled grammars (MIT; THIRD-PARTY-NOTICES.md), one per language. -->
+    <EmbeddedResource Include="Editor\LanguageConfigurations\*.json" LogicalName="Codalus.Shell.LanguageConfigurations.%(Filename).json" />
     <EmbeddedResource Include="Localization\*.json" LogicalName="Codalus.Shell.Localization.%(Filename).json" />
   </ItemGroup>
 
