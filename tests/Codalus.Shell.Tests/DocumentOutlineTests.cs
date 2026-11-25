@@ -317,5 +317,11 @@ public sealed class DocumentOutlineTests
         Assert.Equal(caret, large.Editor.CaretOffset);
         await ShellFixture.PumpUntil(() => outline.Rows.Count == 111 && !outline.IsBuilding, describe: () => $"{outline.Rows.Count} rows");
         Assert.False(outline.HasMessage);
+
+        // Once the large document's rows show, a row the small one had (a late click) still goes nowhere in it: a flatten
+        // that finished before its await showed them at once, and that row then went to its symbol's place (Linux CI,
+        // run 45632903916).
+        outline.Navigate(old);
+        Assert.Equal(caret, large.Editor.CaretOffset);
     }
 }

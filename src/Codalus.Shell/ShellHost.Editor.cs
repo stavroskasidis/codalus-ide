@@ -1422,6 +1422,7 @@ public sealed partial class ShellHost : IEditorServices
         Workbench.Context.Set("editorExtension", ActiveEditor?.Model.Path is { } activePath ? Path.GetExtension(activePath).ToLowerInvariant() : null);
         FollowXamlEditor();
         OnHistoryDocumentChanged();
+        UpdateActiveFileGitKeys();
         if (ActiveEditor is { Controller: { } controller } editor)
         {
             controller.CaretChanged -= OnCaretChanged;
