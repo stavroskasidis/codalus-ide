@@ -305,7 +305,9 @@ public sealed partial class CommandSweepTests
     {
         Assert.True(Directory.Exists(PluginsDir), $"{PluginsDir} has the built-in plugins (the shell's build copies them)");
         var f = ShellFixture.Create(builtInPlugins: PluginsDir);
-        Assert.True(f.Shell.Plugins.Plugins.Count(p => p.IsBuiltIn) >= 7, "every built-in plugin is discovered");
+        var builtIn = f.Shell.Plugins.Plugins.Where(p => p.IsBuiltIn).Select(p => p.Id).ToList();
+        Assert.True(builtIn.Count >= 6, $"every built-in plugin is discovered (found: {string.Join(", ", builtIn)})"); // the Start page is the shell's own since M66
+        Assert.DoesNotContain("codalus.welcome", builtIn);
         Assert.DoesNotContain(f.Shell.Plugins.Plugins, p => p.Id == "codalus.templates"); // retired: New Project is the IDE's (ADR 0082)
         return f;
     }
