@@ -510,11 +510,21 @@ internal sealed class LanguageServer : IAsyncDisposable
                     return full.Result;
                 }
 
-                if (await WorkspaceManager.FindDocumentAsync(_workspace.CurrentSolution, where(p).Uri, ct).ConfigureAwait(false) is { } document
-                    && await cold(document, p, ct).ConfigureAwait(false) is { } partial)
+                // The syntax's answer, unless the full one lands first: on a fast machine it comes soon after the wait, and
+                // the syntax's (a parse of its own) would then hold it back by its time and the client's next request
+                // (CI's same-runner A/B, run 45531093514: full colors 5 to 7% later on Linux).
+                var syntactic = SyntacticAsync(p, ct);
+                if (await Task.WhenAny(full, syntactic).ConfigureAwait(false) == full && full.IsCompletedSuccessfully && answered!(full.Result))
+                {
+                    _ = syntactic.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    _coldAnswers[path] = ColdAnswer.Full;
+                    return full.Result;
+                }
+
+                if (await syntactic.ConfigureAwait(false) is ({ } partial, var text))
                 {
                     _ = full.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
-                    computing![path] = (p, await document.GetTextVersionAsync(ct).ConfigureAwait(false), full);
+                    computing![path] = (p, text, full);
                     return partial;
                 }
 
@@ -536,6 +546,18 @@ internal sealed class LanguageServer : IAsyncDisposable
 
             return answer;
         });
+
+        // The answer from the syntax alone, with the version of the text it is for; null where there is none.
+        async Task<(TResult? Partial, VersionStamp Text)> SyntacticAsync(TParams p, CancellationToken ct)
+        {
+            if (await WorkspaceManager.FindDocumentAsync(_workspace.CurrentSolution, where(p).Uri, ct).ConfigureAwait(false) is not { } document)
+            {
+                return (default, default);
+            }
+
+            var text = await document.GetTextVersionAsync(ct).ConfigureAwait(false);
+            return (await cold!(document, p, ct).ConfigureAwait(false), text);
+        }
 
         // The cold request's full answer when this request asks for the same range of the same text, else a new one.
         async Task<TResult> FullAsync(string path, TParams p, CancellationToken ct)
