@@ -441,6 +441,7 @@ public static class CommandIcons
         ["editor.action.surroundWithSnippet"] = new("snippet"),
         ["editor.action.insertCursorBelow"] = new("caret"),
         ["editor.action.toggleFold"] = new("fold"),
+        ["editor.action.toggleAllFolds"] = new("fold"),
         ["editor.action.foldAll"] = new("fold-all"),
         ["editor.action.unfoldAll"] = new("unfold-all"),
         ["editor.action.rename"] = new("rename"),

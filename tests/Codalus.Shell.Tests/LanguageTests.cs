@@ -498,5 +498,15 @@ public sealed class LanguageTests
 
         await f.ExecuteAsync("editor.action.unfoldAll");
         Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+
+        // Toggle All Outlining: with nothing collapsed it collapses everything (the type too); with anything collapsed it
+        // expands everything.
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.True(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.foldAll");
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
     }
 }

@@ -93,6 +93,7 @@ editor.action.showTypeHierarchy
 editor.action.smartSelect.expand
 editor.action.smartSelect.shrink
 editor.action.surroundWithSnippet
+editor.action.toggleAllFolds
 editor.action.toggleFold
 editor.action.triggerParameterHints
 editor.action.triggerSuggest
