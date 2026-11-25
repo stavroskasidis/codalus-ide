@@ -97,7 +97,7 @@ public sealed class DataTipCollectionTests
         Assert.Equal(["[0]", "[1]", "[2]", "Raw View"], rows.Select(r => r.Node.Name));
         Assert.All(rows.Take(3), r => Assert.Equal(("symbol-field", "Day = " + r.Node.Name.Trim('[', ']')), (r.Node.Icon, r.Node.Value)));
         Assert.Equal(("symbol-raw-view", string.Empty), (rows[3].Node.Icon, rows[3].ValueBlock.Text));
-        Assert.Equal(11, rows[0].Node.ParentReference); // set in _items, where netcoredbg names the slot [0]
+        Assert.Equal(11 * Codalus.Debugging.CompoundDebugAdapter.MaxParts, rows[0].Node.ParentReference); // set in _items, where netcoredbg names the slot [0] (the session's reference: the adapter's times its programs, #547)
 
         // Raw View: what netcoredbg lists, grouped (List<T> is a library type).
         tip.SetOpen(tip.Panels[0], rows[3], rows[3].Node, true);

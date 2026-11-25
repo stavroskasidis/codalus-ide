@@ -51,7 +51,9 @@ A program that joins is part of the session as [several startup projects](#sever
 
 Web apps take part too. A **Blazor WebAssembly** app's page joins as one more program, with its dev server running beside it; closing the page stops the dev server. A **web app debugged with its page** (a Blazor Web App, or a server whose launch profile opens its page under the debugger) joins as one program, its server and its page together, as F5 debugs it: its threads are named after it (`Web: Browser: …`). A web app that joins a session runs without [Hot Reload while debugging](#hot-reload-while-debugging), which stays the session's first program's: its edits take effect after a restart.
 
-Some sessions and projects don't take part yet, and say so instead: a session attached to a process, a session whose web app runs under `dotnet watch` (netcoredbg's Hot Reload while debugging), an Aspire AppHost, a container profile, a mobile or packaged app, and projects in a remote window. Stop the session to debug one of them, or start it without debugging.
+Every other kind of project joins the same way, started as F5 starts it: a .NET MAUI app on its device, a packaged WinUI app, a project of a [remote window](remote.md), an Aspire AppHost (its projects join with it; one AppHost runs at a time), and a project whose launch profile runs it in a container. **Attach to Process** (`Ctrl+Alt+P`) and its remote and container kin add the process to the running session too, and a session that began with an attach takes launched programs: Stop ends what it launched and detaches from what it attached to.
+
+One session doesn't take other programs: one whose Blazor Web App runs under `dotnet watch`, which netcoredbg's Hot Reload while debugging uses, since `dotnet watch` restarts the app by ending the session. It says so; stop it to debug another program, or start that one without debugging.
 
 ### Debugging on other machines
 
@@ -368,7 +370,7 @@ The Codalus debugger's own limits:
 - symbols found on a server give a module its lines and names; its source files still come from your disk (embedded sources and Source Link aren't read by the debugger yet)
 - F# expressions are read as C#'s subset
 - Edit and Continue doesn't cover modules built with Windows PDBs
-- Start New Instance adds programs that run on this machine or in WSL, and web apps with their pages, to a running session of such programs; a web app that joins has no Hot Reload while debugging ([Starting another project while you debug](#starting-another-project-while-you-debug))
+- a web app that joins a running session ([Starting another project while you debug](#starting-another-project-while-you-debug)) has no Hot Reload while debugging, and a session whose web app runs under `dotnet watch` takes no other programs
 - the async call stack is for state machines only, and ends at `Task.WhenAll`, `Task.WhenAny` and `ContinueWith`; runtime async has none, and its limits for Step Out of a resumed method ([Async code](#async-code-and-runtime-async-net-11))
 
 These are netcoredbg's, when you choose it as the fallback; [the Codalus debugger](#the-codalus-debugger) does the first eight:
@@ -381,7 +383,6 @@ These are netcoredbg's, when you choose it as the fallback; [the Codalus debugge
 - no `new`, lambdas or generic methods in expressions, and hit counts and logpoints stop the program at each hit
 - with several startup projects, a stop in one program doesn't pause the others (on Windows, a program netcoredbg paused that way didn't always go on)
 - no data breakpoints and no mixed-mode debugging
-- Step Into New Instance doesn't stop at the entry point of a program netcoredbg attaches to in the integrated terminal or a console window: it runs to its first breakpoint
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
 - dumps written on another operating system don't open
 - no console input for a program debugged with the Debug Console (set `debug.console` to `integratedTerminal`)

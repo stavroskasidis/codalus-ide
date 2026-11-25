@@ -155,6 +155,41 @@ public sealed class SessionsTests(SessionsFixture fixture) : IClassFixture<Sessi
     }
 
     [Fact]
+    public async Task An_attach_joins_a_session_and_Stop_ends_the_launched_program_but_leaves_the_attached_one_running()
+    {
+        // #547: Attach to Process while debugging adds the process to the session; Stop ends what it launched and
+        // detaches from what it attached to.
+        var partner = fixture.Source("Partner", "Program.cs");
+        var go = Path.Combine(Path.GetTempPath(), "codalus-attach-join-" + Guid.NewGuid().ToString("N"));
+        using var waiting = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(DotnetHost) { ArgumentList = { "exec", fixture.Dll("Debuggee"), "--wait-for", go }, RedirectStandardOutput = true })!;
+        try
+        {
+            Assert.Equal("waiting", await waiting.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken));
+            _debug.Breakpoints.Set(new BreakpointSpec(partner, DebuggeeFixture.Line(partner, "partner")));
+            await _debug.LaunchAsync([new DebugLaunch("Partner", Plan("Partner"))], TestContext.Current.CancellationToken, joinable: true);
+            await NextStopAsync();
+
+            Assert.Equal(1, await _debug.AttachAsync(waiting.Id, TestContext.Current.CancellationToken, name: "Debuggee"));
+            Assert.Equal([DebugProcess.Launched, DebugProcess.Attached], _debug.Processes.Select(p => p.Kind));
+            Assert.False(_debug.IsAttached); // not every program was attached to
+
+            await _debug.StopAsync();
+            Assert.Equal(DebugState.Idle, _debug.State);
+            Assert.False(waiting.HasExited); // detached from, not ended
+        }
+        finally
+        {
+            await File.WriteAllTextAsync(go, string.Empty, TestContext.Current.CancellationToken);
+            if (!waiting.WaitForExit(30_000))
+            {
+                waiting.Kill();
+            }
+
+            File.Delete(go);
+        }
+    }
+
+    [Fact]
     public async Task Step_Into_New_Instance_stops_at_the_program_entry_point()
     {
         // #547: netcoredbg's stopAtEntry, for a program that joins the session as for the session's first. The first

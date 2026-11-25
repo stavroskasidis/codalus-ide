@@ -520,6 +520,20 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
     }
 
+    /// <summary>The program's own id of <paramref name="threadId"/> (a nested web app's too), or the id itself once its program has ended.</summary>
+    public int DisplayThreadId(int threadId)
+    {
+        try
+        {
+            var (part, thread) = Owner(threadId, "threads");
+            return part.Adapter.DisplayThreadId(thread);
+        }
+        catch (DapException)
+        {
+            return threadId;
+        }
+    }
+
     /// <summary>The adapters still in the session.</summary>
     private List<Part> Parts()
     {

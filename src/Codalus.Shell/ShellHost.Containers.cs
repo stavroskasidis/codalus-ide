@@ -21,6 +21,9 @@ public sealed partial class ShellHost
 {
     private string? _debugContainer;
 
+    /// <summary>The containers of projects Start New Instance added to the session (#547): removed when it ends.</summary>
+    private readonly List<string> _joinedContainers = [];
+
     public ContainersViewModel ContainersWindow { get; private set; } = null!;
 
     public OutputChannel ContainerLog => Workbench.Output.GetOrCreate("codalus.containers", "Container Tools");
@@ -44,6 +47,18 @@ public sealed partial class ShellHost
             if (Interlocked.Exchange(ref _debugContainer, null) is { } container)
             {
                 _ = RemoveContainerQuietlyAsync(container);
+            }
+
+            List<string> joined;
+            lock (_joinedContainers)
+            {
+                joined = [.. _joinedContainers];
+                _joinedContainers.Clear();
+            }
+
+            foreach (var other in joined)
+            {
+                _ = RemoveContainerQuietlyAsync(other);
             }
         };
     }
@@ -255,7 +270,7 @@ public sealed partial class ShellHost
     private async Task<bool> DebugInContainerAsync(string name, ContainerLaunch launch, ContainerEngine engine)
     {
         var target = new ContainerTarget(launch.Name, engine.Tool);
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
         Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
@@ -264,15 +279,27 @@ public sealed partial class ShellHost
             // The container is ours: the debugger is copied into it without asking.
             var debugger = await RemoteDebuggers.EnsureAsync(target, Debugger.UsesCodalusAdapter, _ => Task.FromResult(true), new Progress<string>(line => DebugLog.AppendLine(line)), CancellationToken.None).ConfigureAwait(true);
             var map = new SourceMap(SourceFileMap(), SolutionFiles());
-            UseRemoteCompanion(RemoteShell.Companion(target, debugger));
-            _debugContainer = launch.Name;
+            if (Debugger.IsActive)
+            {
+                // It joins the running session (#547): the session's companion stays; its container goes with the session.
+                lock (_joinedContainers)
+                {
+                    _joinedContainers.Add(launch.Name);
+                }
+            }
+            else
+            {
+                UseRemoteCompanion(RemoteShell.Companion(target, debugger));
+                _debugContainer = launch.Name;
+            }
+
             if (launch.FastMode)
             {
                 var arguments = new LaunchArguments(launch.Program, [.. launch.Arguments], launch.WorkingDirectory, new Dictionary<string, string>(launch.Environment));
                 var plan = new LaunchPlan(launch.Program, string.Join(' ', launch.Arguments), launch.WorkingDirectory, launch.Environment, launch.BrowserUrl);
                 DebugLog.AppendLine($"[{name}] > {launch.Program} {string.Join(' ', launch.Arguments)} (in the container {launch.Name})");
                 _pendingBrowserUrl = launch.BrowserUrl;
-                await Debugger.LaunchAsync([new DebugLaunch(name, plan) { Remote = new RemoteLaunch(RemoteShell.Adapter(target, debugger), arguments, map, target.Display) }], CancellationToken.None).ConfigureAwait(true);
+                await Debugger.LaunchOrJoinAsync(new DebugLaunch(name, plan) { Remote = new RemoteLaunch(RemoteShell.Adapter(target, debugger), arguments, map, target.Display) }, CancellationToken.None).ConfigureAwait(true);
                 return true;
             }
 

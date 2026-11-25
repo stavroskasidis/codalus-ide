@@ -1,3 +1,5 @@
+using Codalus.Workbench.Debugging;
+
 namespace Codalus.Debugging.Tests;
 
 /// <summary>
@@ -69,6 +71,24 @@ public sealed class StopAtEntryTests(DebuggeeFixture fixture, AsyncDebuggeeFixtu
         await adapter.ContinueAsync(stop.ThreadId!.Value, Ct);
         var (name, _) = await events.NextOfAsync([DapEvents.Stopped, DapEvents.Exited], seconds: 90);
         Assert.Equal(DapEvents.Exited, name);
+    }
+
+    [Fact]
+    public void The_entry_points_first_line_is_read_from_the_pdb()
+    {
+        // The IDE's own reading (Workbench.Debugging.EntryPoints), for a program netcoredbg attaches to in the terminal.
+        Assert.Equal((fixture.Program, DebuggeeFixture.Line(fixture.Program, "first")), EntryPoints.FirstLine(fixture.Dll));
+        var (dll, _) = asyncFixture.Program("AsyncDebuggee");
+        var program = asyncFixture.Source("Program.cs");
+        var line = EntryPoints.FirstLine(dll);
+        Assert.Equal(program, line?.Document);
+        var lines = File.ReadAllLines(program);
+        Assert.InRange(line!.Value.Line,
+            Array.FindIndex(lines, l => l.Contains("static async Task<int> Main", StringComparison.Ordinal)) + 2,
+            Array.FindIndex(lines, l => l.Contains("var scenario =", StringComparison.Ordinal)) + 1);
+
+        // A library has no entry point.
+        Assert.Null(EntryPoints.FirstLine(typeof(EntryPoints).Assembly.Location));
     }
 
     [Theory]

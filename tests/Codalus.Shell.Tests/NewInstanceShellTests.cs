@@ -92,6 +92,10 @@ public sealed class NewInstanceShellTests
         await ShellFixture.PumpUntil(() => Volatile.Read(ref stopped) >= 1 && f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
         Assert.True(f.Shell.Debugger.CanAddLaunch);
 
+        // Attach to Process and its kin add to the running session, as the classic IDE's do (#547's last step).
+        await f.WhenEnabledAsync("debug.attach");
+        await f.WhenEnabledAsync("debug.attachRemote");
+
         // Start New Instance on Partner while Debuggee is stopped: it builds and joins the session, then stops at its own
         // breakpoint once Debuggee goes on.
         f.Shell.Debugger.Breakpoints.Toggle(partner, Line(partner, "partner"));

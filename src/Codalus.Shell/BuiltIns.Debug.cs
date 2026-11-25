@@ -23,8 +23,8 @@ internal static partial class BuiltIns
           { "key": "f9", "command": "debug.toggleBreakpoint", "when": "editorTextFocus" },
           { "key": "ctrl+f9", "command": "debug.toggleBreakpointEnabled", "when": "editorTextFocus" },
           { "key": "primary+shift+f9", "command": "debug.deleteAllBreakpoints", "when": "hasBreakpoints" },
-          { "key": "ctrl+alt+p", "command": "debug.attach", "when": "!debugActive" },
-          { "key": "shift+alt+p", "command": "debug.reattach", "when": "!debugActive" },
+          { "key": "ctrl+alt+p", "command": "debug.attach", "when": "!debugActive || debugCanAddProgram" },
+          { "key": "shift+alt+p", "command": "debug.reattach", "when": "!debugActive || debugCanAddProgram" },
           { "key": "shift+f9", "command": "debug.quickWatch", "when": "debugStopped" },
           { "key": "primary+f10", "command": "debug.runToCursor", "when": "editorTextFocus && !debugRunning" },
           { "key": "primary+shift+f10", "command": "debug.setNextStatement", "when": "editorTextFocus && debugCanSetNextStatement" },
@@ -272,8 +272,8 @@ internal static partial class BuiltIns
         Add("debug.stepInto", "Step Into", _ => shell.Debugger.StepIntoAsync(), "debugStopped");
         Add("debug.stepOut", "Step Out", _ => shell.Debugger.StepOutAsync(), "debugStopped");
         Add("debug.pause", "Break All", _ => shell.Debugger.PauseAsync(), "debugRunning");
-        Add("debug.attach", "Attach to Process…", shell.AttachToProcessAsync, "!debugActive");
-        Add("debug.webPage", "Debug a Web Page…", shell.DebugWebPageAsync, "!debugActive");
+        Add("debug.attach", "Attach to Process…", shell.AttachToProcessAsync, "!debugActive || debugCanAddProgram");
+        Add("debug.webPage", "Debug a Web Page…", shell.DebugWebPageAsync, "!debugActive || debugCanAddProgram");
         Add("debug.toggleBreakpoint", "Toggle Breakpoint", Sync(shell.ToggleBreakpoint), "activeDocumentKind == textFile");
         Add("debug.toggleBreakpointEnabled", "Enable or Disable Breakpoint", Sync(shell.ToggleBreakpointEnabled), "activeDocumentKind == textFile");
         Add("debug.editBreakpoint", "Breakpoint Conditions and Actions…", _ => shell.EditBreakpointAsync(), "activeDocumentKind == textFile");
@@ -285,7 +285,7 @@ internal static partial class BuiltIns
         Add("debug.forceRunToCursor", "Force Run to Cursor", _ => shell.RunToCursorAsync(force: true), "activeDocumentKind == textFile && debugStopped");
         Add("debug.setNextStatement", "Set Next Statement", _ => shell.SetNextStatementAsync(), "activeDocumentKind == textFile && debugCanSetNextStatement");
         Add("debug.stepIntoSpecific", "Step Into Specific…", _ => shell.StepIntoSpecificAsync(), "debugCanStepIntoSpecific");
-        Add("debug.reattach", "Reattach to Process", _ => shell.ReattachAsync(), "!debugActive");
+        Add("debug.reattach", "Reattach to Process", _ => shell.ReattachAsync(), "!debugActive || debugCanAddProgram");
         Add("debug.newFunctionBreakpoint", "New Function Breakpoint…", _ => shell.NewFunctionBreakpointAsync());
         Add("debug.insertTemporaryBreakpoint", "Insert Temporary Breakpoint", Sync(shell.InsertTemporaryBreakpoint), "activeDocumentKind == textFile");
         Add("debug.exportBreakpoints", "Export Breakpoints…", _ => shell.ExportBreakpointsAsync(), "hasBreakpoints");
@@ -294,7 +294,7 @@ internal static partial class BuiltIns
         Add("debug.createDump", "Create Dump", shell.CreateDumpAsync, "debugActive");
         Add("debug.clearDataTips", "Clear All DataTips", Sync(shell.Debugger.PinnedTips.Clear));
         Add("debug.detachAll", "Detach All", _ => shell.Debugger.DetachAsync(), "debugCanDetach");
-        Add("debug.attachRemote", "Attach to Process on a Remote Machine…", shell.AttachToRemoteProcessAsync, "!debugActive");
+        Add("debug.attachRemote", "Attach to Process on a Remote Machine…", shell.AttachToRemoteProcessAsync, "!debugActive || debugCanAddProgram");
         Add("debug.justInTime", "Just-In-Time Debugging…", shell.ConfigureJitDebuggingAsync);
     }
 }
