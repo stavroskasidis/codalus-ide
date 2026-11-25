@@ -206,6 +206,12 @@ Each file, project and the solution show their state at the bottom left of their
 
 - **Change markers** in the gutter, as you type, against the staged version: green for added lines, blue for modified lines, a red wedge for deleted lines.
 - **Blame** (Git → Toggle Blame, `Ctrl+Shift+Alt+B`; `⌘⌥B` on macOS): the commit, author, date and summary of each block of lines. Lines you haven't committed say so.
+- **The editor's Git menu** (right-click → Git), as in the classic IDE, acts on the file you're editing:
+  - **Commit or Stash…** opens [Git Changes](#the-git-changes-window).
+  - **Undo Changes** takes the file back to the last commit, dropping both its staged and unstaged changes and any unsaved edits. It always asks first, with Cancel the default. A file the last commit doesn't have (untracked, or newly added) is deleted, and the question says so. It shows only while the file has changes, and never for a file with a merge conflict.
+  - **View History**, **Compare with Unmodified…** and **Blame (Annotate)**: the file's [history](#history), its [diff](#diffs), and blame on or off.
+  - **Ignore and Untrack item** adds the file to the repository's root `.gitignore` and, when git tracks it, removes it from the index. The file stays on disk, and its removal is staged for your next commit. It doesn't ask: the status bar says what it did, and you can undo it by unstaging the removal (or with Undo Changes) and removing the line from `.gitignore`. It shows only while git doesn't already ignore the file.
+  - Then View Line History, Show Commit for Line and Compare with Branch or Commit ([History](#history)).
 
 ## Branches and remotes
 

@@ -269,6 +269,8 @@ internal static partial class BuiltIns
         Add("git.lineHistory", "View Line History", shell.ShowLineHistoryAsync, Editor);
         Add("git.showCommit", "Show Commit for Line", shell.ShowCommitAtCaretAsync, Editor);
         Add("git.compareWith", "Compare with Branch or Commit…", shell.CompareWithRevisionAsync, Editor);
+        Add("git.undoFileChanges", "Undo Changes to Active File…", shell.UndoActiveFileChangesAsync, Editor + " && gitActiveFileChanged");
+        Add("git.ignoreAndUntrack", "Ignore and Untrack Active File", shell.IgnoreAndUntrackActiveFileAsync, Editor + " && !gitActiveFileIgnored");
         Add("git.continue", "Continue", shell.ContinueOperationAsync, "gitOperation");
         Add("git.abort", "Abort", shell.AbortOperationAsync, "gitOperation");
         Add("git.skip", "Skip Commit", shell.SkipOperationAsync, "gitOperation");
