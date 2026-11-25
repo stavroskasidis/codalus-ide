@@ -103,6 +103,27 @@ public sealed class SyntacticTokensTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_edit_after_the_syntactic_answer_gets_the_full_answer_of_the_new_text()
+    {
+        // The cold request keeps computing its full answer for the request after it (M66); an edit in between makes
+        // that answer stale, so the request after the edit computes its own.
+        await using var client = await StartAsync(TimeSpan.Zero);
+        var uri = DocumentUris.FromPath(Path.Combine(_root, "App", "Greeter.cs"));
+        var range = new Protocol.Range(new Position(0, 0), new Position(11, 0));
+        Assert.Equal("syntactic", (await client.SemanticTokensAsync(uri, range, Ct)).ResultId);
+
+        var edited = Source.Replace("count", "numberOfGreetings", StringComparison.Ordinal);
+        await client.DidChangeTextAsync(uri, 2, () => edited, Ct);
+        var full = await client.SemanticTokensAsync(uri, range, Ct);
+        Assert.Null(full.ResultId);
+
+        var lines = edited.Split('\n');
+        var parameters = Decode(full.Data).Where(t => client.Legend!.TokenTypes[t.Type] == "parameter").ToList();
+        Assert.NotEmpty(parameters);
+        Assert.All(parameters, t => Assert.Equal("numberOfGreetings", lines[t.Line].Substring(t.Start, t.Length)));
+    }
+
+    [Fact]
     public async Task A_client_that_does_not_ask_for_them_gets_only_full_answers()
     {
         await using var client = await StartAsync(null);

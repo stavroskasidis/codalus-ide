@@ -486,6 +486,10 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<Document, TParams, CancellationToken, Task<TResult?>>? cold = null,
         Func<TResult, bool>? answered = null)
     {
+        // The full answer a cold request answered from the syntax while it kept computing, by file: the request after it
+        // (the client's at once, M66) takes it when it asks for the same range of the same text, instead of computing it
+        // again beside it (the request's token source is disposed with its answer, not cancelled, so it runs on).
+        var computing = cold is null ? null : new System.Collections.Concurrent.ConcurrentDictionary<string, (TParams Params, VersionStamp Text, Task<TResult> Full)>(Paths.Comparer);
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
         {
             if (cold is null || _coldWait is not { } coldWait || DocumentUris.ToPath(where(p).Uri) is not { } path || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
@@ -510,6 +514,7 @@ internal sealed class LanguageServer : IAsyncDisposable
                     && await cold(document, p, ct).ConfigureAwait(false) is { } partial)
                 {
                     _ = full.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    computing![path] = (p, await document.GetTextVersionAsync(ct).ConfigureAwait(false), full);
                     return partial;
                 }
 
@@ -523,7 +528,7 @@ internal sealed class LanguageServer : IAsyncDisposable
                 return result;
             }
 
-            var answer = await AnswerAsync(p, ct).ConfigureAwait(false);
+            var answer = await FullAsync(path, p, ct).ConfigureAwait(false);
             if (answered!(answer))
             {
                 _coldAnswers[path] = ColdAnswer.Full;
@@ -531,6 +536,21 @@ internal sealed class LanguageServer : IAsyncDisposable
 
             return answer;
         });
+
+        // The cold request's full answer when this request asks for the same range of the same text, else a new one.
+        async Task<TResult> FullAsync(string path, TParams p, CancellationToken ct)
+        {
+            if (computing!.TryRemove(path, out var earlier) && !earlier.Full.IsFaulted && !earlier.Full.IsCanceled
+                && EqualityComparer<TParams>.Default.Equals(earlier.Params, p)
+                && await WorkspaceManager.FindDocumentAsync(_workspace.CurrentSolution, where(p).Uri, ct).ConfigureAwait(false) is { } current
+                && await current.GetTextVersionAsync(ct).ConfigureAwait(false) == earlier.Text)
+            {
+                Interlocked.Increment(ref _reusedColdAnswers);
+                return await earlier.Full.WaitAsync(ct).ConfigureAwait(false);
+            }
+
+            return await AnswerAsync(p, ct).ConfigureAwait(false);
+        }
 
         async Task<TResult> AnswerAsync(TParams p, CancellationToken ct)
         {
@@ -567,6 +587,11 @@ internal sealed class LanguageServer : IAsyncDisposable
     /// client's <c>codalusSyntacticTokens</c> capability; null (other clients), never.
     /// </summary>
     private TimeSpan? _coldWait;
+
+    /// <summary>How many requests took the full answer a cold request had kept computing (tests).</summary>
+    internal int ReusedColdAnswers => Volatile.Read(ref _reusedColdAnswers);
+
+    private int _reusedColdAnswers;
 
     /// <summary>Each C# file's token answers so far: a partial one (the next waits for the full answer), or a full one.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ColdAnswer> _coldAnswers = new(Paths.Comparer);
