@@ -11,6 +11,14 @@ on:
 permissions:
   contents: read
 
+# The tools' telemetry opt-outs, as in pipeline.yml (M59; the setup action checks them).
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  AVALONIA_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+  DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
+
 jobs:
   ab:
     strategy:
