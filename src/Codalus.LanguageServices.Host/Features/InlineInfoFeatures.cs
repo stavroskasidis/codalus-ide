@@ -208,9 +208,9 @@ internal static class CodeLensFeature
     }
 
     /// <summary>
-    /// A class or record class that isn't sealed or static: other types can derive from it. Not one whose constructors
-    /// are all private, with no nested types and no other parts: nothing can, so its lens would only cost a search of
-    /// the solution for derived classes.
+    /// A class or record class that isn't sealed or static: other types can derive from it. Not a class whose
+    /// constructors are all private, with no nested types and no other parts: nothing can, so its lens would only cost a
+    /// search of the solution for derived classes. A record always can, through its copy constructor.
     /// </summary>
     private static bool IsInheritable(SyntaxNode node)
     {
@@ -222,7 +222,9 @@ internal static class CodeLensFeature
         }
 
         var constructors = type.Members.OfType<ConstructorDeclarationSyntax>().Where(c => !c.Modifiers.Any(SyntaxKind.StaticKeyword)).ToList();
-        var closed = type.ParameterList is null // a record's primary constructor is public
+        // Not a record: one that isn't sealed has a protected copy constructor the compiler adds, which a derived record calls.
+        var closed = type is ClassDeclarationSyntax
+            && type.ParameterList is null // a primary constructor is public
             && constructors.Count > 0
             && constructors.All(c => !c.Modifiers.Any(m => m.Kind() is SyntaxKind.PublicKeyword or SyntaxKind.ProtectedKeyword or SyntaxKind.InternalKeyword))
             && !type.Modifiers.Any(SyntaxKind.PartialKeyword)

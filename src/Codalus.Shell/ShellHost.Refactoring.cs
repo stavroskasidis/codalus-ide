@@ -40,7 +40,15 @@ public sealed partial class ShellHost
             return;
         }
 
-        var offset = controller.Editor.CaretOffset;
+        await FindReferencesAtAsync(editor, client, controller.Editor.CaretOffset).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Find All References at <paramref name="offset"/> of <paramref name="editor"/>: the caret's, or a CodeLens's
+    /// symbol in the pane that was clicked (the split pane's caret isn't the primary controller's).
+    /// </summary>
+    private async Task FindReferencesAtAsync(CodeEditorDocument editor, LanguageHostClient client, int offset)
+    {
         if (editor.Model.LanguageId == CSharpLanguageId)
         {
             // Our host classifies references (read, write, declaration) and names their definitions for the References window's groups and columns.

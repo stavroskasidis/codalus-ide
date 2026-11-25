@@ -44,7 +44,7 @@ public sealed partial class ShellHost
             }
             else if (click.Subject == LensSubject.Usages)
             {
-                Run(click.CommandId);
+                await FindReferencesAtAsync(editor, client, editor.Model.OffsetAt(position)).ConfigureAwait(true);
             }
             else
             {

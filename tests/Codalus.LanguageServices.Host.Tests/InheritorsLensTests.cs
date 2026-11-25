@@ -30,6 +30,9 @@ public sealed class InheritorsLensTests
         public class Car : IVehicle { }
         public class Singleton { private Singleton() { } }
         public class Template { protected Template() { } }
+        public record Envelope { private Envelope() { } }
+        public record Letter : Envelope { public Letter(Envelope e) : base(e) { } }
+        public class Pair(int x) { private Pair() : this(0) { } }
         """;
 
     private static async Task<(Solution Solution, Document Document, SourceText Text)> OpenAsync()
@@ -68,6 +71,7 @@ public sealed class InheritorsLensTests
     [InlineData("Dog", "1 implementation")]
     [InlineData("Message", "1 implementation")] // a record class
     [InlineData("IVehicle", "1 implementation")] // an interface, as before
+    [InlineData("Envelope", "1 implementation")] // only private constructors, but a record's copy constructor is protected
     public async Task A_class_with_derived_types_counts_them(string type, string title) =>
         Assert.Equal(title, await ImplementationsTitleAsync(type));
 
@@ -76,6 +80,7 @@ public sealed class InheritorsLensTests
     [InlineData("Cat")]
     [InlineData("Reply")]
     [InlineData("Template")] // a protected constructor: a class elsewhere can derive from it
+    [InlineData("Pair")] // a private constructor, but the primary one is public
     public async Task A_class_nothing_derives_from_hides_its_count(string type) =>
         Assert.Equal("-", await ImplementationsTitleAsync(type));
 

@@ -93,6 +93,23 @@ public class CodeLensStyleTests
     }
 
     [AvaloniaFact]
+    public async Task The_window_styles_references_count_finds_the_lenss_symbol_not_the_carets()
+    {
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensStyleKey, CodeLensStyles.Window, SettingScope.User, TestContext.Current.CancellationToken);
+        var shapes = await OpenShapesAsync(f);
+        var text = shapes.Model.Text.Text;
+
+        // The split pane's click carries its own position; the primary pane's caret is elsewhere (on Circle).
+        shapes.Editor.CaretOffset = text.IndexOf("class Circle", StringComparison.Ordinal) + "class ".Length;
+        var shape = shapes.Model.PositionAt(text.IndexOf("class Shape", StringComparison.Ordinal) + "class ".Length);
+        var view = shapes.Editor.TextArea.TextView;
+        await f.Shell.RunCodeLensAsync(new CodeLensClick("editor.action.showReferences", LensSubject.Usages, shape, view, default, shapes.Editor.TextArea));
+        await ShellFixture.PumpUntil(() => f.Shell.References.HasResults, seconds: 60, describe: () => f.Shell.References.Title);
+        Assert.Equal("'Shape' references", f.Shell.References.Title);
+    }
+
+    [AvaloniaFact]
     public async Task A_virtual_members_popup_lists_its_overrides_not_itself()
     {
         await using var f = ShellFixture.Create();
