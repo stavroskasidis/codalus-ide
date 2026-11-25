@@ -55,18 +55,33 @@ jobs:
           dotnet build ../baseline/benchmarks/Codalus.Benchmarks.Rpc -c Release
           dotnet build benchmarks/Codalus.Benchmarks.Rpc -c Release
           dotnet build benchmarks/Codalus.Benchmarks.Harness -c Release
+      # A lost runner keeps neither log nor artifacts (the Windows job of run 45516575948, 56 minutes into the rounds):
+      # the rounds' console and process samples go off the runner about once a minute (.github/actions/live-output).
+      - uses: ./.github/actions/live-output
+        with:
+          name: live-ab-${{ runner.os }}-${{ github.run_attempt }}
+          path: ab-live
       - name: Alternating rounds (ABBA ABBA)
         timeout-minutes: 280
         shell: bash
         run: |
           set -uo pipefail
+          mkdir -p ab-live/rounds
+          exec > >(while IFS= read -r line; do printf '%s %s\n' "$(date -u +%H:%M:%S)" "$line"; done | tee -a ab-live/rounds/console.txt) 2>&1
+          (while :; do
+             { date -u +%H:%M:%S; if [ "$RUNNER_OS" = Windows ]; then tasklist //FO CSV | sort -t, -k5 -r | head -25; else ps -eo pid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-200; fi; } > ab-live/rounds/processes.txt 2>&1
+             sleep 30
+           done) &
+          # macOS has no coreutils timeout (run 45516575948 ran no scenario there): the job's own limit stands in.
+          limit() { if command -v timeout > /dev/null; then timeout "$@"; elif command -v gtimeout > /dev/null; then gtimeout "$@"; else shift; "$@"; fi; }
           round=0
           for variant in A B B A A B B A; do
             round=$((round + 1))
             export CODALUS_BENCH_SHELL_DIR="$GITHUB_WORKSPACE/ab/$variant"
             out="ab-results/$variant/round$round"
-            bench() { timeout 1800 dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- run --results "$out" --targets shell "$@" || echo "::warning::round $round ($variant): $* failed"; }
+            bench() { limit 1800 dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- run --results "$out" --targets shell "$@" || echo "::warning::round $round ($variant): $* failed"; }
             echo "::group::round $round: $variant"
+            echo "[ab] round $round ($variant)"
             bench --scenarios cold-start --runs 5
             bench --scenarios self-driven,editor-100k,markup-100k --runs 2
             bench --scenarios open-solution-50 --runs 2
