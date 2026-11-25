@@ -357,4 +357,60 @@ public sealed class GitDepthTests : IAsyncLifetime
         Assert.Equal(Path.Combine(Repo, "lib"), submodule.Path);
         Assert.True(submodule.IsInitialized);
     }
+
+    /// <summary>
+    /// The editor's Git ▸: Undo Changes takes a file back to the last commit, its staged and unstaged changes both; deletes
+    /// a file the last commit doesn't have; and undoes a staged rename. Ignore and Untrack keeps the file on disk, stages
+    /// its removal and ignores it; an untracked file is only ignored. A tracked file is never ignored.
+    /// </summary>
+    [Fact]
+    public async Task Undo_changes_goes_back_to_the_last_commit_and_ignore_and_untrack_keeps_the_file()
+    {
+        // Staged and unstaged changes: both go.
+        await Write(FileA, "staged");
+        await Git(Repo, "add", "a.txt");
+        await Write(FileA, "staged", "and not");
+        await _git.RefreshAsync(Ct);
+        await _git.UndoChangesAsync(FileA, Ct);
+        Assert.Equal("one\ntwo\nthree\nfour\nfive\nsix\n", await File.ReadAllTextAsync(FileA, Ct));
+        Assert.Empty(_git.Status!.Files);
+
+        // Untracked, and added to the index: deleted.
+        var untracked = Path.Combine(Repo, "new.txt");
+        await Write(untracked, "new");
+        var added = Path.Combine(Repo, "added.txt");
+        await Write(added, "added");
+        await Git(Repo, "add", "added.txt");
+        await _git.RefreshAsync(Ct);
+        await _git.UndoChangesAsync(untracked, Ct);
+        await _git.UndoChangesAsync(added, Ct);
+        Assert.False(File.Exists(untracked));
+        Assert.False(File.Exists(added));
+        Assert.Empty(_git.Status!.Files);
+
+        // A staged rename: the new name goes, the old one comes back.
+        await Git(Repo, "mv", "a.txt", "renamed.txt");
+        await _git.RefreshAsync(Ct);
+        await _git.UndoChangesAsync(Path.Combine(Repo, "renamed.txt"), Ct);
+        Assert.False(File.Exists(Path.Combine(Repo, "renamed.txt")));
+        Assert.True(File.Exists(FileA));
+        Assert.Empty(_git.Status!.Files);
+
+        // Ignore and Untrack: tracked, then on disk, ignored and its removal staged.
+        Assert.False(await _git.IsIgnoredAsync(FileA, Ct));
+        await _git.IgnoreAndUntrackAsync(FileA, Ct);
+        Assert.True(File.Exists(FileA));
+        Assert.Equal("/a.txt\n", await File.ReadAllTextAsync(Path.Combine(Repo, ".gitignore"), Ct));
+        Assert.Contains(_git.Status!.Files, f => f.Path == FileA && f.Index == 'D');
+        Assert.True(await _git.IsIgnoredAsync(FileA, Ct));
+
+        // An untracked file: only ignored.
+        var log = Path.Combine(Repo, "build.log");
+        await Write(log, "log");
+        await _git.RefreshAsync(Ct);
+        await _git.IgnoreAndUntrackAsync(log, Ct);
+        Assert.True(File.Exists(log));
+        Assert.True(await _git.IsIgnoredAsync(log, Ct));
+        Assert.DoesNotContain(_git.Status!.Files, f => f.Path == log);
+    }
 }

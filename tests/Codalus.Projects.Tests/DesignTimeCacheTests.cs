@@ -84,4 +84,40 @@ public sealed class DesignTimeCacheTests : IDisposable
         Assert.False(DesignTimeCache.InputsExist(Inputs($"/reference:{existing},{Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "Package.dll")}"), _root));
         Assert.Equal(["a.dll", "\"b,c.dll\"", "d.dll"], DesignTimeCache.List("a.dll,\"b,c.dll\", d.dll"));
     }
+
+    [Fact]
+    public void A_batch_checks_files_outside_the_solution_once_and_its_own_files_each_time()
+    {
+        var packages = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-dtcache-packages-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(packages);
+        try
+        {
+            var package = Path.Combine(packages, "Package.dll");
+            File.WriteAllText(package, string.Empty);
+            File.WriteAllText(Path.Combine(_root, "src", "App", "Program.cs"), "class P { }");
+            var entry = DesignTimeCache.Entry("Debug", "AnyCPU", null);
+            DesignTimeCache.Write(Obj, entry, "K", Inputs("/reference:" + package, "Program.cs"));
+
+            var batch = new ExistenceMemo();
+            Assert.NotNull(DesignTimeCache.TryRead(Obj, entry, "K", _root, batch, out _));
+
+            // The package gone in the same batch: its answer stands; the next batch sees it missing.
+            File.Delete(package);
+            Assert.NotNull(DesignTimeCache.TryRead(Obj, entry, "K", _root, batch, out _));
+            Assert.Null(DesignTimeCache.TryRead(Obj, entry, "K", _root, new ExistenceMemo(), out var miss));
+            Assert.Equal("missing " + package, miss);
+
+            // The solution's own source gone: a miss in the same batch.
+            File.WriteAllText(package, string.Empty);
+            var next = new ExistenceMemo();
+            Assert.NotNull(DesignTimeCache.TryRead(Obj, entry, "K", _root, next, out _));
+            File.Delete(Path.Combine(_root, "src", "App", "Program.cs"));
+            Assert.Null(DesignTimeCache.TryRead(Obj, entry, "K", _root, next, out miss));
+            Assert.StartsWith("missing ", miss, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(packages, recursive: true);
+        }
+    }
 }

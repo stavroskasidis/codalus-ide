@@ -177,4 +177,27 @@ public sealed class ErrorListGroupingTests
         await f.Shell.Workbench.Settings.SetAsync(ErrorListViewModel.AnalysisScopeSetting, "solution", SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => list.AnalysisScope == 2);
     }
+
+    [AvaloniaFact]
+    public async Task A_stream_of_changes_shows_every_row_with_few_rebuilds()
+    {
+        await using var f = ShellFixture.Create();
+        var list = f.Shell.ErrorList;
+        list.QuietRefreshInterval = TimeSpan.FromMilliseconds(200);
+        var before = list.Computations;
+        Diagnostic Error(int line) => new(new Range(new Position(line, 0), new Position(line, 1)), DiagnosticSeverity.Error, "CS0103", "csharp", "missing");
+
+        // A file at a time, as the background pass publishes: each change shows within the interval, not each rebuilt.
+        for (var i = 0; i < 300; i++)
+        {
+            f.Shell.Languages.Diagnostics.Set(Path.Combine(f.UserData, $"F{i}.cs"), "csharp", null, [Error(0)]);
+            if (i % 10 == 0)
+            {
+                ShellFixture.Pump();
+            }
+        }
+
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 300 && !list.IsRefreshing);
+        Assert.InRange(list.Computations - before, 1, 10); // 30 bursts: rebuilt for each before
+    }
 }

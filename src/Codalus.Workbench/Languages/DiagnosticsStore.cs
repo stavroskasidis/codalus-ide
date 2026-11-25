@@ -16,6 +16,38 @@ public sealed class DiagnosticsStore
 {
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, FileDiagnostics>> _files = new(SolutionService.PathComparer);
 
+    // The errors and warnings of every file, kept as they change: the status bar counted every diagnostic of the
+    // solution again at each change of one file's. Changes and their counts are made together under the lock.
+    private readonly Lock _gate = new();
+    private int _errors;
+    private int _warnings;
+
+    /// <summary>Every file's errors and warnings, of all sources.</summary>
+    public (int Errors, int Warnings) Counts
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return (_errors, _warnings);
+            }
+        }
+    }
+
+    private void Count(FileDiagnostics? file, int sign)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        foreach (var item in file.Items)
+        {
+            _errors += item.Severity == DiagnosticSeverity.Error ? sign : 0;
+            _warnings += item.Severity == DiagnosticSeverity.Warning ? sign : 0;
+        }
+    }
+
     /// <summary>A file's diagnostics changed (the path).</summary>
     public event EventHandler<string>? Changed;
 
@@ -47,21 +79,29 @@ public sealed class DiagnosticsStore
     /// <summary>Replaces what <paramref name="languageId"/> (a language service) reported for <paramref name="path"/>.</summary>
     public void Set(string path, string languageId, int? version, IReadOnlyList<Diagnostic> items)
     {
-        if (items.Count == 0)
+        lock (_gate)
         {
-            if (!_files.TryGetValue(path, out var existing) || !existing.TryRemove(languageId, out _))
+            if (items.Count == 0)
             {
-                return;
-            }
+                if (!_files.TryGetValue(path, out var existing) || !existing.TryRemove(languageId, out var removed))
+                {
+                    return;
+                }
 
-            if (existing.IsEmpty)
-            {
-                _files.TryRemove(path, out _);
+                Count(removed, -1);
+                if (existing.IsEmpty)
+                {
+                    _files.TryRemove(path, out _);
+                }
             }
-        }
-        else
-        {
-            _files.GetOrAdd(path, _ => new ConcurrentDictionary<string, FileDiagnostics>(StringComparer.Ordinal))[languageId] = new FileDiagnostics(path, languageId, version, items);
+            else
+            {
+                var sources = _files.GetOrAdd(path, _ => new ConcurrentDictionary<string, FileDiagnostics>(StringComparer.Ordinal));
+                var file = new FileDiagnostics(path, languageId, version, items);
+                Count(sources.GetValueOrDefault(languageId), -1);
+                sources[languageId] = file;
+                Count(file, 1);
+            }
         }
 
         Changed?.Invoke(this, path);
@@ -70,18 +110,41 @@ public sealed class DiagnosticsStore
     /// <summary>Drops everything a language service published (its host stopped for good), or everything.</summary>
     public void Clear(string? languageId = null)
     {
-        foreach (var (path, sources) in _files.ToList())
+        var changed = new List<string>();
+        lock (_gate)
         {
-            var removed = languageId is null ? !sources.IsEmpty : sources.TryRemove(languageId, out _);
-            if (languageId is null || sources.IsEmpty)
+            foreach (var (path, sources) in _files.ToList())
             {
-                _files.TryRemove(path, out _);
-            }
+                bool removed;
+                if (languageId is null)
+                {
+                    removed = !sources.IsEmpty;
+                    foreach (var file in sources.Values)
+                    {
+                        Count(file, -1);
+                    }
+                }
+                else
+                {
+                    removed = sources.TryRemove(languageId, out var file);
+                    Count(file, -1);
+                }
 
-            if (removed)
-            {
-                Changed?.Invoke(this, path);
+                if (languageId is null || sources.IsEmpty)
+                {
+                    _files.TryRemove(path, out _);
+                }
+
+                if (removed)
+                {
+                    changed.Add(path);
+                }
             }
+        }
+
+        foreach (var path in changed)
+        {
+            Changed?.Invoke(this, path);
         }
     }
 }

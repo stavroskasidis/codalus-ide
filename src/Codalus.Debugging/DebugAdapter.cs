@@ -355,10 +355,19 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// would be left behind.
     /// </para>
     /// TODO(issue): ask Samsung/netcoredbg for a configurable wait.
+    /// The Codalus debugger's start timeout is <see cref="IsClrStartTimeout"/>.
     /// </summary>
     public static bool IsStartupTimeout(Exception ex) =>
         ex is DapException { Command: "configurationDone" or "attach" }
         && (ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase) || IsCommandTimeout(ex));
+
+    /// <summary>
+    /// The Codalus debugger's answer to a launch that ran past one of its start limits (<see cref="CoreClrAdapter.StartTimeoutCode"/>):
+    /// it ended the program, so the start can be made again. A program's first start after its build is the slow one
+    /// (on macOS its first launch is scanned; on a loaded machine everything is slow), and the next one is quick.
+    /// </summary>
+    public static bool IsClrStartTimeout(Exception ex) =>
+        ex is DapException { Command: "launch", Code: CoreClrAdapter.StartTimeoutCode };
 
     /// <summary>
     /// How long a start waits, past netcoredbg's 5 seconds (or its 15-second command timeout), for the runtime of a

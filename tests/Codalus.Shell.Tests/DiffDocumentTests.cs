@@ -77,6 +77,27 @@ public sealed class DiffDocumentTests
     private static int ColumnOf(string text, int line, string word) =>
         text.Split('\n')[line - 1].IndexOf(word, StringComparison.Ordinal);
 
+    /// <summary>
+    /// The token type drawn at a pane's 1-based line and 0-based character, and on a miss what was drawn there: the line's
+    /// tokens with their types, and which side the language service's tokens replaced. Once, on Linux (a local
+    /// validation, 2026-11-25; docs/ci-flakes.md), the index side's <c>class</c> was drawn as <c>namespace</c> (type 0),
+    /// and passed 40 of 40 alone and under load.
+    /// </summary>
+    private static void AssertType(int expected, DiffView view, DiffViewModel vm, DiffPaneSide side, string paneText, int line, int character)
+    {
+        var actual = view.ColoredTypeAt(side, line, character);
+        if (actual == expected)
+        {
+            return;
+        }
+
+        static string Name(int type) => (uint)type < (uint)TokenTypes.All.Length ? TokenTypes.All[type] : type.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var colors = side == DiffPaneSide.Old ? vm.OldColors : vm.NewColors;
+        var text = (uint)(line - 1) < (uint)paneText.Split('\n').Length ? paneText.Split('\n')[line - 1] : "(no such line)";
+        var drawn = string.Join(", ", (colors?.Line(line - 1).ToArray() ?? []).Select(t => $"{t.Start}+{t.Length} {Name(t.Type)}"));
+        Assert.Fail($"The {side} side's line {line}, character {character}, was drawn as {Name(actual)}, not {Name(expected)}. The line: '{text}'. Its tokens (the file's line {line}, which a side-by-side pane's line is before any filler): {drawn}. The language service's tokens replaced the {(vm.OpenSideIsOld is { } old ? (old ? "old" : "new") : "neither")} side.");
+    }
+
     [Fact]
     public void The_diff_settings_default_to_side_by_side()
     {
@@ -104,11 +125,11 @@ public sealed class DiffDocumentTests
         var left = view.LeftText;
         var right = view.RightText;
         var classLine = LineOf(left, "public static class");
-        Assert.Equal(s_keyword, view.ColoredTypeAt(DiffPaneSide.Old, classLine, ColumnOf(left, classLine, "class")));
-        Assert.Equal(s_comment, view.ColoredTypeAt(DiffPaneSide.Old, LineOf(left, "// Says hello."), 6));
+        AssertType(s_keyword, view, vm, DiffPaneSide.Old, left, classLine, ColumnOf(left, classLine, "class"));
+        AssertType(s_comment, view, vm, DiffPaneSide.Old, left, LineOf(left, "// Says hello."), 6);
         var added = LineOf(right, "Count => 3");
-        Assert.Equal(s_keyword, view.ColoredTypeAt(DiffPaneSide.New, added, ColumnOf(right, added, "int")));
-        Assert.Equal(s_comment, view.ColoredTypeAt(DiffPaneSide.New, LineOf(right, "to someone"), 6));
+        AssertType(s_keyword, view, vm, DiffPaneSide.New, right, added, ColumnOf(right, added, "int"));
+        AssertType(s_comment, view, vm, DiffPaneSide.New, right, LineOf(right, "to someone"), 6);
         Assert.True(view.LineColors(DiffPaneSide.Old, classLine) >= 2, "the index side's class line is drawn in one color");
         Assert.True(view.LineColors(DiffPaneSide.New, added) >= 2, "the working tree's added line is drawn in one color");
 
@@ -170,6 +191,51 @@ public sealed class DiffDocumentTests
 
         Assert.Equal(interfaceType, vm.NewColors!.TypeAt(0, 10)); // IThing, an interface, as the editor colors it
         Assert.Equal(TokenTypes.IndexOf("class"), vm.OldColors!.TypeAt(0, 10)); // the grammar's guess: a type name
+    }
+
+    [AvaloniaFact]
+    public async Task A_large_open_side_asks_for_the_lines_shown_and_keeps_the_grammars_colors_elsewhere()
+    {
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(f.UserData, "Large.cs");
+        var newText = string.Concat(Enumerable.Range(0, 5_000).Select(i => $"class C{i} : IThing {{ }}\n"));
+        var interfaceType = TokenTypes.IndexOf("interface");
+        var asked = new List<(int Start, int End)>();
+
+        // The service colors IThing on every line it's asked for (as a range answer: lines are the file's).
+        var services = new DiffServices(f.Shell)
+        {
+            LanguageOf = _ => "csharp",
+            OpenText = (file, text) => file == path && text == newText,
+            SemanticTokensAsync = (_, _, _) => throw new InvalidOperationException("A large file isn't asked for whole."),
+            SemanticTokensInAsync = (file, text, start, end, _) =>
+            {
+                asked.Add((start, end));
+                var data = new List<int>();
+                var previous = 0;
+                for (var line = start; line < end; line++)
+                {
+                    data.AddRange([line - previous, $"class C{line} : ".Length, 6, interfaceType, 0]);
+                    previous = line;
+                }
+
+                return Task.FromResult<int[]?>([.. data]);
+            },
+        };
+        var vm = new DiffViewModel(path, "test", "old", () => Task.FromResult(newText.Replace("C0 ", "D0 ", StringComparison.Ordinal)), "new", () => Task.FromResult(newText)) { Services = services };
+        await vm.LoadAsync();
+        await ShellFixture.PumpUntil(() => vm.OpenSideIsOld is false && asked.Count > 0);
+
+        Assert.Equal((0, DiffViewModel.WindowMargin * 3), asked[0]);
+        Assert.Equal(interfaceType, vm.NewColors!.TypeAt(0, "class C0 : ".Length));
+        Assert.NotEqual(interfaceType, vm.NewColors.TypeAt(4_000, "class C4000 : ".Length)); // not asked for: the grammar's
+
+        // Lines shown far below: asked for once, with a margin; shown again, not asked for again.
+        await vm.SemanticLinesShownAsync(4_001, 4_030);
+        await vm.SemanticLinesShownAsync(4_010, 4_020);
+        Assert.Equal([(0, DiffViewModel.WindowMargin * 3), (4_000 - DiffViewModel.WindowMargin, 4_030 + DiffViewModel.WindowMargin)], asked);
+        Assert.Equal(interfaceType, vm.NewColors!.TypeAt(4_000, "class C4000 : ".Length));
+        Assert.Equal(interfaceType, vm.NewColors.TypeAt(0, "class C0 : ".Length)); // the first window's kept
     }
 
     [AvaloniaFact]

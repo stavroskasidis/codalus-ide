@@ -73,16 +73,19 @@ internal sealed class SchemaStore(string? cacheDirectory, bool allowDownloads, A
 
         var catalog = await CatalogAsync(cancellationToken).ConfigureAwait(false);
         var normalized = path.Replace('\\', '/');
-        foreach (var (patterns, url) in catalog)
+
+        // A file's catalog entry, found once: each request walked the catalog's ~800 entries, each glob a regular
+        // expression made again (more of them than Regex's cache keeps).
+        if (!_matched.TryGetValue(normalized, out var matched))
         {
-            if (patterns.Any(p => Glob(p, normalized, name)))
-            {
-                return await DownloadAsync(url, cancellationToken).ConfigureAwait(false);
-            }
+            matched = catalog.FirstOrDefault(entry => entry.Patterns.Any(p => Glob(p, normalized, name))).Url;
+            _matched[normalized] = matched;
         }
 
-        return null;
+        return matched is null ? null : await DownloadAsync(matched, cancellationToken).ConfigureAwait(false);
     }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string?> _matched = new(StringComparer.Ordinal);
 
     /// <summary>A bundled schema by resource name (tests and hover links).</summary>
     public static JsonSchema? Bundled(string resource)
@@ -193,9 +196,18 @@ internal sealed class SchemaStore(string? cacheDirectory, bool allowDownloads, A
     /// <summary>SchemaStore's file patterns: a file name, or a glob over the path (<c>**/</c>, <c>*</c>).</summary>
     internal static bool Glob(string pattern, string path, string name)
     {
+        var (regex, onName) = s_globs.GetOrAdd(pattern, Compile);
+        return regex.IsMatch(onName ? name : path);
+    }
+
+    /// <summary>Each pattern's expression, made once (interpreted: matched a few times a file).</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (Regex Regex, bool OnName)> s_globs = new(StringComparer.Ordinal);
+
+    private static (Regex, bool) Compile(string pattern)
+    {
         if (!pattern.Contains('/', StringComparison.Ordinal))
         {
-            return Regex.IsMatch(name, "^" + Regex.Escape(pattern).Replace("\\*", "[^/]*", StringComparison.Ordinal).Replace("\\?", ".", StringComparison.Ordinal) + "$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(50));
+            return (new Regex("^" + Regex.Escape(pattern).Replace("\\*", "[^/]*", StringComparison.Ordinal).Replace("\\?", ".", StringComparison.Ordinal) + "$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(50)), true);
         }
 
         var regex = Regex.Escape(pattern.TrimStart('/'))
@@ -203,6 +215,6 @@ internal sealed class SchemaStore(string? cacheDirectory, bool allowDownloads, A
             .Replace("\\*\\*", ".*", StringComparison.Ordinal)
             .Replace("\\*", "[^/]*", StringComparison.Ordinal)
             .Replace("\\?", ".", StringComparison.Ordinal);
-        return Regex.IsMatch(path, "(^|/)" + regex + "$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(50));
+        return (new Regex("(^|/)" + regex + "$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(50)), false);
     }
 }

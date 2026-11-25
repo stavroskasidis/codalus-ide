@@ -73,6 +73,8 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
+    private string? _indexLinesOf; // the index text _indexLines were split from
+    private string[]? _indexLines;
     private bool _indexLoaded;
     private string? _indexKey; // what the status knew the index version read by (IndexKey)
     private bool _indexMayHaveChanged; // the repository's index changed since it was read
@@ -323,6 +325,25 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Raised when semantic tokens were applied (first highlight, benchmarks).</summary>
     public event EventHandler? TokensApplied;
 
+    /// <summary>The colors of a C# file's syntax were shown before the service's full answer (benchmarks).</summary>
+    public event EventHandler? SyntacticTokensApplied;
+
+    /// <summary>The <c>resultId</c> of a token answer from the syntax alone (the C# service's, see docs/protocol.md).</summary>
+    internal const string SyntacticResult = "syntactic";
+
+    /// <summary>Whether the service's full tokens have been shown, and whether the syntax's were (tests, benchmarks).</summary>
+    private bool _semanticShown;
+
+    private bool SyntacticShown => _syntacticCount > 0;
+
+    private int _syntacticCount;
+
+    /// <summary>Whether a full answer of semantic tokens has been shown (benchmarks: not the syntax's first colors).</summary>
+    internal bool SemanticTokensShown => _semanticShown;
+
+    /// <summary>How many answers from the syntax alone were shown, each asked again for the full answer (tests).</summary>
+    internal int SyntacticAnswers => _syntacticCount;
+
     private LanguageHostClient? Client => _services.Client(Model);
 
     /// <summary>The definitions of the symbol at an offset, for the Ctrl+hover link; null without a language service.</summary>
@@ -397,13 +418,13 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnThemeChanged(object? sender, EventArgs e) => ApplyTheme();
 
-    private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
+    private TintColorizer? _grammar;
 
     /// <summary>The TextMate grammar scope coloring this document, or null (tests).</summary>
     public string? GrammarScope { get; private set; }
 
-    /// <summary>The TextMate model of a grammar-colored document (tests).</summary>
-    internal AvaloniaEdit.TextMate.TextMate.Installation? TextMate => _textMate;
+    /// <summary>The grammar colorizer of a grammar-colored document (tests).</summary>
+    internal TintColorizer? Grammar => _grammar;
 
     /// <summary>The distinct text colors on a rendered line (smoke test, benchmarks).</summary>
     internal int LineColors(int line)
@@ -434,48 +455,50 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         GrammarScope = scope;
+        RemoveGrammar();
         if (scope is null)
         {
-            _textMate?.Dispose();
-            _textMate = null;
             return;
         }
 
         try
         {
-            if (_textMate is null)
-            {
-                _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
-                _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
-            }
-
-            // TODO(issue): AvaloniaEdit.TextMate copies each visible line whole on the UI thread at every scroll, to
-            // tokenize its first 10,000 characters there, and keeps a thread per editor: a megabyte line under the
-            // large-file limits costs a copy per scroll step. A colorizer on one shared tokenizer (as GrammarColorizer
-            // tokenizes) that reads only what's drawn, visible lines first, would end both.
-            _textMate.SetGrammar(scope);
+            var grammar = new TintColorizer(
+                Editor.TextArea.TextView, _services.TextMate, scope, _services.TextMate.ThemeFor(_services.Theme.Id), _services.Log);
+            _grammar = grammar;
+            Editor.TextArea.TextView.LineTransformers.Add(grammar);
             KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
             KeepLongLinesLast();
-            MatchGrammarToView(); // a tab not shown yet, or the language changed while hidden: setting a grammar starts the thread
+            MatchGrammarToView(); // a tab not shown yet, or the language changed while hidden
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _services.Log($"TextMate: {Model.Name}: {ex.Message}");
-            _textMate?.Dispose();
-            _textMate = null;
+            RemoveGrammar();
             GrammarScope = null;
         }
     }
 
+    private void RemoveGrammar()
+    {
+        if (_grammar is { } grammar)
+        {
+            _grammar = null;
+            Editor.TextArea.TextView.LineTransformers.Remove(grammar);
+            grammar.Dispose();
+            Editor.TextArea.TextView.Redraw();
+        }
+    }
+
     /// <summary>
-    /// Puts the semantic tokens (and the diagnostics' marks) after the grammar's colors, which AvaloniaEdit's TextMate adds
-    /// last: where the language service classified the text (Razor's markup and C#), its colors win.
+    /// Puts the semantic tokens (and the diagnostics' marks) after the grammar's colors, which are added last: where the
+    /// language service classified the text (Razor's markup and C#), its colors win.
     /// </summary>
     private void KeepSemanticColorsOverGrammar()
     {
         var transformers = Editor.TextArea.TextView.LineTransformers;
-        var grammar = transformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+        var grammar = transformers.OfType<TintColorizer>().FirstOrDefault();
         if (grammar is null || transformers.IndexOf(_colorizer) > transformers.IndexOf(grammar))
         {
             return;
@@ -489,23 +512,38 @@ public sealed partial class CodeEditorController : IDisposable
 
     // ------------------------------------------------------------------ the grammar's tokenizer while hidden
 
-    /// <summary>Whether the grammar's tokenizer has a thread now (tests: a hidden editor's has none).</summary>
-    internal bool GrammarTokenizing => _textMate is { } installation && Tokenizer(installation) is { IsStopped: false };
+    /// <summary>Whether the grammar's tokenizer may run now (tests: a hidden editor's doesn't).</summary>
+    internal bool GrammarTokenizing => _grammar is { IsTokenizing: true };
+
+    /// <summary>
+    /// Whether the grammar has tokenized every visible line and they were drawn with its colors (benchmarks: unlike
+    /// <see cref="GrammarColored"/>, also true of grammars that color whole lines one color, as diffs').
+    /// </summary>
+    internal bool GrammarVisibleColored()
+    {
+        var view = Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        if (GrammarScope is null || !view.VisualLinesValid || view.VisualLines.Count == 0 || _grammar is not { } grammar)
+        {
+            return false;
+        }
+
+        var last = view.VisualLines[^1].LastDocumentLine.LineNumber - 1;
+        var plain = (Editor.Foreground as Avalonia.Media.ISolidColorBrush)?.Color;
+        return grammar.IsLineTokenized(last)
+            && view.VisualLines.Any(l => l.Elements.Any(e => e.TextRunProperties.ForegroundBrush is Avalonia.Media.ISolidColorBrush brush && brush.Color != plain));
+    }
+
+    /// <summary>Whether the grammar's tokenizer has tokenized the document's last line (benchmarks: the whole file is colored).</summary>
+    internal bool GrammarComplete() =>
+        _grammar is { } grammar && grammar.LineCount is var count and > 0 && grammar.IsLineTokenized(count - 1);
 
     /// <summary>The scopes the grammar's tokenizer has for a one-based line's column, null when it has none (tests).</summary>
-    internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) =>
-        _textMate is { } installation && Tokenizer(installation)?.GetLineTokens(line - 1) is { } tokens
-            ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
-            : null;
+    internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) => _grammar?.ScopesAt(line - 1, column);
 
     /// <summary>The tokenizer's state and its first lines', for a test's failure: whether each is waiting to be tokenized, and its tokens.</summary>
-    internal string DescribeGrammar() =>
-        _textMate is { } installation && Tokenizer(installation) is { } model
-            ? $"tokenizer {(model.IsStopped ? "stopped" : "running")}; lines " + string.Join(", ", Enumerable.Range(0, Math.Min(model.GetLines().GetNumberOfLines(), 20))
-                .Select(line => $"{line + 1} {(model.IsLineInvalid(line) ? "waiting" : "tokenized")} ({model.GetLineTokens(line)?.Count ?? 0} tokens)"))
-            : "no tokenizer";
+    internal string DescribeGrammar() => _grammar?.Describe() ?? "no tokenizer";
 
-    private static bool s_noTokenizer;
     private bool _grammarCheckScheduled;
 
     private void OnViewAttached(object? sender, VisualTreeAttachmentEventArgs e) => ScheduleGrammarCheck();
@@ -537,85 +575,29 @@ public sealed partial class CodeEditorController : IDisposable
     }
 
     /// <summary>
-    /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
-    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread blocked for each editor as long
-    /// as its tab is open (a thread-pool thread up to TextMateSharp 2.0.3, its own thread since 2.0.5), and a session of
-    /// many JSON, XML or Markdown tabs starved the pool (M56). The
-    /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
-    /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
-    /// <para>
-    /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
-    /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
-    /// visible lines on the UI thread at each scroll, beside the worker): TextMateSharp serializes them since 2.0.5 (2.0.3
-    /// gave a line wrong tokens; <c>GrammarTokenizerThreadTests</c>), and queues a line that failed again.
-    /// </para>
+    /// Stops the grammar's tokenizer while the editor isn't shown (an inactive tab: Dock detaches its view), and starts
+    /// it again when the editor shows: a session of many JSON, XML or Markdown tabs doesn't tokenize them all at once
+    /// (M56). The lines' states stay: edits meanwhile mark their lines, and the tokenizer goes on from there.
     /// </summary>
     private void MatchGrammarToView()
     {
-        if (_textMate is not { } installation || Tokenizer(installation) is not { } model || GrammarTransformer() is not { } transformer)
+        if (_grammar is not { } grammar)
         {
             return;
         }
 
         if (TopLevel.GetTopLevel(Editor.TextArea.TextView) is null)
         {
-            model.RemoveModelTokensChangedListener(transformer); // its only listener: the model stops its thread
+            grammar.Pause();
         }
         else
         {
-            // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
-            // redraw, after the listener is in, shows them.
-            model.AddModelTokensChangedListener(transformer);
-            QueueFirstWaitingLine(model);
+            grammar.Resume();
             Editor.TextArea.TextView.Redraw();
         }
     }
 
-    /// <summary>
-    /// Queues again the first line still waiting to be tokenized. A worker stopped just after it took a line off the
-    /// model's queue drops it: the line stays waiting, nothing queues it again, and the next worker waits for work with
-    /// the file uncolored (TextMateSharp 2.0.5: an editor hidden and shown as it opened, <c>LanguageTests</c>, half its
-    /// runs). The worker walks on from that line to the end, as it would have.
-    /// </summary>
-    private static void QueueFirstWaitingLine(TextMateSharp.Model.TMModel model)
-    {
-        var count = model.GetLines().GetNumberOfLines();
-        for (var line = 0; line < count; line++)
-        {
-            if (model.IsLineInvalid(line))
-            {
-                model.InvalidateLine(line);
-                return;
-            }
-        }
-    }
-
-    private AvaloniaEdit.TextMate.TextMateColoringTransformer? GrammarTransformer() =>
-        Editor.TextArea.TextView.LineTransformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
-
-    /// <summary>The installation's model, or null when the package has none by that name: no pausing then, rather than an exception at each tab switch.</summary>
-    private static TextMateSharp.Model.TMModel? Tokenizer(AvaloniaEdit.TextMate.TextMate.Installation installation)
-    {
-        if (!s_noTokenizer)
-        {
-            try
-            {
-                return TokenizerModel(installation);
-            }
-            catch (MissingFieldException)
-            {
-                s_noTokenizer = true;
-            }
-        }
-
-        return null;
-    }
-
-    // The installation's model isn't public; Native AOT resolves this accessor at compile time.
-    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_tmModel")]
-    private static extern ref TextMateSharp.Model.TMModel? TokenizerModel(AvaloniaEdit.TextMate.TextMate.Installation installation);
-
-    /// <summary>The cut of long lines after every colorizer (a grammar's installs itself last): nothing draws past it.</summary>
+    /// <summary>The cut of long lines after every colorizer (a grammar's is added last): nothing draws past it.</summary>
     private void KeepLongLinesLast()
     {
         var transformers = Editor.TextArea.TextView.LineTransformers;
@@ -638,7 +620,7 @@ public sealed partial class CodeEditorController : IDisposable
         Editor.TextArea.SelectionBrush = theme.Selection;
         Editor.TextArea.TextView.CurrentLineBackground = theme.CurrentLine;
         Editor.TextArea.TextView.CurrentLineBorder = new Avalonia.Media.Pen(Avalonia.Media.Brushes.Transparent, 0);
-        _textMate?.SetTheme(_services.TextMate.ThemeFor(theme.Id));
+        _grammar?.SetTheme(_services.TextMate.ThemeFor(theme.Id));
         Editor.TextArea.TextView.Redraw();
     }
 
@@ -849,7 +831,32 @@ public sealed partial class CodeEditorController : IDisposable
                 return; // stale: a newer edit is on its way
             }
 
+            if (tokens.ResultId == SyntacticResult)
+            {
+                // The syntax's colors while the service compiles the project (keywords, literals, comments): shown
+                // where no full answer is, never over one, and asked again at once for the full answer, which the
+                // service then waits for. The insights wait for it too.
+                if (!_semanticShown)
+                {
+                    _colorizer.Apply(start, end, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
+                    Editor.TextArea.TextView.Redraw();
+                    _syntacticCount++;
+                    SyntacticTokensApplied?.Invoke(this, EventArgs.Empty);
+                }
+
+                _tokensAgain = true;
+                return;
+            }
+
+            if (tokens.Data.Length == 0 && SyntacticShown && !_semanticShown)
+            {
+                // Still loading its projects: the syntax's colors stay until the service is ready (RefreshAll).
+                AfterTokens();
+                return;
+            }
+
             _colorizer.Apply(start, end, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
+            _semanticShown = true;
             Editor.TextArea.TextView.Redraw();
             TokensApplied?.Invoke(this, EventArgs.Empty);
             AfterTokens();
@@ -914,6 +921,16 @@ public sealed partial class CodeEditorController : IDisposable
                     return;
                 }
 
+                if (tokens.ResultId == SyntacticResult)
+                {
+                    // Asked again with the full answer (the service waits for it now).
+                    tokens = await client.SemanticTokensAsync(Model.Uri, range, CancellationToken.None).ConfigureAwait(true);
+                    if (version != Model.Version || _disposed)
+                    {
+                        return;
+                    }
+                }
+
                 _colorizer.ApplyLine(line, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
             }
 
@@ -973,6 +990,10 @@ public sealed partial class CodeEditorController : IDisposable
                 if (!cancellationToken.IsCancellationRequested && version0 == Model.Version && !_disposed)
                 {
                     _folding.UpdateFoldings(local, -1);
+                    foreach (var section in _folding.AllFoldings)
+                    {
+                        section.Tag = null; // no kinds: Collapse to Definitions folds everything
+                    }
                 }
 
                 return;
@@ -997,6 +1018,7 @@ public sealed partial class CodeEditorController : IDisposable
     {
         var document = Model.Text;
         var foldings = new List<NewFolding>();
+        var kinds = new Dictionary<(int Start, int End), string>();
         foreach (var range in ranges)
         {
             if (range.StartLine + 1 > document.LineCount || range.EndLine + 1 > document.LineCount || range.EndLine <= range.StartLine)
@@ -1007,16 +1029,26 @@ public sealed partial class CodeEditorController : IDisposable
             var startLine = document.GetLineByNumber(range.StartLine + 1);
             var endLine = document.GetLineByNumber(range.EndLine + 1);
             var start = Math.Min(startLine.EndOffset, startLine.Offset + (range.StartCharacter ?? startLine.Length));
-            if (range.Kind is "comment" or "imports" or "region")
+            if (range.Kind is FoldingKinds.Comment or FoldingKinds.Imports or FoldingKinds.Region)
             {
                 start = startLine.Offset + (startLine.Length - document.GetText(startLine.Offset, startLine.Length).TrimStart().Length); // fold the whole first line
             }
 
             foldings.Add(new NewFolding(start, endLine.EndOffset) { Name = range.CollapsedText ?? "…" });
+            if (range.Kind is { } kind)
+            {
+                kinds.TryAdd((start, endLine.EndOffset), kind);
+            }
         }
 
         foldings.Sort((a, b) => a.StartOffset.CompareTo(b.StartOffset));
         _folding.UpdateFoldings(LanguageFeatures.CapFoldings(foldings, Folded()), -1);
+
+        // Each section keeps its range's kind (sections move with edits; a kept section takes its new range's kind).
+        foreach (var section in _folding.AllFoldings)
+        {
+            section.Tag = kinds.GetValueOrDefault((section.StartOffset, section.EndOffset));
+        }
     }
 
     /// <summary>Where the collapsed foldings are: kept when the foldings are capped.</summary>
@@ -1036,13 +1068,55 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    /// <summary>Collapses (true) or expands (false) every folding; Ctrl+M Ctrl+O / Ctrl+M Ctrl+L.</summary>
+    /// <summary>Collapses (true) or expands (false) every folding; Expand All Outlining (Ctrl+M Ctrl+X) expands.</summary>
     public void SetAllFolded(bool folded)
     {
         foreach (var folding in _folding.AllFoldings)
         {
             folding.IsFolded = folded;
         }
+    }
+
+    /// <summary>
+    /// Toggle All Outlining (Ctrl+M Ctrl+L), as the classic IDE does: expands every folding when any is collapsed, and
+    /// collapses them all when none is.
+    /// </summary>
+    public void ToggleAllFolded() => SetAllFolded(!_folding.AllFoldings.Any(f => f.IsFolded));
+
+    /// <summary>
+    /// Collapse to Definitions (Ctrl+M Ctrl+O), as the classic IDE does: when the language server marks members
+    /// (<see cref="FoldingKinds.Member"/>, the C# and Visual Basic hosts), it collapses members, <c>using</c> groups and
+    /// comments, and expands the namespaces, types and regions that hold them, so the definitions show. Without members
+    /// (another server, or folding by indentation) it collapses every folding.
+    /// </summary>
+    public void CollapseToDefinitions()
+    {
+        var all = _folding.AllFoldings.ToList();
+        if (!all.Any(f => f.Tag is FoldingKinds.Member))
+        {
+            SetAllFolded(true);
+            return;
+        }
+
+        // AllFoldings is sorted by start; the foldings nest, so the first definition starting inside a folding ends inside it.
+        var definitions = all.Where(IsDefinition).Select(f => f.StartOffset).ToList();
+        foreach (var folding in all)
+        {
+            if (IsDefinition(folding))
+            {
+                folding.IsFolded = true;
+                continue;
+            }
+
+            var next = definitions.BinarySearch(folding.StartOffset);
+            next = next < 0 ? ~next : next;
+            if (next < definitions.Count && definitions[next] < folding.EndOffset)
+            {
+                folding.IsFolded = false;
+            }
+        }
+
+        static bool IsDefinition(FoldingSection folding) => folding.Tag is FoldingKinds.Member or FoldingKinds.Imports or FoldingKinds.Comment;
     }
 
     // ------------------------------------------------------------------ diagnostics
@@ -1414,8 +1488,10 @@ public sealed partial class CodeEditorController : IDisposable
             {
                 ShowCompletion(text);
             }
-            else if (_completion is null && (char.IsLetter(c) || c == '_'))
+            else if (_completion is null && (char.IsLetter(c) || c == '_') && !IsWordCharacterAt(Editor.CaretOffset))
             {
+                // Only a letter that starts a word asks (Roslyn's rule, as the classic IDE): one typed right before a
+                // word ("v" before "InitializeComponent") is an edit of that word, not the start of a new one.
                 // A server that had nothing complete for this word isn't asked again while it grows (as VS Code).
                 if (WordStart(Editor.CaretOffset) != _noCompletionWordStart || Model.Version != _noCompletionVersion + 1)
                 {
@@ -1483,7 +1559,7 @@ public sealed partial class CodeEditorController : IDisposable
         get
         {
             var line = Model.Text.GetLineByOffset(Editor.CaretOffset);
-            return _markers.Segments.Any(s => s.StartOffset <= line.EndOffset && s.EndOffset >= line.Offset) ? line.LineNumber : null;
+            return _markers.AnyOn(line.Offset, line.Length) ? line.LineNumber : null;
         }
     }
 
@@ -1579,6 +1655,8 @@ public sealed partial class CodeEditorController : IDisposable
 
             var window = NewCompletionPopup(start, caret);
             window.CloseWhenCaretAtBeginning = triggerCharacter is null || triggerCharacter == ".";
+            window.RequestedAt = position;
+            window.TailLength = TailLength(list.ItemDefaults?.EditRange, position, caret);
             Task<LanguageServices.Protocol.CompletionItem> Resolve(LanguageServices.Protocol.CompletionItem item) =>
                 item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet
                     ? Task.FromResult(item) // our snippets: nothing to resolve
@@ -1602,9 +1680,9 @@ public sealed partial class CodeEditorController : IDisposable
             void Select()
             {
                 // Filters by the typed text and picks the best match (CompletionData.Priority breaks ties).
-                if (caret > start && Editor.CaretOffset >= caret)
+                if ((caret > start || window.TailLength > 0) && Editor.CaretOffset >= caret)
                 {
-                    window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+                    window.CompletionList.SelectItem(window.FilterText(Editor.CaretOffset));
                 }
 
                 if (window.CompletionList.SelectedItem is null && list.Items.FirstOrDefault(i => i.Preselect == true) is { } preselected)
@@ -1614,6 +1692,12 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             Select();
+            if (window.TailLength > 0 && window.CompletionList.CurrentList.Count == 0)
+            {
+                // Nothing matches the word with its rest: the list doesn't show, and typing goes on as typing.
+                window.Close();
+                return;
+            }
 
             // Again once the list is laid out: a selection made before its template applied doesn't stick (M34a).
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -1629,6 +1713,25 @@ public sealed partial class CodeEditorController : IDisposable
             Report(ex);
         }
     }
+
+    /// <summary>
+    /// How much of the word after the caret the list's range covers (the server asked in the middle of a word replaces
+    /// its rest, as Roslyn does), clamped to the caret's line: 0 when the range ends at the request's position.
+    /// </summary>
+    private int TailLength(LanguageServices.Protocol.Range? range, Position requestedAt, int caret)
+    {
+        if (range is not { } r || r.End.Line != requestedAt.Line || r.End.Character <= requestedAt.Character)
+        {
+            return 0;
+        }
+
+        var line = Model.Text.GetLineByOffset(caret);
+        return Math.Min(r.End.Character - requestedAt.Character, line.EndOffset - caret);
+    }
+
+    /// <summary>Whether the character at <paramref name="offset"/> is part of a word (a letter, a digit or "_").</summary>
+    private bool IsWordCharacterAt(int offset) =>
+        offset < Model.Text.TextLength && Model.Text.GetCharAt(offset) is var c && (char.IsLetterOrDigit(c) || c == '_');
 
     /// <summary>The embedded language's completion at the caret (HTML at a Razor file's markup); nothing elsewhere or when it fails.</summary>
     private async Task<(EmbeddedRequest? Request, LanguageServices.Protocol.CompletionList? List)> EmbeddedCompletionAsync(int offset, Position position, CompletionContext context, CancellationToken cancellationToken)
@@ -1693,17 +1796,22 @@ public sealed partial class CodeEditorController : IDisposable
     internal CompletionData NewCompletionData(LanguageServices.Protocol.CompletionItem item, Func<LanguageServices.Protocol.CompletionItem, Task<LanguageServices.Protocol.CompletionItem>> resolve, string commitCharacters = "") =>
         new(item, resolve, Commit) { CommitCharacters = commitCharacters.ToHashSet() };
 
-    /// <summary>Opens the completion list over [<paramref name="start"/>, the caret) with these items, filtered by the typed text (tests).</summary>
-    internal void OpenCompletion(int start, IEnumerable<CompletionData> items)
+    /// <summary>
+    /// Opens the completion list over [<paramref name="start"/>, the caret) with these items, filtered by the typed text
+    /// (tests); as a server's list asked for at <paramref name="requestedAt"/> whose range is <paramref name="range"/>.
+    /// </summary>
+    internal void OpenCompletion(int start, IEnumerable<CompletionData> items, LanguageServices.Protocol.Range? range = null, Position? requestedAt = null)
     {
         var window = NewCompletionPopup(start, Editor.CaretOffset);
+        window.RequestedAt = requestedAt;
+        window.TailLength = requestedAt is { } request ? TailLength(range, request, Editor.CaretOffset) : 0;
         foreach (var item in items)
         {
             window.CompletionList.CompletionData.Add(item);
         }
 
         OpenCompletion(window);
-        window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+        window.CompletionList.SelectItem(window.FilterText(Editor.CaretOffset));
     }
 
     /// <summary>
@@ -1735,6 +1843,13 @@ public sealed partial class CodeEditorController : IDisposable
     private LateResolve? _lateResolve;
 
     /// <summary>
+    /// The offset now of a completion edit's end, a position in the document as it was when the list was asked for: one
+    /// after the request's position moved with the typing since (<see cref="CompletionSpan.OffsetOf"/>).
+    /// </summary>
+    private int EndOffsetOf(Position end, ISegment segment) =>
+        Math.Min(Model.Text.TextLength, segment is CompletionSpan span && span.OffsetOf(end) is { } moved ? moved : Model.OffsetAt(end));
+
+    /// <summary>
     /// Commits a completion item without waiting for the language service (M56: the UI thread waited up to 300 ms for a
     /// resolve on every commit character): with the resolve prefetched while the item was selected if it has arrived, else
     /// with the item's own text; a resolve that arrives later applies its edits only while the document is as the commit
@@ -1754,7 +1869,7 @@ public sealed partial class CodeEditorController : IDisposable
             if (snippet.TextEdit is { } edit)
             {
                 start = Model.OffsetAt(edit.Range.Start);
-                length = Math.Max(0, Math.Max(segment.EndOffset, Model.OffsetAt(edit.Range.End)) - start);
+                length = Math.Max(0, Math.Max(segment.EndOffset, EndOffsetOf(edit.Range.End, segment)) - start);
             }
 
             SnippetEngine.Insert(Editor.TextArea, body, start, length, SnippetVariables(Configuration));
@@ -1765,7 +1880,8 @@ public sealed partial class CodeEditorController : IDisposable
         using (document.RunUpdate())
         {
             // The item's edit replaces its range, which may start before the word being typed (CSS's "::after" over
-            // "::af"), through what was typed since the request.
+            // "::af"), through what was typed since the request, and the rest of the word it covers after the caret,
+            // measured from where the typing left it (CompletionSpan).
             var textEdit = resolved?.TextEdit ?? data.Item.TextEdit;
             var text = textEdit?.NewText ?? data.Item.InsertText ?? data.Item.Label;
             var replaceStart = segment.Offset;
@@ -1773,7 +1889,7 @@ public sealed partial class CodeEditorController : IDisposable
             if (textEdit is { } itemEdit && Model.OffsetAt(itemEdit.Range.Start) is var editStart && editStart <= segment.Offset)
             {
                 replaceStart = editStart;
-                replaceLength = Math.Max(segment.EndOffset, Model.OffsetAt(itemEdit.Range.End)) - editStart;
+                replaceLength = Math.Max(segment.EndOffset, EndOffsetOf(itemEdit.Range.End, segment)) - editStart;
             }
 
             document.Replace(replaceStart, replaceLength, text);
@@ -2355,10 +2471,20 @@ public sealed partial class CodeEditorController : IDisposable
                 return;
             }
 
-            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current.Text)), cancellationToken).ConfigureAwait(true);
+            // The index's lines, split once per read of it: each pause in typing split the whole index text again.
+            var known = ReferenceEquals(_indexLinesOf, baseline) ? _indexLines : null;
+            var (changes, baselineLines) = await Task.Run(() =>
+            {
+                var lines = known ?? LineDiff.Lines(baseline);
+                return (LineDiff.Changes(lines, LineDiff.Lines(current.Text)), lines);
+            }, cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 _gitMargin.Changes = changes;
+                if (ReferenceEquals(baseline, _indexText))
+                {
+                    (_indexLinesOf, _indexLines) = (baseline, baselineLines);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -3006,7 +3132,7 @@ public sealed partial class CodeEditorController : IDisposable
         _hoverPopup.Closed -= OnHoverClosed;
         Editor.TextArea.TextView.AttachedToVisualTree -= OnViewAttached;
         Editor.TextArea.TextView.DetachedFromVisualTree -= OnViewDetached;
-        _textMate?.Dispose();
+        _grammar?.Dispose();
         _insights.Dispose();
         _inline.Dispose();
         _nextEdit.Dispose();

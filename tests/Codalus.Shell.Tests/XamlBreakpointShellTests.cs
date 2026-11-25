@@ -87,9 +87,11 @@ public sealed class XamlBreakpointShellTests
             Assert.DoesNotContain(f.Shell.Debugger.Frames.Skip(1), frame => frame.Name.Contains("Codalus.Previewer.Agent", StringComparison.Ordinal));
             Assert.Contains(f.Shell.Debugger.Frames, frame => frame.Name.Contains("InitializeComponent", StringComparison.Ordinal));
 
-            // The breakpoints are bound (the agent said so), not sent to the debugger.
+            // The breakpoints are bound (the agent said so), not sent to the debugger. Their states are the agent's answer to
+            // the shell's sync when it connected; macOS CI (PR #537's run 45623810099) timed out here with no state at all,
+            // stopped at the button: the agent's log and the shell's say whether that answer came (docs/ci-flakes.md).
             await ShellFixture.PumpUntil(() => breakpoints.For(window).All(b => breakpoints.StateOf(b) is { Verified: true }), 30,
-                () => string.Join("; ", breakpoints.For(window).Select(b => $"{b.Line}: {breakpoints.StateOf(b)}")));
+                () => string.Join("; ", breakpoints.For(window).Select(b => $"{b.Line}: {breakpoints.StateOf(b)}")) + "\n" + Describe(f));
 
             // On: the count's binding sets its Text (an attribute breakpoint), the broken binding fails (an exception-like stop).
             var seen = new HashSet<string>(StringComparer.Ordinal);

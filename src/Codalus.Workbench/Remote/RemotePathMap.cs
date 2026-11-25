@@ -149,6 +149,9 @@ public sealed class RemotePathMap
         return builder.ToString();
     }
 
+    /// <summary>Strings longer than this (in their escaped bytes) are no path or URI: they pass unmapped.</summary>
+    internal const int RawStringLength = 256 * 1024;
+
     private static byte[] Rewrite(ReadOnlySpan<byte> json, Func<string, string?> map)
     {
         var output = new ArrayBufferWriter<byte>(json.Length + 64);
@@ -173,6 +176,22 @@ public sealed class RemotePathMap
                         break;
                     case JsonTokenType.PropertyName:
                         writer.WritePropertyName(reader.ValueSpan.Length == 0 && !reader.ValueIsEscaped ? string.Empty : reader.GetString()!);
+                        break;
+                    case JsonTokenType.String when reader.ValueSpan.Length > RawStringLength:
+                        // A document's text, not a path: copied as it is (still escaped) instead of decoded and encoded again.
+                        var raw = System.Buffers.ArrayPool<byte>.Shared.Rent(reader.ValueSpan.Length + 2);
+                        try
+                        {
+                            raw[0] = (byte)'"';
+                            reader.ValueSpan.CopyTo(raw.AsSpan(1));
+                            raw[reader.ValueSpan.Length + 1] = (byte)'"';
+                            writer.WriteRawValue(raw.AsSpan(0, reader.ValueSpan.Length + 2), skipInputValidation: true);
+                        }
+                        finally
+                        {
+                            System.Buffers.ArrayPool<byte>.Shared.Return(raw);
+                        }
+
                         break;
                     case JsonTokenType.String:
                         var text = reader.GetString()!;

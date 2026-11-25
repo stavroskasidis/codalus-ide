@@ -1,6 +1,6 @@
 using Avalonia.Styling;
 using Codalus.Shell.Theming;
-using TextMateSharp.Grammars;
+using Tint;
 
 namespace Codalus.Shell.Editor;
 
@@ -17,23 +17,30 @@ public static class CodeColors
 
     private static readonly Dictionary<string, string?> s_languages = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(string Language, string Text), (int Start, int Length, int Type)[]> s_tokens = [];
+
+    /// <summary>
+    /// Each language's tokenizer (null: no grammar), kept: a tokenizer builds its regular expressions as it reaches its
+    /// grammar's rules, so a new one per line made Find Results' Markdown lines about ten times slower and allocated GiBs.
+    /// </summary>
+    private static readonly Dictionary<string, Tokenizer?> s_tokenizers = new(StringComparer.Ordinal);
     private static Func<string, string?>? s_languageOf;
-    private static Func<string, IGrammar?>? s_grammarOf;
+    private static Func<string, Tokenizer?>? s_tokenizerOf;
     private static Func<string?, EditorTheme>? s_themeFor;
 
     /// <summary>The theme or the user's colors changed: lines shown should be colored again.</summary>
     public static event EventHandler? Changed;
 
     /// <param name="languageOf">A file's language id.</param>
-    /// <param name="grammarOf">A language's TextMate grammar, or null.</param>
+    /// <param name="tokenizerOf">A new tokenizer for a language's TextMate grammar, or null (asked once per language).</param>
     /// <param name="themeFor">A built-in theme's editor colors by its id (null: the active theme's).</param>
-    public static void Configure(Func<string, string?> languageOf, Func<string, IGrammar?> grammarOf, Func<string?, EditorTheme> themeFor)
+    public static void Configure(Func<string, string?> languageOf, Func<string, Tokenizer?> tokenizerOf, Func<string?, EditorTheme> themeFor)
     {
         s_languageOf = languageOf;
-        s_grammarOf = grammarOf;
+        s_tokenizerOf = tokenizerOf;
         s_themeFor = themeFor;
         s_languages.Clear();
         s_tokens.Clear();
+        s_tokenizers.Clear();
         NotifyChanged();
     }
 
@@ -46,15 +53,34 @@ public static class CodeColors
         if (Equals(s_languageOf, languageOf))
         {
             s_languageOf = null;
-            s_grammarOf = null;
+            s_tokenizerOf = null;
             s_themeFor = null;
             s_languages.Clear();
             s_tokens.Clear();
+            s_tokenizers.Clear();
         }
     }
 
     /// <summary>The theme or the user's colors changed.</summary>
     public static void NotifyChanged() => Changed?.Invoke(null, EventArgs.Empty);
+
+    /// <summary>
+    /// The languages changed (a plugin's grammars or file patterns): forgets each file's language, the lines' tokens and
+    /// the tokenizers, and lines shown are colored again. Only for the configuration whose <paramref name="languageOf"/>
+    /// this is (a disposed shell's change, posted before it was disposed, changes nothing).
+    /// </summary>
+    public static void LanguagesChanged(Func<string, string?> languageOf)
+    {
+        if (!Equals(s_languageOf, languageOf))
+        {
+            return;
+        }
+
+        s_languages.Clear();
+        s_tokens.Clear();
+        s_tokenizers.Clear();
+        NotifyChanged();
+    }
 
     /// <summary>The language of a file (by its extension, cached), or null.</summary>
     public static string? LanguageOf(string? path)
@@ -109,7 +135,7 @@ public static class CodeColors
     /// <summary>The colored tokens of one line (start, length, token type), or none without a grammar.</summary>
     public static IReadOnlyList<(int Start, int Length, int Type)> Tokens(string? languageId, string text)
     {
-        if (languageId is null || text.Length == 0 || s_grammarOf is not { } grammarOf)
+        if (languageId is null || text.Length == 0 || s_tokenizerOf is not { } tokenizerOf)
         {
             return [];
         }
@@ -122,14 +148,20 @@ public static class CodeColors
         var tokens = new List<(int, int, int)>();
         try
         {
-            if (grammarOf(languageId) is { } grammar)
+            if (!s_tokenizers.TryGetValue(languageId, out var tokenizer))
             {
-                var result = grammar.TokenizeLine(text, null, TimeSpan.FromMilliseconds(50));
-                foreach (var token in result.Tokens)
+                tokenizer = tokenizerOf(languageId);
+                s_tokenizers[languageId] = tokenizer;
+            }
+
+            if (tokenizer is not null)
+            {
+                tokenizer.TimeBudget = TimeSpan.FromMilliseconds(50);
+                foreach (var token in tokenizer.TokenizeLine(text, StateStack.Initial, out _))
                 {
-                    var start = Math.Min(token.StartIndex, text.Length);
-                    var end = Math.Min(token.EndIndex, text.Length);
-                    if (end > start && GrammarColorizer.TypeOf(token.Scopes) is { } type)
+                    var start = Math.Min(token.Start, text.Length);
+                    var end = Math.Min(token.End, text.Length);
+                    if (end > start && GrammarColorizer.TypeOf(token.Scopes.GetScopeNames()) is { } type)
                     {
                         tokens.Add((start, end - start, type));
                     }

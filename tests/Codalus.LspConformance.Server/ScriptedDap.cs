@@ -98,6 +98,12 @@ internal static class ScriptedDap
                     await RespondAsync(output, requestSeq, command, body);
                     await EventAsync(output, "initialized", null);
                     continue;
+                case "launch" when message.TryGetProperty("arguments", out var timing) && timing.ValueKind == JsonValueKind.Object
+                    && Option(timing, "clrStartTimesOut") == "true" && FailsToStart(timing):
+                    // As the Codalus debugger answers a launch that ran past one of its start limits (it ended the
+                    // program): its code as DAP's raw message, the text to show as body.error.format.
+                    await FailAsync(output, requestSeq, command, "codalus.startTimeout", "program's .NET runtime didn't start in 30 seconds: is it a .NET program?");
+                    continue;
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
                     inspection = ScriptedInspection.From(launch);
@@ -309,7 +315,8 @@ internal static class ScriptedDap
     /// <summary>
     /// A launch configuration with <c>failStarts</c> (a count) and <c>startsFile</c> (a file the adapters share) fails
     /// that many starts, one per adapter process, before one succeeds (the debug service starts again, as after netcoredbg's startup timeout).
-    /// With <c>startTimesOut</c> (true), a failed start is answered with netcoredbg's command timeout instead.
+    /// With <c>startTimesOut</c> (true), a failed start is answered with netcoredbg's command timeout instead; with
+    /// <c>clrStartTimesOut</c> (true), the launch fails as the Codalus debugger's does past one of its start limits.
     /// A netcoredbg launch (a debug service's own <c>LaunchArguments</c>) carries the two in its <c>env</c>.
     /// </summary>
     private static bool FailsToStart(JsonElement? launch)
@@ -436,8 +443,10 @@ internal static class ScriptedDap
         return program.Id;
     }
 
-    internal static Task FailAsync(Stream output, int requestSeq, string command, string error) =>
-        WriteAsync(output, new JsonObject
+    /// <summary>A failed response: <paramref name="error"/> as its message, or as its code with <paramref name="shown"/> the text to show.</summary>
+    internal static Task FailAsync(Stream output, int requestSeq, string command, string error, string? shown = null)
+    {
+        var response = new JsonObject
         {
             ["seq"] = ++s_seq,
             ["type"] = "response",
@@ -445,7 +454,14 @@ internal static class ScriptedDap
             ["success"] = false,
             ["command"] = command,
             ["message"] = error,
-        });
+        };
+        if (shown is not null)
+        {
+            response["body"] = new JsonObject { ["error"] = new JsonObject { ["id"] = 1, ["format"] = shown } };
+        }
+
+        return WriteAsync(output, response);
+    }
 
     internal static Task RespondAsync(Stream output, int requestSeq, string command, JsonNode? body) =>
         WriteAsync(output, new JsonObject

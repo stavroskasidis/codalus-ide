@@ -366,6 +366,66 @@ public sealed partial class GitService
         await RefreshAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Ignore and Untrack (the editor's Git ▸): adds the file to the root <c>.gitignore</c> and, when git tracks it, removes
+    /// it from the index (<c>git rm --cached</c>). The file stays on disk; its removal is staged for the next commit.
+    /// </summary>
+    public async Task IgnoreAndUntrackAsync(string path, CancellationToken cancellationToken = default)
+    {
+        await IgnoreAsync(path, cancellationToken).ConfigureAwait(false);
+        await MutateAsync(["rm", "--cached", "-r", "--quiet", "--ignore-unmatch", .. s_pathspecsFromInput], cancellationToken, Pathspecs([Relative(path)])).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether git ignores the file: it is untracked and a <c>.gitignore</c>, <c>.git/info/exclude</c> or
+    /// <c>core.excludesFile</c> pattern matches it. A tracked file is never ignored (<c>git check-ignore</c>).
+    /// </summary>
+    public async Task<bool> IsIgnoredAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var (code, _, _) = await RunAsync(Root ?? throw new InvalidOperationException("No git repository is open."), ["check-ignore", "-q", "--", Relative(path)], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
+        return code == 0;
+    }
+
+    /// <summary>
+    /// Undo Changes (the editor's Git ▸): the file goes back to the last commit, its staged and unstaged changes both
+    /// dropped. A file the last commit doesn't have (untracked, or added to the index) is deleted, and a staged rename
+    /// brings back the file it renamed.
+    /// </summary>
+    public async Task UndoChangesAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var real = Real(path);
+        var status = Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, real));
+        if (status is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (status.IsUntracked)
+            {
+                await GitAsync(["clean", "-f", "-q", "--", status.RelativePath], cancellationToken).ConfigureAwait(false);
+            }
+            else if (status.Index is 'A' or 'R' or 'C' || Status?.Head is null)
+            {
+                // Not in the last commit: removed from the index and the disk. A rename's source comes back from HEAD.
+                await GitAsync(["rm", "-f", "--quiet", "--", status.RelativePath], cancellationToken).ConfigureAwait(false);
+                if (status.Index == 'R' && status.OriginalPath is { } original)
+                {
+                    await GitAsync(["restore", "--source=HEAD", "--staged", "--worktree", "--", Path.GetRelativePath(Root!, original).Replace('\\', '/')], cancellationToken).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                await GitAsync(["restore", "--source=HEAD", "--staged", "--worktree", "--", status.RelativePath], cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await RefreshAsync(cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>The commit message template (<c>commit.template</c>), or null when none is configured.</summary>
     public async Task<string?> CommitTemplateAsync(CancellationToken cancellationToken = default)
     {

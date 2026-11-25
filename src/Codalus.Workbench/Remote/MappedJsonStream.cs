@@ -86,8 +86,21 @@ public sealed class MappedJsonStream : Stream
             while (TakeMessage() is { } body)
             {
                 var mapped = _map.MessageToRemote(body);
-                await _inner.WriteAsync(FramedMessageWriter.Header(mapped.Length), cancellationToken).ConfigureAwait(false);
-                await _inner.WriteAsync(mapped, cancellationToken).ConfigureAwait(false);
+
+                // The header and the body in one write, from a rented buffer: two writes each crossed the link apart.
+                var header = FramedMessageWriter.Header(mapped.Length);
+                var frame = System.Buffers.ArrayPool<byte>.Shared.Rent(header.Length + mapped.Length);
+                try
+                {
+                    header.CopyTo(frame, 0);
+                    mapped.CopyTo(frame, header.Length);
+                    await _inner.WriteAsync(frame.AsMemory(0, header.Length + mapped.Length), cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    System.Buffers.ArrayPool<byte>.Shared.Return(frame);
+                }
+
                 await _inner.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
         }

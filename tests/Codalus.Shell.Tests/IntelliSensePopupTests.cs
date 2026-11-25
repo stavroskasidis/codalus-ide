@@ -223,6 +223,38 @@ public class IntelliSensePopupTests
         }
     }
 
+    [AvaloniaFact]
+    public void A_query_that_grows_matches_the_last_matches_and_the_list_is_that_of_a_full_match()
+    {
+        var window = new Window();
+        var editor = new TextEditor { Document = new AvaloniaEdit.Document.TextDocument("") };
+        window.Content = editor;
+        window.Show();
+        var names = Enumerable.Range(0, 20_000).Select(i => (i % 7) switch
+        {
+            0 => $"String{i}", 1 => $"StringBuilder{i}", 2 => $"Stream{i}", 3 => $"SetText{i}", 4 => $"strip{i}", 5 => $"ToString{i}", _ => $"Other{i}",
+        }).ToList();
+        var popup = CompletionOf(editor, 0, names.Select(n => Item(n, SymbolGlyphs.Method)));
+        var full = CompletionOf(editor, 0, names.Select(n => Item(n, SymbolGlyphs.Method)));
+        try
+        {
+            foreach (var query in new[] { "S", "St", "Str", "Stri", "Str", "S", "StB", "StBu" })
+            {
+                popup.CompletionList.SelectItem(query); // typed: narrowed while it grows
+                full.CompletionList.SelectItem(string.Empty);
+                full.CompletionList.SelectItem(query); // from nothing: every item matched
+                Assert.Equal(full.CompletionList.CurrentList.Select(i => i.Text), popup.CompletionList.CurrentList.Select(i => i.Text));
+                Assert.Equal(full.CompletionList.SelectedItem?.Text, popup.CompletionList.SelectedItem?.Text);
+            }
+        }
+        finally
+        {
+            popup.Hide();
+            full.Hide();
+            window.Close();
+        }
+    }
+
     private static CompletionPopup CompletionOf(TextEditor editor, int start, IEnumerable<CompletionItem> items, Func<string, string?>? keyLabel = null)
     {
         var popup = new CompletionPopup(editor.TextArea, () => EditorTheme.Dark, keyLabel ?? (_ => null)) { StartOffset = start, EndOffset = editor.CaretOffset };
@@ -1325,5 +1357,79 @@ public class IntelliSensePopupTests
         f.Type("(");
         Assert.StartsWith("Console.WriteLine(", Line("/*dot*/"), StringComparison.Ordinal);
         Assert.Equal("Console.WriteLine(".Length, editor.Editor.CaretOffset - (editor.Model.Text.Text.IndexOf("/*dot*/", StringComparison.Ordinal) + "/*dot*/".Length));
+    }
+
+    private const string Words = """
+
+
+        public static class Words
+        {
+            public static void Run(string title)
+            {
+                /*before*/title.Trim();
+                /*middle*/System.Console.WriteLine();
+            }
+        }
+        """;
+
+    [AvaloniaFact]
+    public async Task With_the_csharp_service_typing_before_a_word_keeps_it_and_completing_inside_one_replaces_it()
+    {
+        // A review of 1.0 on macOS: "text getting deleted as if some kind of overwrite mode were on". A letter typed right
+        // before a word asked for completion, and Roslyn's span covers the word's rest there: "var " before "title" became
+        // "var le". A letter there no longer asks (Roslyn's rule), and a list asked for inside a word filters by all of it.
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var document = await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "App", "Program.cs"));
+        Assert.NotNull(document);
+        await ShellFixture.PumpUntil(() => document.Controller is not null);
+        var editor = document.Controller!;
+        editor.Model.Text.Insert(editor.Model.Text.TextLength, Words);
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.FormatOnTypeKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        string Line(string marker)
+        {
+            var text = editor.Model.Text.Text;
+            var at = text.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+            return text[at..text.IndexOf('\n', at)].TrimEnd();
+        }
+
+        void CaretAfter(string marker)
+        {
+            editor.Editor.CaretOffset = editor.Model.Text.Text.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+            editor.Editor.TextArea.Focus();
+            ShellFixture.Pump();
+        }
+
+        // Asked inside "Wri|teLine" (again until the edit's analysis is in): filtered by "WriteLine", which Enter replaces.
+        CaretAfter("/*middle*/System.Console.Wri");
+        var deadline = DateTime.UtcNow.AddSeconds(120);
+        while (true)
+        {
+            editor.ShowCompletion();
+            try
+            {
+                await ShellFixture.PumpUntil(() => editor.CompletionWindow is { IsOpen: true } w && w.CompletionList.SelectedItem?.Label == "WriteLine" && !w.CompletionList.IsSoftSelection, seconds: 15);
+                break;
+            }
+            catch (Exception) when (DateTime.UtcNow < deadline)
+            {
+            }
+        }
+
+        Assert.Equal("teLine".Length, editor.CompletionWindow!.TailLength);
+        f.Press(Key.Enter);
+        Assert.Equal("System.Console.WriteLine();", Line("/*middle*/"));
+        Assert.Null(editor.CompletionWindow);
+
+        // Typed right before "title": no list, and Space is a space.
+        CaretAfter("/*before*/");
+        f.Type("v");
+        var settled = DateTime.UtcNow.AddSeconds(2); // the time a list would take to come
+        await ShellFixture.PumpUntil(() => DateTime.UtcNow >= settled);
+        Assert.Null(editor.CompletionWindow);
+        f.Type("a");
+        f.Type("r");
+        f.Type(" ");
+        Assert.Equal("var title.Trim();", Line("/*before*/"));
     }
 }

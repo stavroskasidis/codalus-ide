@@ -32,7 +32,8 @@ public sealed class DiffServices
     public Func<string, string, bool>? OpenText { get; init; }
 
     /// <summary>Whether a side's text is the open document's: that side gets the language service's colors and the navigation bar.</summary>
-    public bool IsOpenText(string path, string text) => OpenText?.Invoke(path, text) ?? OpenDocument(path)?.Text.Text == text;
+    public bool IsOpenText(string path, string text) =>
+        OpenText?.Invoke(path, text) ?? (OpenDocument(path)?.Text is { } open && open.TextLength == text.Length && open.Text == text); // the lengths first: no string of the text otherwise
 
     /// <summary>Saves an open document as the editor saves it (format on save and all); false when it couldn't.</summary>
     public Func<CodeDocument, Task<bool>> SaveAsync { get; init; } = _ => Task.FromResult(false);
@@ -54,6 +55,12 @@ public sealed class DiffServices
     /// <c>text</c>, or null: the file isn't open, its text is another, or its language service has none.
     /// </summary>
     public Func<string, string, CancellationToken, Task<int[]?>> SemanticTokensAsync { get; init; } = (_, _, _) => Task.FromResult<int[]?>(null);
+
+    /// <summary>
+    /// As <see cref="SemanticTokensAsync"/>, for the 0-based lines <c>start</c> to <c>end</c> (end excluded) of a large file:
+    /// the tokens' lines are the file's. A service without range requests answers for the whole file.
+    /// </summary>
+    public Func<string, string, int, int, CancellationToken, Task<int[]?>> SemanticTokensInAsync { get; init; } = (_, _, _, _, _) => Task.FromResult<int[]?>(null);
 
     /// <summary>
     /// Holds a file's document while a working-tree diff shows it (its language service then knows the file, open in an

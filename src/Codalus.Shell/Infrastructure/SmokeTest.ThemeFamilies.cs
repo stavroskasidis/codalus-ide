@@ -25,7 +25,7 @@ internal sealed partial class SmokeTest
         try
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);
-            await WaitAsync(() => program.Colorizer.HasTokens, "semantic tokens arrive", 90).ConfigureAwait(true);
+            await WaitAsync(() => program.SemanticTokensShown, "semantic tokens arrive", 90).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
             await RenderedAsync().ConfigureAwait(true);
             // The editor has the focus, so its tab shows the family's active-tab shape.

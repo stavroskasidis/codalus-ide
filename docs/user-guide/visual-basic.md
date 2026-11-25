@@ -30,7 +30,11 @@ Two things Visual Basic editors sometimes do aren't offered:
 ## Projects
 
 - **New Project** lists the templates of every installed language, each language's its own row with the language as its first tag (Console App in C#, F# and Visual Basic are three rows); the **Visual Basic** language filter shows VB's only ([New projects and solutions](solutions.md#new-projects-and-solutions)).
-- **Add New Item** offers VB's own Class, Module, Interface, Structure, Enum and Code File in a VB project, in the project's root namespace.
+- **Add New Item** offers VB's own Class, Module, Interface, Structure, Enum and Code File in a VB project, in the project's root namespace, and in a Windows Forms project its Form and User Control.
+
+## Windows Forms
+
+A Visual Basic Windows Forms project's forms open in the Windows Forms designer on Windows, written back as the classic IDE writes Visual Basic: `Friend WithEvents` controls named `Button1`, and event handlers with `Handles` clauses in the form's code ([Visual Basic forms](windows-desktop.md#visual-basic-forms)).
 - **Properties** (`Alt+Enter` on the project) has VB's options on the Application page: Option Explicit, Option Strict, Option Infer, Option Compare and the language version. The Build page has "Remove integer overflow checks", and conditional compilation constants are separated by commas (`DEBUG=-1,TRACE=-1`). Imports for the whole project are `Import` items in the project file (`<Import Include="System.Text" />`); edit them there.
 
 ## Tests

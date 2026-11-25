@@ -516,10 +516,20 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     }
 
     /// <summary>The project configuration the active solution configuration maps to (MSBuild spells "Any CPU" "AnyCPU").</summary>
-    private (string Configuration, string Platform) ProjectConfiguration(string projectPath)
+    /// <summary>One project's design-time cache lookup in a batch: its result from the cache, or the build it needs and why.</summary>
+    private sealed record Lookup(string Path, EvaluatedProject? Project, DesignTimeBuilder.Request? Request,
+        (string Directory, string Entry, string Key, string? Framework)? Cache, CompilerInputsInfo? Hit, string? Miss);
+
+    private (string Configuration, string Platform) ProjectConfiguration(string projectPath) => ProjectConfiguration(projectPath, null);
+
+    /// <summary>As <see cref="ProjectConfiguration(string)"/>, the solution's projects looked up in <paramref name="solutionProjects"/> (<see cref="SolutionProjectsByPath"/>).</summary>
+    private (string Configuration, string Platform) ProjectConfiguration(string projectPath, IReadOnlyDictionary<string, SolutionProjectModel>? solutionProjects)
     {
         var (configuration, platform) = (Active.Configuration, Active.Platform);
-        if (_model?.SolutionProjects.FirstOrDefault(p => s_pathComparer.Equals(Full(System.IO.Path.GetDirectoryName(Path)!, p.FilePath), projectPath)) is { } project)
+        var project = solutionProjects is not null
+            ? solutionProjects.GetValueOrDefault(projectPath)
+            : _model?.SolutionProjects.FirstOrDefault(p => s_pathComparer.Equals(Full(System.IO.Path.GetDirectoryName(Path)!, p.FilePath), projectPath));
+        if (project is not null)
         {
             var mapped = project.GetProjectConfiguration(Active.Configuration, Active.Platform);
             configuration = mapped.Item1 ?? configuration;
@@ -527,6 +537,19 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
 
         return (configuration, platform.Replace(" ", string.Empty, StringComparison.Ordinal));
+    }
+
+    /// <summary>The solution's projects by full path, for one batch's lookups (the first of a path, as the list's search finds).</summary>
+    private Dictionary<string, SolutionProjectModel> SolutionProjectsByPath()
+    {
+        var map = new Dictionary<string, SolutionProjectModel>(s_pathComparer);
+        var directory = System.IO.Path.GetDirectoryName(Path)!;
+        foreach (var project in _model?.SolutionProjects ?? [])
+        {
+            map.TryAdd(Full(directory, project.FilePath), project);
+        }
+
+        return map;
     }
 
     /// <summary>
@@ -603,56 +626,93 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             _forcedDesignTime.ExceptWith(forced);
         }
 
-        foreach (var path in batch)
+        // Once for the batch: the solution's projects by path (each project's configuration looked up the whole list),
+        // and the files outside the solution its cached command lines name (every project's reference packs).
+        var solutionProjects = SolutionProjectsByPath();
+        var outside = new ExistenceMemo();
+        // Each project's lookup (its key: a walk of the projects below it; the cache file: read and parsed; its files:
+        // checked) on its own, in parallel for a large batch, then taken in the batch's order, which the progress, the
+        // misses' report and the builds' requests keep.
+        Lookup Decide(string path)
         {
             if (!_evaluated.TryGetValue(path, out var project) || project.Info.State != ProjectStates.Loaded)
             {
-                continue;
+                return new Lookup(path, null, null, null, null, null);
             }
 
             var frameworks = project.Info.TargetFrameworks;
             var framework = frameworks.Length <= 1 ? null
                 : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
-            var (configuration, platform) = ProjectConfiguration(path);
+            var (configuration, platform) = ProjectConfiguration(path, solutionProjects);
+            var request = new DesignTimeBuilder.Request(path, configuration, platform, framework)
+            {
+                WinUI = project.Info.UsesWinUI,
+                FrameworkLabel = project.Info.IsNonSdkStyle ? project.Info.TargetFrameworks.FirstOrDefault() : null,
+                IgnoreMissingImports = project.Info.CannotBuildReason is not null,
+            };
+
+            // The persisted cache (M34b): unchanged inputs give the last build's command line without building.
+            if (project.IntermediateDirectory is not { } obj || DesignTimeKey(path, framework, properties) is not { } key)
+            {
+                return new Lookup(path, project, request, null, null, "no cache key (no intermediate folder, or a referenced project has none)");
+            }
+
+            var entry = DesignTimeCache.Entry(configuration, platform, framework);
+            if (forced.Contains(path))
+            {
+                return new Lookup(path, project, request, (obj, entry, key, framework), null, "asked for");
+            }
+
+            return DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory, outside, out var miss) is { } hit
+                ? new Lookup(path, project, request, (obj, entry, key, framework), hit, null)
+                : new Lookup(path, project, request, (obj, entry, key, framework), null, miss);
+        }
+
+        var lookups = new Lookup[batch.Length];
+        if (batch.Length > 4)
+        {
+            Parallel.For(0, batch.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2), CancellationToken = cancellationToken }, i => lookups[i] = Decide(batch[i]));
+        }
+        else
+        {
+            for (var i = 0; i < batch.Length; i++)
+            {
+                lookups[i] = Decide(batch[i]);
+            }
+        }
+
+        foreach (var lookup in lookups)
+        {
+            if (lookup.Project is not { } project)
+            {
+                continue;
+            }
+
+            var path = lookup.Path;
 
             // The assets file this batch's result is known to come from: the evaluation's, which its cache key holds. The
             // file's date now, newer once a restore wrote it before its evaluation was done, said a result taken from the
             // cache (a build before the restore, without the packages) came from the new file, so the restore's
             // evaluation found nothing to build again (Web21's no references, docs/ci-flakes.md).
             _builtAssets[path] = project.AssetsStamp;
-
-            // The persisted cache (M34b): unchanged inputs give the last build's command line without building.
-            if (project.IntermediateDirectory is { } obj && DesignTimeKey(path, framework, properties) is { } key)
+            if (lookup.Cache is { } cache)
             {
-                used[path] = (framework, key);
-                var entry = DesignTimeCache.Entry(configuration, platform, framework);
-                if (forced.Contains(path))
-                {
-                    misses.Add($"{System.IO.Path.GetFileName(path)}: asked for");
-                }
-                else if (DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory, out var miss) is { } hit)
-                {
-                    cached.Add(hit);
-                    continue;
-                }
-                else
-                {
-                    misses.Add($"{System.IO.Path.GetFileName(path)}: {miss}");
-                }
-
-                keys[path] = (obj, entry, key);
-            }
-            else
-            {
-                misses.Add($"{System.IO.Path.GetFileName(path)}: no cache key (no intermediate folder, or a referenced project has none)");
+                used[path] = (cache.Framework, cache.Key);
             }
 
-            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework)
+            if (lookup.Hit is { } hit)
             {
-                WinUI = project.Info.UsesWinUI,
-                FrameworkLabel = project.Info.IsNonSdkStyle ? project.Info.TargetFrameworks.FirstOrDefault() : null,
-                IgnoreMissingImports = project.Info.CannotBuildReason is not null,
-            });
+                cached.Add(hit);
+                continue;
+            }
+
+            misses.Add($"{System.IO.Path.GetFileName(path)}: {lookup.Miss}");
+            if (lookup.Cache is { } written)
+            {
+                keys[path] = (written.Directory, written.Entry, written.Key);
+            }
+
+            requests.Add(lookup.Request!);
         }
 
         var started = Stopwatch.GetTimestamp();
@@ -914,8 +974,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private Task<string[]> PauseDesignTimeBuildsAsync() => _designTimeQueue.PauseAsync();
 
     /// <summary>How to start a project: the SDK's run properties for the active configuration and target framework.</summary>
-    public RunInfo GetRunInfo(string projectPath, string? targetFramework = null)
+    public RunInfo GetRunInfo(string projectPath, string? targetFramework = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!Trusted)
         {
             throw new InvalidOperationException("Projects run only in trusted solutions.");
@@ -934,7 +995,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             properties["TargetFramework"] = framework;
         }
 
+        // A request dropped while it waited (a menu's refresh the next one replaced) evaluates nothing.
+        cancellationToken.ThrowIfCancellationRequested();
         using var gate = StringCacheGate.Enter();
+        cancellationToken.ThrowIfCancellationRequested();
         using var collection = new ProjectCollection(properties);
         var project = collection.LoadProject(path);
         string? Property(string name) => project.GetPropertyValue(name) is { Length: > 0 } value ? value : null;

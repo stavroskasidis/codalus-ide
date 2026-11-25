@@ -815,6 +815,74 @@ internal sealed class ClrModuleInfo : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Where a launch that stops at its entry stops in this module (#547: Debug → Step Into New Instance): the first
+    /// visible line of the user's <c>Main</c>. That is the PDB's entry point (the compiler names the user's method there,
+    /// not the <c>&lt;Main&gt;</c> it adds for an async one) or else the image's; for an async <c>Main</c> (and top-level
+    /// statements that await) the lines are its state machine's <c>MoveNext</c>'s. Null for a module without a managed
+    /// entry point (a library) or without lines for it (no symbols).
+    /// </summary>
+    public (int Method, int Offset, int Line)? EntryLocation()
+    {
+        if (_pe.PEHeaders.CorHeader is not { } header || (header.Flags & CorFlags.NativeEntryPoint) != 0
+            || MetadataTokens.EntityHandle(header.EntryPointTokenOrRelativeVirtualAddress) is not { Kind: HandleKind.MethodDefinition } image)
+        {
+            return null;
+        }
+
+        var candidates = new List<int>();
+        if (Pdb?.DebugMetadataHeader is { EntryPoint.IsNil: false } debug)
+        {
+            candidates.Add(MetadataTokens.GetToken(debug.EntryPoint));
+        }
+
+        var imageToken = MetadataTokens.GetToken(image);
+        candidates.Add(imageToken);
+
+        // Without the PDB's entry point (a Windows PDB): an async Main's <Main> calls the user's Main, of its type.
+        var imageMethod = Metadata.GetMethodDefinition(MethodHandle(imageToken));
+        if (Metadata.GetString(imageMethod.Name) is ['<', .. var inner, '>'])
+        {
+            candidates.AddRange(Metadata.GetTypeDefinition(imageMethod.GetDeclaringType()).GetMethods()
+                .Where(m => Metadata.StringComparer.Equals(Metadata.GetMethodDefinition(m).Name, inner))
+                .Select(m => MetadataTokens.GetToken(m)));
+        }
+
+        foreach (var method in candidates.Distinct())
+        {
+            if ((FirstLine(method) ?? StateMachineMoveNexts(method).Select(FirstLine).FirstOrDefault(l => l is not null)) is { } at)
+            {
+                return at;
+            }
+        }
+
+        return null;
+
+        (int Method, int Offset, int Line)? FirstLine(int method) =>
+            SequencePoints(method).Where(p => !p.IsHidden).OrderBy(p => p.Offset).Cast<ClrSequencePoint?>().FirstOrDefault() is { } first
+                ? (method, first.Offset, first.StartLine)
+                : null;
+    }
+
+    /// <summary>The <c>MoveNext</c> of an async method's state machines (the nested <c>&lt;Name&gt;d__N</c> types that implement <c>IAsyncStateMachine</c>).</summary>
+    private IEnumerable<int> StateMachineMoveNexts(int kickoffToken)
+    {
+        var kickoff = Metadata.GetMethodDefinition(MethodHandle(kickoffToken));
+        var prefix = "<" + Metadata.GetString(kickoff.Name) + ">";
+        foreach (var nested in Metadata.GetTypeDefinition(kickoff.GetDeclaringType()).GetNestedTypes())
+        {
+            var type = Metadata.GetTypeDefinition(nested);
+            if (Metadata.GetString(type.Name).StartsWith(prefix, StringComparison.Ordinal)
+                && type.GetInterfaceImplementations().Any(i => NameOf(Metadata.GetInterfaceImplementation(i).Interface)?.FullName == "System.Runtime.CompilerServices.IAsyncStateMachine"))
+            {
+                foreach (var method in type.GetMethods().Where(m => Metadata.StringComparer.Equals(Metadata.GetMethodDefinition(m).Name, "MoveNext")))
+                {
+                    yield return MetadataTokens.GetToken(method);
+                }
+            }
+        }
+    }
+
     /// <summary>The portable PDB's async stepping information (<c>AsyncMethodSteppingInformationBlob</c>).</summary>
     private static readonly Guid s_asyncSteppingInformation = new("54FD2AC5-E925-401A-9C2A-F94F171072F8");
 

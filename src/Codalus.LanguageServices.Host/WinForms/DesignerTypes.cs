@@ -12,6 +12,12 @@ internal interface IDesignerTypeResolver
 
     /// <summary>Whether <paramref name="fullName"/> is an enum (null when unknown).</summary>
     bool? IsEnum(string fullName);
+
+    /// <summary>
+    /// The member a name refers to as its declaration spells it (<c>Text</c> for Visual Basic's <c>Button1.text</c>, whose
+    /// names ignore case), or <paramref name="written"/> when that isn't known (without a compilation).
+    /// </summary>
+    string MemberName(SyntaxNode name, string written) => written;
 }
 
 /// <summary>Through the project's compilation: what the compiler binds the name to.</summary>
@@ -43,6 +49,16 @@ internal sealed class SemanticDesignerTypeResolver(SemanticModel model) : IDesig
     }
 
     public bool? IsEnum(string fullName) => _seen.TryGetValue(fullName, out var type) ? type.TypeKind == TypeKind.Enum : null;
+
+    /// <summary>The member the compiler binds the name to (a property, field, event or method), as declared.</summary>
+    public string MemberName(SyntaxNode name, string written)
+    {
+        var info = model.GetSymbolInfo(name);
+        return (info.Symbol ?? info.CandidateSymbols.FirstOrDefault()) is { Kind: SymbolKind.Property or SymbolKind.Field or SymbolKind.Event or SymbolKind.Method } symbol
+            && string.Equals(symbol.Name, written, StringComparison.OrdinalIgnoreCase)
+            ? symbol.Name
+            : written;
+    }
 
     public static string Name(ITypeSymbol type) => type.SpecialType switch
     {
@@ -120,13 +136,29 @@ internal sealed class SyntacticDesignerTypeResolver(string? fileNamespace) : IDe
         "System.Windows.Forms.ToolStripRenderMode",
     };
 
+    /// <summary>Visual Basic's type keywords (which ignore case, as its names do).</summary>
+    private static readonly Dictionary<string, string> s_visualBasicKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Object"] = "System.Object", ["String"] = "System.String", ["Boolean"] = "System.Boolean", ["Char"] = "System.Char", ["Byte"] = "System.Byte",
+        ["SByte"] = "System.SByte", ["Short"] = "System.Int16", ["UShort"] = "System.UInt16", ["Integer"] = "System.Int32", ["UInteger"] = "System.UInt32",
+        ["Long"] = "System.Int64", ["ULong"] = "System.UInt64", ["Single"] = "System.Single", ["Double"] = "System.Double", ["Decimal"] = "System.Decimal",
+        ["Date"] = "System.DateTime",
+    };
+
     private static readonly Dictionary<string, string> s_byName = s_known
         .SelectMany(k => k.Types.Select(t => (t, k.Namespace)))
         .GroupBy(p => p.t, StringComparer.Ordinal)
         .ToDictionary(g => g.Key, g => g.First().Namespace + "." + g.Key, StringComparer.Ordinal);
 
+    private static readonly Dictionary<string, string> s_byNameIgnoringCase = new(s_byName, StringComparer.OrdinalIgnoreCase);
+
     public string? FullName(SyntaxNode node)
     {
+        if (node.Language == LanguageNames.VisualBasic)
+        {
+            return VisualBasicFullName(node);
+        }
+
         var text = node switch
         {
             PredefinedTypeSyntax predefined => predefined.Keyword.Text,
@@ -157,6 +189,33 @@ internal sealed class SyntacticDesignerTypeResolver(string? fileNamespace) : IDe
         return fileNamespace is { Length: > 0 } ns ? ns + "." + text : text;
     }
 
+    /// <summary>A Visual Basic type or name: its keywords, names that ignore case, <c>Global.</c> left out.</summary>
+    private string? VisualBasicFullName(SyntaxNode node)
+    {
+        if (node is not (Microsoft.CodeAnalysis.VisualBasic.Syntax.TypeSyntax or Microsoft.CodeAnalysis.VisualBasic.Syntax.MemberAccessExpressionSyntax))
+        {
+            return null;
+        }
+
+        var text = VisualBasicDesignerSyntax.StripGlobal(node.ToString());
+        if (s_visualBasicKeywords.TryGetValue(text, out var keyword))
+        {
+            return keyword;
+        }
+
+        if (text.StartsWith("System.", StringComparison.OrdinalIgnoreCase) || text.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase))
+        {
+            return text;
+        }
+
+        if (!text.Contains('.', StringComparison.Ordinal) && s_byNameIgnoringCase.TryGetValue(text, out var known))
+        {
+            return known;
+        }
+
+        return fileNamespace is { Length: > 0 } ns ? ns + "." + text : text;
+    }
+
     public bool? IsEnum(string fullName) => s_enums.Contains(fullName) ? true : null;
 
     private static string Strip(string text)
@@ -183,11 +242,13 @@ internal static class DesignerSyntax
         return null;
     }
 
-    /// <summary>The namespace a type is declared in (nested namespaces joined), or null.</summary>
+    /// <summary>The namespace a type is declared in (nested namespaces joined), or null; in Visual Basic, without the project's root namespace.</summary>
     public static string? NamespaceOf(SyntaxNode node) =>
-        node.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(n => n.Name.ToString()) is var parts && parts.Any()
-            ? string.Join('.', parts)
-            : null;
+        node.Language == LanguageNames.VisualBasic
+            ? VisualBasicDesignerSyntax.NamespaceOf(node, rootNamespace: null)
+            : node.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(n => n.Name.ToString()) is var parts && parts.Any()
+                ? string.Join('.', parts)
+                : null;
 
     /// <summary>The <c>using</c> namespaces of the file (not aliases or statics), with <c>global using</c>s.</summary>
     public static IEnumerable<string> UsingsOf(SyntaxNode root) =>

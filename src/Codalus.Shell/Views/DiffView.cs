@@ -1371,6 +1371,26 @@ public sealed class DiffView : UserControl, IPaneView
             CloseQuickInfo();
         }
 
+        if (_viewModel.OpenSideIsOld is { } openIsOld && view.Editor.TextArea.TextView is { VisualLinesValid: true } shown && shown.VisualLines.Count > 0)
+        {
+            // A large open side's semantic tokens for the lines this pane shows of it.
+            var paneLines = PaneLinesOf(view);
+            int from = int.MaxValue, to = 0;
+            foreach (var visual in shown.VisualLines)
+            {
+                if (paneLines.SourceOf(visual.FirstDocumentLine.LineNumber - 1) is var (old, line) && old == openIsOld && line > 0)
+                {
+                    from = Math.Min(from, line);
+                    to = Math.Max(to, line);
+                }
+            }
+
+            if (to > 0)
+            {
+                _ = _viewModel.SemanticLinesShownAsync(from, to);
+            }
+        }
+
         if (_insights is null || view == _left || view.Editor.TextArea.TextView is not { VisualLinesValid: true } textView || textView.VisualLines.Count == 0)
         {
             return;

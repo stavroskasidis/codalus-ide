@@ -322,25 +322,35 @@ public sealed class DiffInsights : IDisposable
         var (first, last) = (_shown.First - 5, _shown.Last + 5);
         try
         {
-            foreach (var lens in _lenses.Where(p => p.Key >= first && p.Key <= last).SelectMany(p => p.Value).Where(l => l.Command is null).ToList())
+            var failure = await BoundedResolve.RunAsync(
+                _lenses.Where(p => p.Key >= first && p.Key <= last).SelectMany(p => p.Value).Where(l => l.Command is null).ToList(),
+                lens =>
+                {
+                    if (FailingResolvesForTests > 0)
+                    {
+                        FailingResolvesForTests--;
+                        throw new Codalus.Rpc.JsonRpcRemoteException(-32603, "A failure for the tests.");
+                    }
+
+                    return client.ResolveCodeLensAsync(lens.Value, token);
+                },
+                () => !token.IsCancellationRequested && !_disposed && Model.Version == version,
+                (lens, resolved) =>
+                {
+                    if (resolved.Command is { } command)
+                    {
+                        lens.Resolve(command);
+                        LensesChanged?.Invoke(this, EventArgs.Empty);
+                    }
+                }).ConfigureAwait(true);
+            if (failure is OperationCanceledException && (token.IsCancellationRequested || _disposed || Model.Version != version))
             {
-                if (FailingResolvesForTests > 0)
-                {
-                    FailingResolvesForTests--;
-                    throw new Codalus.Rpc.JsonRpcRemoteException(-32603, "A failure for the tests.");
-                }
+                return;
+            }
 
-                var resolved = await client.ResolveCodeLensAsync(lens.Value, token).ConfigureAwait(true);
-                if (token.IsCancellationRequested || _disposed || Model.Version != version)
-                {
-                    return;
-                }
-
-                if (resolved.Command is { } command)
-                {
-                    lens.Resolve(command);
-                    LensesChanged?.Invoke(this, EventArgs.Empty);
-                }
+            if (failure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
         }
         catch (Exception ex) when (IsTransient(ex))

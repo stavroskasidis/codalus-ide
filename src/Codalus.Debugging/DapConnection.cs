@@ -11,6 +11,13 @@ namespace Codalus.Debugging;
 public sealed class DapException(string command, string message) : Exception(message)
 {
     public string Command { get; } = command;
+
+    /// <summary>
+    /// The adapter's error code, when it sent one: DAP's raw <c>message</c> of a response whose <c>body.error.format</c>
+    /// is the text shown (<see cref="Exception.Message"/>); null otherwise. The Codalus debugger's start timeout is
+    /// <see cref="CoreClrAdapter.StartTimeoutCode"/>.
+    /// </summary>
+    public string? Code { get; init; }
 }
 
 /// <summary>The debug adapter went away.</summary>
@@ -139,13 +146,16 @@ public sealed class DapConnection : IAsyncDisposable
             if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False)
             {
                 var message = result.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+                string? code = null;
                 if (result.TryGetProperty("body", out var errorBody) && errorBody.ValueKind == JsonValueKind.Object
-                    && errorBody.TryGetProperty("error", out var error) && error.TryGetProperty("format", out var format) && format.ValueKind == JsonValueKind.String)
+                    && errorBody.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object
+                    && error.TryGetProperty("format", out var format) && format.ValueKind == JsonValueKind.String)
                 {
+                    code = message;
                     message = format.GetString();
                 }
 
-                throw new DapException(command, string.IsNullOrEmpty(message) ? $"The debug adapter failed '{command}'." : message);
+                throw new DapException(command, string.IsNullOrEmpty(message) ? $"The debug adapter failed '{command}'." : message) { Code = code };
             }
 
             return result.TryGetProperty("body", out var body) ? body : default;
@@ -177,6 +187,7 @@ public sealed class DapConnection : IAsyncDisposable
     private async Task WriteAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken)
     {
         var body = new ArrayBufferWriter<byte>(256);
+        body.Advance(FramedMessageWriter.HeaderRoom); // the Content-Length header goes in front: one write per frame
         using (var writer = new Utf8JsonWriter(body))
         {
             writer.WriteStartObject();
@@ -196,8 +207,7 @@ public sealed class DapConnection : IAsyncDisposable
         try
         {
             // Never cancel a frame halfway (a header without its body corrupts the stream); only the lock wait is cancellable.
-            await _output.WriteAsync(FramedMessageWriter.Header(body.WrittenCount), CancellationToken.None).ConfigureAwait(false);
-            await _output.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
+            await _output.WriteAsync(FramedMessageWriter.Frame(body), CancellationToken.None).ConfigureAwait(false);
             await _output.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)

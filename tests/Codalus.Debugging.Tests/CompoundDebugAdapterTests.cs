@@ -307,6 +307,27 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task Ending_a_program_whose_session_ends_meanwhile_doesnt_throw()
+    {
+        // #547 (Linux smoke, run 45670700961): Terminate Process on the session's last program ends the session, which
+        // cancels the token the end was given while the program's disconnect was still under way.
+        var gate = new TaskCompletionSource();
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var last = new FakeAdapter([new DapThread(1, "Main Thread")]) { DisconnectGate = gate.Task };
+        var session = new CompoundDebugAdapter(first, "Debuggee", independent: true);
+        await session.AddAsync("Partner", _ => Task.FromResult<IDebugAdapter>(last), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 1, Ct);
+        await session.EndPartAsync(0, Ct);
+
+        using var ending = new CancellationTokenSource();
+        var end = session.EndPartAsync(1, ending.Token);
+        await WaitAsync(() => last.Requests.Contains("disconnect True"));
+        ending.Cancel();
+        await end;
+        Assert.True(session.Closed.IsCompleted);
+        gate.TrySetResult();
+    }
+
+    [Fact]
     public async Task A_program_added_under_its_callers_index_is_reported_and_reached_by_it()
     {
         // The debug service numbers its programs before their adapters start (an Aspire AppHost's projects added at

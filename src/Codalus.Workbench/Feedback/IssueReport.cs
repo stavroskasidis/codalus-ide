@@ -46,6 +46,12 @@ public sealed record IssueDraft(IssueKind Kind, string Title, string Description
 {
     /// <summary>The redacted tail of the IDE's log, attached to a problem when its box is checked; null otherwise.</summary>
     public string? Logs { get; init; }
+
+    /// <summary>
+    /// The redacted tail of the last debug session's log (<c>DebugSessionLog</c>), attached with <see cref="Logs"/>; null
+    /// when there is none or the box isn't checked.
+    /// </summary>
+    public string? DebugLog { get; init; }
 }
 
 /// <summary>The new issue's address, and whether the logs were left out of it, to be saved to a file and attached.</summary>
@@ -73,6 +79,9 @@ public static class IssueReport
 
     /// <summary>How many of the log's last lines a problem attaches.</summary>
     public const int LogLines = 200;
+
+    /// <summary>How many of the last debug session's log lines a problem attaches.</summary>
+    public const int DebugLogLines = 100;
 
     /// <summary>The issue form (<c>.github/ISSUE_TEMPLATE</c>) for <paramref name="kind"/>.</summary>
     public static string Template(IssueKind kind) => kind == IssueKind.Problem ? "bug_report.yml" : "feature_request.yml";
@@ -142,11 +151,18 @@ public static class IssueReport
     /// <summary>Everything attached besides the user's own text, exactly as it is sent: the environment, then the logs if any.</summary>
     public static string AttachmentsText(IssueDraft draft) =>
         draft.Kind == IssueKind.Feature ? FeatureEnvironment(draft.Environment)
-        : draft.Logs is not { Length: > 0 } logs ? EnvironmentText(draft.Environment)
-        : EnvironmentText(draft.Environment) + "\n\n" + LogHeader(logs) + "\n" + logs;
+        : EnvironmentText(draft.Environment)
+            + (draft.Logs is { Length: > 0 } logs ? "\n\n" + LogHeader(logs) + "\n" + logs : string.Empty)
+            + (draft.DebugLog is { Length: > 0 } debug ? "\n\n" + DebugLogHeader(debug) + "\n" + debug : string.Empty);
+
+    /// <summary>Whether a problem carries logs: the IDE's, the last debug session's, or both.</summary>
+    public static bool HasLogs(IssueDraft draft) => draft.Kind == IssueKind.Problem && (draft.Logs is { Length: > 0 } || draft.DebugLog is { Length: > 0 });
 
     private static string LogHeader(string logs) =>
         $"--- Codalus IDE log, the last {logs.Split('\n').Length} lines (secrets and the home folder redacted) ---";
+
+    private static string DebugLogHeader(string logs) =>
+        $"--- The last debug session's log, the last {logs.Split('\n').Length} lines (secrets and the home folder redacted) ---";
 
     /// <summary>A feature request's one line about the installation (its form has no fields for it).</summary>
     private static string FeatureEnvironment(IssueEnvironment environment) =>
@@ -210,7 +226,7 @@ public static class IssueReport
             return new IssueLink(new Uri(url), LogsInFile: false);
         }
 
-        var logsInFile = draft.Kind == IssueKind.Problem && draft.Logs is { Length: > 0 };
+        var logsInFile = HasLogs(draft);
         var note = logsInFile ? LogsNote(logFileName) : null;
         url = Url(Fields(draft, note));
         if (url.Length <= MaxUrlLength)

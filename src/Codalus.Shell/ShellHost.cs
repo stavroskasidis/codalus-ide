@@ -115,7 +115,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
         UseEnvironment();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings(), .. BuiltIns.TemplatesSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings(), .. BuiltIns.TemplatesSettings(), .. StartPageSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         Theme.Changed += (_, _) => UseFamilyDefaults();
@@ -127,7 +127,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Append(BuiltIns.CodeSearchToolWindow()).Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.WinFormsToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()).Concat(BuiltIns.MobileToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Append(BuiltIns.CodeSearchToolWindow()).Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.WinFormsToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()).Concat(BuiltIns.MobileToolWindows()).Append(StartPageToolWindow()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -258,11 +258,15 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterTemplatesMenus(Workbench.Menus);
         BuiltIns.RegisterTerminalMenus(Workbench.Menus);
         BuiltIns.RegisterInteractiveMenus(Workbench.Menus);
-        Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
+        // The scheme's defaults at once: parsing and applying the default scheme's first made a user of another scheme
+        // parse every default binding twice, each time rebuilding what follows the bindings (menus, tooltips).
+        _keyboardScheme = KeyboardScheme();
+        Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform, _keyboardScheme));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
         BuiltIns.RegisterTerminalCommands(this);
         BuiltIns.RegisterInteractiveCommands(this);
+        InitializeStartPage();
         LoadState();
 
         Workbench.ToolWindows.Changed += (_, _) => Ui.Post(SyncViewCommands);
@@ -538,6 +542,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             _ = ExitWhenDoneAsync(EditAndWaitAsync(waitFile));
         }
 
+        ShowStartPageOnStartup();
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
         _ = Plugins.ActivateDebuggedPluginsAsync(CancellationToken.None);
         _ = CheckPluginUpdatesOnStartupAsync();
@@ -1052,10 +1057,13 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>The <c>keyboardScheme</c> context key, which the default key bindings depend on (M29).</summary>
     private string _keyboardScheme = "default";
 
+    /// <summary>The <c>keyboard.scheme</c> setting: one of the built-in schemes, else the default.</summary>
+    private string KeyboardScheme() =>
+        Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default") is var scheme && scheme is "vscode" or "resharper" or "emacs" ? scheme : "default";
+
     private void ApplyKeyboardScheme()
     {
-        var scheme = Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default");
-        scheme = scheme is "vscode" or "resharper" or "emacs" ? scheme : "default";
+        var scheme = KeyboardScheme();
         if (scheme != _keyboardScheme)
         {
             // Only the active scheme's own bindings are among the defaults: menus and the shortcuts editor show its keys.
@@ -1227,6 +1235,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     private async Task DisposeDebuggingAsync()
     {
         await Debugger.DisposeAsync().ConfigureAwait(false);
+        DebugSessions?.Dispose();
         if (DebugEdits is not null)
         {
             await DebugEdits.DisposeAsync().ConfigureAwait(false);

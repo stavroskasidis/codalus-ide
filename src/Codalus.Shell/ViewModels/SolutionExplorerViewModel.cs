@@ -218,6 +218,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     // The folder view (see LoadFoldersAsync): each listed folder's own listing, one level, by folder. The workspace folder
     // and the expanded folders are listed; a collapsed folder keeps its last listing until the workspace closes.
     private readonly Dictionary<string, FolderListing> _folders = new(SolutionService.PathComparer);
+
+    /// <summary>Changes with every write of <see cref="_folders"/>: the folder view's tree is built again only then.</summary>
+    private int _foldersVersion;
+
+    /// <summary>The folder view's last tree, with the solution, listings and language it was built from.</summary>
+    private (SolutionInfo Solution, int Folders, string Language, ExplorerNode Root)? _folderViewMemo;
     private readonly HashSet<string> _folderQueue = new(SolutionService.PathComparer);
     private HashSet<string>? _folderBatch; // the folders of the batch on its way: one at a time, the queue waits for it
     private int _folderGeneration; // the workspace closed or the solution view shown: the batch on its way is stale
@@ -440,6 +446,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         foreach (var folder in _folders.Where(f => _folderStandIns.Contains(f.Value)).Select(f => f.Key).ToList())
         {
             _folders.Remove(folder);
+            _foldersVersion++;
         }
 
         _folderStandIns.Clear();
@@ -673,6 +680,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         StopFolderListings();
         _folders.Clear();
+        _foldersVersion++;
         _folderStandIns.Clear();
         _folderRoot = null;
     }
@@ -804,6 +812,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 var standIn = new FolderListing([], false);
                 if (_folders.TryAdd(folder, standIn))
                 {
+                    _foldersVersion++;
                     _folderStandIns.Add(standIn); // listed again once the build host restarts (OnHostRestarted)
                     changed = true;
                 }
@@ -816,6 +825,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 }
 
                 _folders[folder] = listing!;
+                _foldersVersion++;
                 changed = true;
             }
         }
@@ -870,6 +880,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             if (System.IO.Path.GetDirectoryName(folder) is not { } parent || !_folders.TryGetValue(parent, out var listing) || !listing.HasFolder(folder))
             {
                 _folders.Remove(folder);
+                _foldersVersion++;
             }
         }
     }
@@ -1434,6 +1445,46 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private Dictionary<string, (ExplorerNode Node, ExplorerNode? Parent)>? _byId;
     private Dictionary<string, ExplorerNode>? _byPath;
 
+    /// <summary>
+    /// Whether <paramref name="after"/> holds <paramref name="before"/>'s subtrees: the same nodes, or a solution
+    /// folder (or the solution) made again around them, in the same order. <paramref name="relinked"/> gets each node
+    /// whose parent is new.
+    /// </summary>
+    private static bool SameSubtrees(ExplorerNode before, ExplorerNode after, List<(ExplorerNode Node, ExplorerNode Parent)> relinked)
+    {
+        if (before.Id != after.Id || before.Kind != after.Kind || before.Kind is not (ExplorerNodeKind.Solution or ExplorerNodeKind.SolutionFolder)
+            || before.Children.Count != after.Children.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < after.Children.Count; i++)
+        {
+            var (old, now) = (before.Children[i], after.Children[i]);
+            relinked.Add((now, after));
+            if (ReferenceEquals(old, now))
+            {
+                continue;
+            }
+
+            // A solution item is made again with its folder; it has no children.
+            if (old.Kind == ExplorerNodeKind.SolutionItem && now == old)
+            {
+                continue;
+            }
+
+            if (!SameSubtrees(old, now, relinked))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>How many builds kept the index of the last one (tests).</summary>
+    internal int IndexReused { get; private set; }
+
     private void EnsureIndex()
     {
         if (_byId is not null || _root is null)
@@ -1490,10 +1541,18 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         if (!_byId.TryGetValue(id, out var entry))
         {
-            // Under a project's dependencies: walk that project's subtree, the only one that can hold it.
+            // Under a project's dependencies ("deps:<project>|…", not indexed): walk the Dependencies node it starts
+            // with, the only one that can hold it. Any other id not in the index isn't in the tree; walking every
+            // project's dependencies for each was the cost of a reveal that missed.
+            if (!id.StartsWith("deps:", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
             foreach (var (_, (node, _)) in _byId)
             {
-                if (node.Kind == ExplorerNodeKind.Dependencies && Path(node, id) is { } below)
+                if (node.Kind == ExplorerNodeKind.Dependencies && id.Length > node.Id.Length && id[node.Id.Length] == '|'
+                    && id.StartsWith(node.Id, StringComparison.Ordinal) && Path(node, id) is { } below)
                 {
                     var path = PathTo(node.Id)!;
                     path.AddRange(below.Skip(1));
@@ -1542,6 +1601,44 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             && _shell.Solutions.Projects.TryGetValue(orderedProject, out var orderedInfo) && CompileOrder.Of(orderedInfo).Contains(ordered, SolutionService.PathComparer));
         _shell.Workbench.Context.Set("explorerItemIsProjectFile", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } projectFile } && SolutionTree.IsProjectFile(projectFile));
         _shell.Workbench.Context.Set("explorerProjectLoaded", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } loadedFile } && _shell.Solutions.Solution?.Projects.Any(p => SolutionService.PathComparer.Equals(p.Path, loadedFile)) == true);
+        SetStartableContext(value);
+    }
+
+    /// <summary>
+    /// <c>explorerItemStartable</c> (#547, the Debug ▸ submenu): the selected project starts, as a program (OutputType
+    /// Exe or WinExe) or through its launch profiles' Roslyn component profile (an analyzer or generator debugged on its
+    /// target). A library's launch settings are read off the UI thread, and the key is set once they are, if it's still
+    /// the selection.
+    /// </summary>
+    private void SetStartableContext(ExplorerRowViewModel? value)
+    {
+        var project = value?.Node is { Kind: ExplorerNodeKind.Project, IsUnloaded: false, ProjectPath: { } path } ? path : null;
+        var executable = project is not null && _shell.Runs.IsExecutable(project);
+        _shell.Workbench.Context.Set("explorerItemStartable", executable);
+        if (project is null || executable || !_shell.Solutions.Projects.ContainsKey(project))
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            var folder = System.IO.Path.GetDirectoryName(project) ?? string.Empty;
+            foreach (var settings in new[] { System.IO.Path.Combine(folder, "Properties", "launchSettings.json"), System.IO.Path.Combine(folder, "My Project", "launchSettings.json") })
+            {
+                var (profiles, _) = await Codalus.Workbench.Build.LaunchSettings.ReadAsync(settings, CancellationToken.None).ConfigureAwait(false);
+                if (profiles.Any(p => p.CommandName == Codalus.Workbench.Build.LaunchProfile.RoslynComponent))
+                {
+                    Ui.Post(() =>
+                    {
+                        if (Selected?.Node.ProjectPath is { } selected && SolutionService.PathComparer.Equals(selected, project) && Selected.Node.Kind == ExplorerNodeKind.Project)
+                        {
+                            _shell.Workbench.Context.Set("explorerItemStartable", true);
+                        }
+                    });
+                    return;
+                }
+            }
+        });
     }
 
     public ExplorerNode? Root => _root;
@@ -1597,6 +1694,23 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The folder view's tree: built again only when the folder, a listing or the display language changed since the
+    /// last one (each refresh, a project's change or a status read built the whole listed tree again).
+    /// </summary>
+    private ExplorerNode FolderViewRoot(SolutionInfo solution)
+    {
+        var language = System.Globalization.CultureInfo.CurrentUICulture.Name;
+        if (_folderViewMemo is { } last && ReferenceEquals(last.Solution, solution) && last.Folders == _foldersVersion && last.Language == language)
+        {
+            return last.Root;
+        }
+
+        var root = SolutionTree.Build(solution, _shell.Solutions.Projects, null, new ExplorerOptions { FolderListings = _folders }, _treeCache);
+        _folderViewMemo = (solution, _foldersVersion, language, root);
+        return root;
+    }
+
     /// <summary>The tree was built again (tests count them: an expansion or a reveal doesn't).</summary>
     internal int Builds { get; private set; }
 
@@ -1620,13 +1734,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             }
         }
 
-        SetRoot(solutions.Solution is { } solution
-            ? SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
+        SetRoot(solutions.Solution is not { } solution ? null
+            : IsFolderView && solution.IsFolder ? FolderViewRoot(solution)
+            : SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
             {
                 DiskEntries = _showAllFiles ? _disk : null,
                 FolderListings = IsFolderView ? _folders : null,
-            }, _treeCache)
-            : null);
+            }, _treeCache));
         OnPropertyChanged(nameof(HasSolution));
         var reveal = TakePendingReveal();
         if (_root is not null && _filter.Trim() is { Length: > 0 } filter)
@@ -1648,11 +1762,35 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     private void SetRoot(ExplorerNode? root)
     {
+        var previous = _root;
+        var previousWasFolderView = _rootIsFolderView;
         _root = root;
         _rootIsFolderView = _root is not null && IsFolderView;
         Builds++;
-        _byId = null;
-        _byPath = null;
+        List<(ExplorerNode Node, ExplorerNode Parent)> relinked = [];
+        if (_byId is not null && _byPath is not null && previous is not null && root is not null && !_rootIsFolderView && !previousWasFolderView
+            && SameSubtrees(previous, root, relinked))
+        {
+            // The same projects' subtrees under a new solution node and new solution folders (the tree's cache kept
+            // every project): the index stands, with the new nodes above them. Anything else is indexed again.
+            _byId[root.Id] = (root, null);
+            foreach (var (node, parent) in relinked)
+            {
+                _byId[node.Id] = (node, parent);
+                if (node is { Kind: ExplorerNodeKind.SolutionItem, Path: { } item })
+                {
+                    _byPath[item] = node;
+                }
+            }
+
+            IndexReused++;
+        }
+        else
+        {
+            _byId = null;
+            _byPath = null;
+        }
+
         if (_root is null)
         {
             _withMembers.Clear();
@@ -1732,6 +1870,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         _filtering = false;
+        var sameSearch = _searchRowsFor == filter && _searchRows is not null;
         if (_searchRowsFor != filter)
         {
             _searchRowsFor = filter;
@@ -1742,6 +1881,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (reveal is not null)
         {
             ExpandSearchDownTo(reveal);
+        }
+
+        if (sameSearch)
+        {
+            // The same search found again (a project changed while it showed): the rows that stayed are patched in
+            // place, not all made again.
+            Apply(ShownSearchRows());
+            AfterRefresh(reveal);
+            return;
         }
 
         var selectedId = _selected?.Id;

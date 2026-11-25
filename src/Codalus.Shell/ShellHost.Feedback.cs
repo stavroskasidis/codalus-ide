@@ -45,6 +45,8 @@ public sealed partial class ShellHost
 
         public string LogText => shell.Workbench.Log.GetText();
 
+        public string? DebugSessionLog => shell.DebugSessions?.ReadLatest();
+
         public string? Home => System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
 
         public Task<string?> FindSdkAsync(CancellationToken cancellationToken) => (shell.FindSdkVersion ?? shell.FindSdkVersionAsync)(cancellationToken);

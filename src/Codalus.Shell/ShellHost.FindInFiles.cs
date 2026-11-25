@@ -291,17 +291,21 @@ public sealed partial class ShellHost
                     continue;
                 }
 
-                if (text.Contains('\0', StringComparison.Ordinal))
+                if (text.Contains('\0', StringComparison.Ordinal) || !FindResultsPage.MayMatch(regex, text, options.UseRegex))
                 {
-                    continue; // binary
+                    continue; // binary, or the text doesn't hold the words
                 }
 
                 var edits = new List<TextEdit>();
                 var inFile = 0;
-                var lines = text.Split('\n');
-                for (var i = 0; i < lines.Length; i++)
+                FindResultsPage.ForEachLine(text, (i, span) =>
                 {
-                    var line = lines[i].TrimEnd('\r');
+                    if (!regex.IsMatch(span))
+                    {
+                        return true;
+                    }
+
+                    var line = span.ToString();
                     var count = 0;
                     var replaced = regex.Replace(line, m =>
                     {
@@ -315,7 +319,7 @@ public sealed partial class ShellHost
                     });
                     if (count == 0 || replaced == line)
                     {
-                        continue;
+                        return true;
                     }
 
                     inFile += count;
@@ -324,7 +328,9 @@ public sealed partial class ShellHost
                     {
                         rows.Add(new FindResultRow(file, i + 1, before.Column, before.Length, replaced.Trim(), false));
                     }
-                }
+
+                    return true;
+                });
 
                 if (edits.Count > 0)
                 {

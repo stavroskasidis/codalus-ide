@@ -87,6 +87,9 @@ public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch
 
             // A comment marker, then a token as a whole word: // TODO: x, /* HACK x, # UNDONE x, <!-- TODO x, ' TODO x.
             var regex = new Regex(@"(?://+|/\*+|#|<!--|'|\*)\s*(" + string.Join('|', words) + @")\b[:\s-]*(.*)$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+            // Any of the tokens as a word: most files and lines have none, and are skipped without a string per line.
+            var anyToken = new Regex("(" + string.Join('|', words) + @")\b", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
             Summary = "Listing the solution's files…";
             var (all, texts) = await files(token).ConfigureAwait(true);
             var paths = await Task.Run(() => all.Where(f => s_textExtensions.Contains(System.IO.Path.GetExtension(f))).ToList(), token).ConfigureAwait(true);
@@ -96,7 +99,7 @@ public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch
             }
 
             Summary = $"Scanning {paths.Count} files…";
-            var found = await Task.Run(() => Scan(paths, texts, regex, token), token).ConfigureAwait(true);
+            var found = await Task.Run(() => Scan(paths, texts, regex, anyToken, token), token).ConfigureAwait(true);
             if (token.IsCancellationRequested)
             {
                 return;
@@ -118,7 +121,7 @@ public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch
         }
     }
 
-    private static List<TaskRow> Scan(List<string> paths, IReadOnlyDictionary<string, string> texts, Regex regex, CancellationToken cancellationToken)
+    internal static List<TaskRow> Scan(List<string> paths, IReadOnlyDictionary<string, string> texts, Regex regex, Regex anyToken, CancellationToken cancellationToken)
     {
         var rows = new List<TaskRow>();
         foreach (var path in paths)
@@ -134,11 +137,20 @@ public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch
                 continue;
             }
 
-            var line = 0;
-            foreach (var raw in text.Split('\n'))
+            if (!anyToken.IsMatch(text))
             {
+                continue;
+            }
+
+            var line = 0;
+            for (var start = 0; start <= text.Length;)
+            {
+                var newline = text.IndexOf('\n', start);
+                var end = newline < 0 ? text.Length : newline;
                 line++;
-                if (regex.Match(raw) is { Success: true } match)
+                var span = text.AsSpan(start, end - start);
+                start = end + 1;
+                if (anyToken.IsMatch(span) && regex.Match(span.ToString()) is { Success: true } match)
                 {
                     var token = match.Groups[1].Value.ToUpperInvariant();
                     var description = match.Groups[2].Value.Replace("*/", string.Empty, StringComparison.Ordinal).Replace("-->", string.Empty, StringComparison.Ordinal).Trim();

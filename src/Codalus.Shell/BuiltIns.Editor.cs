@@ -25,7 +25,8 @@ internal static partial class BuiltIns
           { "key": "primary+f12", "command": "editor.action.goToImplementation", "when": "editorTextFocus" },
           { "key": "primary+m primary+m", "mac": "cmd+alt+[", "command": "editor.action.toggleFold", "when": "editorTextFocus" },
           { "key": "primary+m primary+o", "mac": "cmd+k cmd+0", "command": "editor.action.foldAll", "when": "editorTextFocus" },
-          { "key": "primary+m primary+l", "mac": "cmd+k cmd+j", "command": "editor.action.unfoldAll", "when": "editorTextFocus" },
+          { "key": "primary+m primary+l", "mac": "cmd+k cmd+o", "command": "editor.action.toggleAllFolds", "when": "editorTextFocus" },
+          { "key": "primary+m primary+x", "mac": "cmd+k cmd+j", "command": "editor.action.unfoldAll", "when": "editorTextFocus" },
           { "key": "primary+f", "command": "editor.action.find", "when": "editorTextFocus" },
           { "key": "primary+h", "mac": "cmd+alt+f", "command": "editor.action.replace", "when": "editorTextFocus" },
           { "key": "f3", "command": "editor.action.findNext", "when": "editorTextFocus" },
@@ -340,7 +341,8 @@ internal static partial class BuiltIns
         Add("editor.action.marker.prev", "Go to Previous Problem", "Editor", Ui(() => shell.GoToProblem(-1)), Editor);
         Add("workbench.action.navigateToLastEditLocation", "Go to Last Edit Location", "Go", Ui(shell.GoToLastEditAsync));
         Add("editor.action.toggleFold", "Toggle Outlining Expansion", "Editor", OnEditor(c => c.ToggleFoldAtCaret()), Editor);
-        Add("editor.action.foldAll", "Collapse to Definitions", "Editor", OnEditor(c => c.SetAllFolded(true)), Editor);
+        Add("editor.action.toggleAllFolds", "Toggle All Outlining", "Editor", OnEditor(c => c.ToggleAllFolded()), Editor);
+        Add("editor.action.foldAll", "Collapse to Definitions", "Editor", OnEditor(c => c.CollapseToDefinitions()), Editor);
         Add("editor.action.unfoldAll", "Expand All Outlining", "Editor", OnEditor(c => c.SetAllFolded(false)), Editor);
         Add("editor.action.find", "Find", "Edit", OnEditor(c => OpenSearch(c, replace: false)), Editor);
         Add("editor.action.replace", "Replace", "Edit", OnEditor(c => OpenSearch(c, replace: true)), Editor);

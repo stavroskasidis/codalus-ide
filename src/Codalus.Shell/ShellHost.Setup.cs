@@ -526,7 +526,7 @@ public sealed partial class ShellHost
             ? new InstallPlan(tool.Id, InstallKind.Run, Localizer.Get("msg.setup.installAndroid", "Install the Android SDK and a JDK through the Android workload"), "dotnet build -t:InstallAndroidDependencies")
             : null
         : tool.Id.StartsWith(WorkloadToolPrefix, StringComparison.Ordinal)
-        ? new InstallPlan(tool.Id, InstallKind.Terminal, Localizer.Format("msg.setup.installWorkload", "Install the .NET workload {0}", tool.Id[WorkloadToolPrefix.Length..]), "dotnet workload install " + tool.Id[WorkloadToolPrefix.Length..])
+        ? new InstallPlan(tool.Id, InstallKind.Terminal, Localizer.Format("msg.setup.installWorkload", "Install the .NET workload {0}", tool.Id[WorkloadToolPrefix.Length..]), WorkloadCommand("workload", "install", tool.Id[WorkloadToolPrefix.Length..]).Command)
         : WindowsApps.PlanFor(tool, hasWinget: Workbench.Platform == PlatformKind.Windows && EnvironmentCheck.FindOnPath("winget") is not null) is { } windowsApp
         ? windowsApp // Developer Mode's Settings page, the Windows App SDK runtime (M44)
         : NetFrameworkProjects.PlanFor(tool) is { } netFramework

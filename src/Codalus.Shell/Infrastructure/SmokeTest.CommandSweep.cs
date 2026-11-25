@@ -1581,6 +1581,20 @@ internal sealed partial class SmokeTest
             await shell.SaveAllAsync().ConfigureAwait(true);
         }
 
+        // Program.cs tracked and not ignored (the editor's Ignore and Untrack staged its removal): a merge needs the index as HEAD has it.
+        if (_sweepProgram.Length > 0 && shell.Git.Status?.Files.Any(f => f.Index == 'D' && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, _sweepProgram)) == true)
+        {
+            lock (saw)
+            {
+                saw.Add("Program.cs untracked");
+            }
+
+            var gitignore = Path.Combine(_sweepFolder, ".gitignore");
+            File.WriteAllLines(gitignore, File.ReadAllLines(gitignore).Where(l => l != "/src/Hello/Program.cs"));
+            GitIn(_sweepFolder, "reset", "-q", "--", "src/Hello/Program.cs");
+            await shell.Git.RefreshAsync().ConfigureAwait(true);
+        }
+
         if (shell.Runs.Running.Count > before.Running)
         {
             lock (saw)

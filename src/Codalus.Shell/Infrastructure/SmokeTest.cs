@@ -111,6 +111,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             };
         }
 
+        StartHangReporter();
         DispatcherTimer.RunOnce(() =>
         {
             Report("watchdog", "-", $"The smoke test did not finish within {s_watchdog.TotalMinutes} minutes.", "failed", 0, null);
@@ -275,14 +276,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("plugins.host", "M1", "Built-in plugins load and run in the plugin host", async () =>
         {
             var builtIn = shell.Plugins.Plugins.Where(p => p.IsBuiltIn).ToList();
-            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.dotnettest"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.Any(p => p.Id == "codalus.dotnettest") && builtIn.All(p => p.Id != "codalus.welcome"), $"the built-in plugins are discovered, the Start page no longer one of them (M66) (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
             Check(builtIn.All(p => p.Id != "codalus.templates"), "the retired Templates plugin isn't loaded (New Project is the IDE's, ADR 0082)");
             var broken = builtIn.Where(p => p.State is PluginState.Invalid or PluginState.Incompatible or PluginState.Failed).ToList();
             Check(broken.Count == 0, $"no built-in plugin is broken ({string.Join(", ", broken.Select(p => $"{p.Id}: {p.State}"))})");
 
-            // The Start page is a plugin tree view: its items come from the out-of-process plugin host. A plugin command
-            // shows it (the layout may have been reset since startup).
-            await WaitAsync(() => shell.Plugins.Plugins.Any(p => p is { Id: "codalus.welcome", State: PluginState.Active }), "the Welcome plugin activates at startup", 90).ConfigureAwait(true);
+            // The Start page is the shell's own tree view (M66), shown as a plugin's: no plugin activates at startup for it.
+            Check(builtIn.All(p => !p.ActivationEvents.Contains("onStartup")), "no built-in plugin starts the plugin host at every launch");
             await shell.RunAsync("welcome.show", []).ConfigureAwait(true);
             await WaitAsync(() => shell.Layout.IsVisible("welcome.view"), "welcome.show shows the Start page", 60).ConfigureAwait(true);
             var tree = (TreeToolViewModel)shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
@@ -370,7 +370,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("editor.highlighting", "M3", "Semantic highlighting and folding", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
-            await WaitAsync(() => greeter.Colorizer.HasTokens, "semantic tokens arrive", 90).ConfigureAwait(true);
+            await WaitAsync(() => greeter.SemanticTokensShown, "semantic tokens arrive", 90).ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.editor.language" && i.Text == "C#"), "the status bar shows C#");
         }, "language.ready").ConfigureAwait(true);
 
@@ -1110,6 +1110,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.newInstance", "1.1", "Debug ▸ Start New Instance on a project in Solution Explorer adds it to the running F5 session; Terminate Process ends it alone", DebugNewInstanceStepAsync, "debug.compound").ConfigureAwait(true);
         // On macOS too: the Codalus debugger's launcher starts the program in the terminal there (M54b).
         await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
@@ -1306,6 +1307,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         else
         {
             Report("winforms.properties", "0.6", winFormsPropertiesTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
+        }
+
+        // 1.1: a Visual Basic form in the designer (ADR 0073, Visual Basic forms), through the real host.
+        const string winFormsVisualBasicTitle = "The Visual Basic app's OrderForm.vb opens in the Windows Forms designer with every statement applied; a Button from the Toolbox is Button1, a Friend WithEvents field in OrderForm.Designer.vb; its default event is a handler with a Handles clause in OrderForm.vb; undone";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.visualBasic", "1.1", winFormsVisualBasicTitle, WinFormsVisualBasicStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.visualBasic", "1.1", winFormsVisualBasicTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); reading and writing Visual Basic forms, and the shell's side against a fake designer host, are tested on every OS.");
         }
 
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
@@ -1992,6 +2004,47 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var log = shell.DebugLog.GetText();
         Check(log.Contains("partner says partner", StringComparison.Ordinal) && log.Contains("total=15", StringComparison.Ordinal), "both programs' output is in the Debug Console:\n" + Tail(log, 1500));
         shell.SetStartupProject(Path.Combine(Sessions, "Debuggee", "Debuggee.csproj"));
+    }
+
+    /// <summary>
+    /// #547 (ADR 0109): F5 on Debuggee, then Solution Explorer's Debug ▸ Start New Instance on Partner: it joins the
+    /// session while Debuggee is stopped, and the Processes window's Terminate Process ends it while Debuggee goes on.
+    /// </summary>
+    private async Task DebugNewInstanceStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        var debuggeeProject = Path.Combine(Sessions, "Debuggee", "Debuggee.csproj");
+        var partnerProject = Path.Combine(Sessions, "Partner", "Partner.csproj");
+        shell.SetStartupProject(debuggeeProject);
+        var debuggee = SessionSource("Debuggee", "Program.cs");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(debuggee, MarkerLine(debuggee, "print"));
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Source?.Path == debuggee, "Debuggee stops at its breakpoint", 420).ConfigureAwait(true);
+
+        // The submenu, on Partner's row.
+        shell.Explorer.Selected = shell.Explorer.Rows.FirstOrDefault(r => r.Node is { Kind: Workbench.Projects.ExplorerNodeKind.Project, ProjectPath: { } path } && Workbench.Projects.SolutionService.PathComparer.Equals(path, partnerProject))
+            ?? throw new SmokeFailure("Solution Explorer has no row for Partner.");
+        var items = shell.Workbench.Menus.GetItems(Views.SolutionExplorerView.DebugMenuLocation, shell.Workbench.Context);
+        Check(items.Select(i => i.Title).SequenceEqual(["Start New Instance", "Start Without Debugging", "Step Into New Instance"]), "Partner's Debug submenu has Start New Instance, Start Without Debugging and Step Into New Instance: " + string.Join(", ", items.Select(i => i.Title)));
+        Check(items.All(i => i.Enabled), "the submenu's commands are enabled while Debuggee is stopped");
+
+        // Partner joins while Debuggee is held at its breakpoint, which keeps the session going for the rest of the
+        // step: Debuggee ran to its end once continued, and Partner was then the last program (Linux smoke, run 45670700961).
+        await shell.Workbench.Commands.ExecuteAsync("debug.startNewInstance", [System.Text.Json.JsonSerializer.SerializeToElement(partnerProject, Docking.ShellJsonContext.Default.String)], CancellationToken.None).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.Processes is [{ Id: not null }, { Name: "Partner", Id: not null, Ended: false }], "Partner joins the session", 300).ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(ProcessesViewModel.ToolWindowId);
+        await WaitAsync(() => shell.ProcessesWindow.Rows.Count == 2, "the Processes window lists both programs").ConfigureAwait(true);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("smoke-test-debug-new-instance.png");
+
+        var row = shell.ProcessesWindow.Rows.First(r => r.Index == 1);
+        await shell.ProcessesWindow.EndAsync(row, detach: false).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.Processes[1].Ended, "Terminate Process ends Partner", 60).ConfigureAwait(true);
+        Check(shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Source?.Path == debuggee, "the session goes on with Debuggee, still stopped");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
     }
 
     /// <summary>A console app in the integrated terminal (M14c): input, a breakpoint, and Detach All leaving it running.</summary>
@@ -3226,6 +3279,67 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// dispatcher is free: the next step's open of the same form found the designer still open and used it, and the
     /// answer then closed it under that step (Windows smoke, runs 43484474099 and 43489637316: winforms.properties).
     /// </summary>
+    /// <summary>
+    /// A Visual Basic form in the shipped app's designer (ADR 0073, Visual Basic forms; a user reported VB forms didn't
+    /// open in it): the Visual Basic app opened, OrderForm.vb loaded by the real designer host with every statement
+    /// applied, a Button from the Toolbox written as the classic IDE writes it in Visual Basic, and its default event a
+    /// Handles clause in OrderForm.vb; both files undone and saved.
+    /// </summary>
+    private async Task WinFormsVisualBasicStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "WindowsDesktop");
+        await shell.OpenSolutionAsync(Path.Combine(target, "WinFormsVbApp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Visual Basic Windows Forms solution is open (its packages restored)", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 1 }, "the language host has loaded the Visual Basic project", 300).ConfigureAwait(true);
+
+        var form = Path.Combine(target, "WinFormsVbApp", "OrderForm.vb");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.vb opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer builds the app, loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        Check(designer!.Problems is null, "every statement applied: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "ExpressRadioButton" && c.Parent == "ShippingGroupBox"), "the form's controls are on the surface, nested");
+
+        var code = designer.DesignerCode!;
+        var original = code.Text.Text;
+        shell.Layout.ShowToolWindow(ViewModels.ToolboxViewModel.ToolWindowId, focus: false);
+        var button = shell.Toolbox.Items.FirstOrDefault(i => i.Type == "System.Windows.Forms.Button");
+        Check(button is not null && shell.Toolbox.IsAvailable, "the Toolbox has the Button");
+        shell.Toolbox.Armed = button;
+        var root = designer.Root!;
+        // The form's free space under the notes, left of its buttons.
+        await designer.CreateAsync(button!.Type, root.ClientX + 20, root.ClientY + 252).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("        Button1 = New Button()", StringComparison.Ordinal) && code.Text.Text.Contains("    Friend WithEvents Button1 As Button", StringComparison.Ordinal)
+            && code.Text.Text.Contains("        Controls.Add(Button1)", StringComparison.Ordinal), "the new button is Visual Basic in OrderForm.Designer.vb: " + designer.Status);
+        shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-visual-basic.png");
+
+        var added = designer.Find("Button1");
+        Check(added is not null, "Button1 is on the surface");
+        await designer.DefaultEventAsync(added!.X + 5, added.Y + 5).ConfigureAwait(true);
+        await WaitAsync(() => shell.ActiveEditor?.Model.Path == form, "the handler shows in OrderForm.vb", 60).ConfigureAwait(true);
+        var formCode = shell.ActiveEditor!.Model;
+        Check(formCode.Text.Text.Contains("Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click", StringComparison.Ordinal),
+            "the default event's handler has a Handles clause: " + formCode.Text.Text);
+
+        while (formCode.Text.UndoStack.CanUndo)
+        {
+            formCode.Text.UndoStack.Undo();
+        }
+
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes the designer file back to the original");
+        await shell.SaveAllAsync().ConfigureAwait(true);
+        shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
+    }
+
     private async Task DesignerClosedAsync(ViewModels.WinFormsDesignerDocument designer) =>
         await WaitAsync(() => !shell.Layout.Documents.Contains(designer), () => "the designer closes: " + designer.Status, 60).ConfigureAwait(true);
 
@@ -3549,6 +3663,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Copy(Path.Combine(samples, "Diagnostics"), target);
         }
 
+        // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=profiler.memory skips it, and the trust prompt held
+        // the step to its limit, unanswered (as web.scaffolding's did).
+        shell.Trust.Trust(target);
+
         // Still open from profiler.cpu (its path is the real one, which differs from target's under macOS's /private).
         if (!shell.Solutions.Projects.Values.Any(p => p.Name == "CpuBound"))
         {
@@ -3619,23 +3737,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private async Task ProfilerMemoryStepAsync()
     {
-        await DiagnosticsStartupAsync("Leaky", "0").ConfigureAwait(true);
+        // Leaky for five minutes at most, not until it's stopped ("0"): it leaks about 400 MB a minute, and a step that
+        // hung left it leaking until the runner ran out of memory and went silent with no log, the step limit's report
+        // and the watchdog's included (Windows smoke, run 45434861768, docs/ci-flakes.md). The step needs it for seconds.
+        await DiagnosticsStartupAsync("Leaky", "300").ConfigureAwait(true);
         var before = LatestReport();
         var hub = ProfilerWith(Workbench.Diagnostics.ProfilerTools.Memory);
-        var run = await hub.StartAsync().ConfigureAwait(true);
+
+        // Each call within its own time, so a hang says which one it was (the same run gave no sign of it).
+        var run = await WithinAsync(hub.StartAsync(), 300, "profiling starts (Leaky built and launched)").ConfigureAwait(true);
         Check(run is not null, "profiling starts: " + hub.Status + " " + LastNotifications());
         try
         {
             await Task.Delay(1000).ConfigureAwait(true);
             var clock = Stopwatch.StartNew();
-            Check(await hub.TakeSnapshotAsync().ConfigureAwait(true) is not null, "the first snapshot is taken: " + hub.Status);
+            Check(await WithinAsync(hub.TakeSnapshotAsync(), 120, "the first heap snapshot").ConfigureAwait(true) is not null, "the first snapshot is taken: " + hub.Status);
             Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  heap snapshot in {clock.ElapsedMilliseconds} ms"));
             await Task.Delay(2000).ConfigureAwait(true);
-            Check(await hub.TakeSnapshotAsync().ConfigureAwait(true) is not null, "the second snapshot is taken: " + hub.Status);
+            Check(await WithinAsync(hub.TakeSnapshotAsync(), 120, "the second heap snapshot").ConfigureAwait(true) is not null, "the second snapshot is taken: " + hub.Status);
         }
         finally
         {
-            await hub.StopAsync().ConfigureAwait(true);
+            await WithinAsync(hub.StopAsync(), 120, "the collection stops (and Leaky with it)").ConfigureAwait(true);
         }
 
         await WaitAsync(() => !hub.IsCollecting, "the collection stops", 120).ConfigureAwait(true);
@@ -4650,11 +4773,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // Diagnosing one step: CODALUS_SMOKE_ONLY=<id>[,<id>…] runs those (steps that need an earlier one's state
         // need it listed too).
-        if (Environment.GetEnvironmentVariable("CODALUS_SMOKE_ONLY") is { Length: > 0 } only
-            && !only.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
+        if (Environment.GetEnvironmentVariable("CODALUS_SMOKE_ONLY") is { Length: > 0 } only)
         {
-            Report(id, milestone, title, "skipped", 0, "Not in CODALUS_SMOKE_ONLY.");
-            return;
+            var kept = only.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (!kept.Contains(id, StringComparer.Ordinal))
+            {
+                Report(id, milestone, title, "skipped", 0, "Not in CODALUS_SMOKE_ONLY.");
+                return;
+            }
+
+            // The steps open their solutions in the work folder, which projects.open trusts: a step run without it waited
+            // at the trust prompt, unanswered, to its limit (profiler.cpu on Windows, run 45517439073; web.scaffolding and
+            // profiler.memory before it). projects.newProject checks that its wizard trusts its folder, so it keeps it untrusted.
+            if (!kept.Contains("projects.newProject", StringComparer.Ordinal))
+            {
+                shell.Trust.Trust(Work);
+            }
         }
 
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
@@ -4755,23 +4889,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     }
 
     /// <summary>
-    /// On Linux and macOS: the busiest processes, and the C# host's managed stacks when <c>dotnet-stack</c> is installed
-    /// (CI installs it), so a host that stopped answering says where it is.
+    /// The busiest processes (Linux and macOS), and the C# host's managed stacks when <c>dotnet-stack</c> is installed
+    /// (CI installs it, Windows' smoke too), so a host that stopped answering says where it is.
     /// </summary>
     private void PrintHostDiagnostics()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         static string Run(string program, params string[] arguments) => RunTool(program, TimeSpan.FromSeconds(60), arguments);
 
-        Console.Out.WriteLine("  --- Processes (by CPU) ---");
-        Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
-        var tool = new[] { Environment.GetEnvironmentVariable("HOME") is { } home ? Path.Combine(home, ".dotnet", "tools", "dotnet-stack") : null }
-            .OfType<string>().FirstOrDefault(File.Exists);
-        if (tool is not null && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
+        if (!OperatingSystem.IsWindows())
+        {
+            Console.Out.WriteLine("  --- Processes (by CPU) ---");
+            Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
+        }
+
+        if (StackTool() is { } tool && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
         {
             Console.Out.WriteLine($"  --- The C# host's stacks (process {pid}) ---");
             Console.Out.WriteLine(Tail(Run(tool, "report", "-p", pid.ToString(System.Globalization.CultureInfo.InvariantCulture)), 20000));
@@ -4836,6 +4967,26 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// Asks <paramref name="probe"/> until it answers non-null, each try cut off after 10 s, without ever blocking the
     /// UI thread: a host that stops answering fails the step instead of hanging the app.
     /// </summary>
+    /// <summary>
+    /// <paramref name="task"/>'s result, or a failure naming <paramref name="what"/> when it takes more than
+    /// <paramref name="seconds"/>: a call of the IDE's that never returns fails its step with its name, not as the step's limit.
+    /// </summary>
+    private async Task<T> WithinAsync<T>(Task<T> task, int seconds, string what)
+    {
+        try
+        {
+            return await task.WaitAsync(TimeSpan.FromSeconds(seconds)).ConfigureAwait(true);
+        }
+        catch (TimeoutException)
+        {
+            throw new SmokeFailure($"Not done within {seconds} s: {what}.");
+        }
+    }
+
+    /// <inheritdoc cref="WithinAsync{T}(Task{T}, int, string)"/>
+    private async Task WithinAsync(Task task, int seconds, string what) =>
+        await WithinAsync(task.ContinueWith(t => { t.GetAwaiter().GetResult(); return true; }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default), seconds, what).ConfigureAwait(true);
+
     private static async Task<T> WaitForAsync<T>(Func<CancellationToken, Task<T?>> probe, string what, int seconds = 30) where T : class
     {
         var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);

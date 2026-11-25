@@ -9,7 +9,9 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <summary>
 /// Folding ranges from the syntax tree (Roslyn's block structure service is internal): namespaces, types, members,
 /// accessors, multi-line lambdas and initializers, <c>#region</c> blocks, groups of <c>using</c> directives, and
-/// comment blocks. A range starts on the line where its declaration begins and ends at its closing brace.
+/// comment blocks. A range starts on the line where its declaration begins and ends at its closing brace. Members and
+/// accessors are of kind <c>member</c>: Collapse to Definitions folds them (with <c>using</c> groups and comments), as
+/// the classic IDE does, and leaves namespaces, types, regions and local functions open.
 /// </summary>
 internal static class FoldingFeature
 {
@@ -56,11 +58,13 @@ internal static class FoldingFeature
                     break;
                 case BaseMethodDeclarationSyntax { Body: not null } or BaseMethodDeclarationSyntax { ExpressionBody: not null }:
                 case PropertyDeclarationSyntax or IndexerDeclarationSyntax or EventDeclarationSyntax:
+                    Add(HeaderStart(node), node.Span.End, FoldingKinds.Member);
+                    break;
                 case LocalFunctionStatementSyntax:
                     Add(HeaderStart(node), node.Span.End);
                     break;
                 case AccessorDeclarationSyntax { Body: not null } accessor:
-                    Add(HeaderStart(accessor), accessor.Span.End);
+                    Add(HeaderStart(accessor), accessor.Span.End, FoldingKinds.Member);
                     break;
                 case AnonymousFunctionExpressionSyntax { Block: { } block }:
                     Add(block.OpenBraceToken.SpanStart, block.Span.End);
@@ -75,17 +79,28 @@ internal static class FoldingFeature
         }
 
         // #region … #endregion
-        foreach (var region in root.DescendantTrivia(descendIntoTrivia: true).Select(t => t.GetStructure()).OfType<RegionDirectiveTriviaSyntax>())
+        // The tree's directives, in document order: a walk of every trivia (into documentation comments' structure too)
+        // was a large file's slowest folding pass.
+        var regions = new List<RegionDirectiveTriviaSyntax>();
+        if (root is CSharpSyntaxNode csharp && root.ContainsDirectives)
+        {
+            for (var directive = csharp.GetFirstDirective(d => d is RegionDirectiveTriviaSyntax); directive is not null; directive = directive.GetNextDirective(d => d is RegionDirectiveTriviaSyntax))
+            {
+                regions.Add((RegionDirectiveTriviaSyntax)directive);
+            }
+        }
+
+        foreach (var region in regions)
         {
             if (region.GetRelatedDirectives().OfType<EndRegionDirectiveTriviaSyntax>().FirstOrDefault() is { } end)
             {
                 var label = region.EndOfDirectiveToken.LeadingTrivia.ToString().Trim();
-                Add(region.SpanStart, end.Span.End, "region", label.Length > 0 ? label : "#region");
+                Add(region.SpanStart, end.Span.End, FoldingKinds.Region, label.Length > 0 ? label : "#region");
             }
         }
 
         AddUsingGroups(root, Add);
-        AddCommentBlocks(root, text, Add);
+        AddCommentBlocks(root, text, Add, cancellationToken);
         return [.. ranges.DistinctBy(r => (r.StartLine, r.EndLine)).OrderBy(r => r.StartLine)];
     }
 
@@ -105,7 +120,9 @@ internal static class FoldingFeature
 
     private static void AddUsingGroups(SyntaxNode root, Action<int, int, string?, string?> add)
     {
-        foreach (var container in root.DescendantNodesAndSelf().Where(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax))
+        // Usings are only in the compilation unit and namespaces: a walk into those, not into every member's body.
+        foreach (var container in root.DescendantNodesAndSelf(descendIntoChildren: n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+                     .Where(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax))
         {
             var usings = container switch
             {
@@ -115,13 +132,13 @@ internal static class FoldingFeature
             };
             if (usings.Count > 1)
             {
-                add(usings[0].SpanStart, usings[^1].Span.End, "imports", "using …");
+                add(usings[0].SpanStart, usings[^1].Span.End, FoldingKinds.Imports, "using …");
             }
         }
     }
 
     /// <summary>Runs of two or more single-line comments, documentation comments, and multi-line block comments.</summary>
-    private static void AddCommentBlocks(SyntaxNode root, SourceText text, Action<int, int, string?, string?> add)
+    private static void AddCommentBlocks(SyntaxNode root, SourceText text, Action<int, int, string?, string?> add, CancellationToken cancellationToken)
     {
         int? runStart = null;
         int runEnd = 0, runLine = -2, runCount = 0;
@@ -130,7 +147,7 @@ internal static class FoldingFeature
         {
             if (runStart is { } start && runCount > 1)
             {
-                add(start, runEnd, "comment", runLabel);
+                add(start, runEnd, FoldingKinds.Comment, runLabel);
             }
 
             runStart = null;
@@ -139,6 +156,7 @@ internal static class FoldingFeature
 
         foreach (var trivia in root.DescendantTrivia())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             switch (trivia.Kind())
             {
                 case SyntaxKind.SingleLineCommentTrivia:
@@ -166,11 +184,11 @@ internal static class FoldingFeature
                         ? doc.Content.OfType<XmlElementSyntax>().FirstOrDefault(e => e.StartTag.Name.LocalName.Text == "summary")?.Content.ToString()
                         : null;
                     var collapsed = summary is null ? "/// …" : "/// " + string.Join(' ', summary.Replace("///", string.Empty, StringComparison.Ordinal).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)) + " …";
-                    add(trivia.SpanStart, docEnd, "comment", collapsed);
+                    add(trivia.SpanStart, docEnd, FoldingKinds.Comment, collapsed);
                     break;
                 case SyntaxKind.MultiLineCommentTrivia:
                     Flush();
-                    add(trivia.SpanStart, trivia.Span.End, "comment", "/* … */");
+                    add(trivia.SpanStart, trivia.Span.End, FoldingKinds.Comment, "/* … */");
                     break;
                 case SyntaxKind.WhitespaceTrivia:
                 case SyntaxKind.EndOfLineTrivia:

@@ -89,7 +89,7 @@ internal sealed class ShellFixture : IAsyncDisposable
             WatchFiles = false,
             StartWindow = firstRun, // the first-run setup goes on to the start window
             SkipSetup = !firstRun, // the setup (M46) shows only in its own tests
-            BuiltInPluginsDir = builtInPlugins ?? PluginBin("Codalus.Plugins.Welcome"),
+            BuiltInPluginsDir = builtInPlugins ?? NoPlugins, // the Start page is the shell's (M66): no plugin by default
         });
 
         // System Integration (M51) never registers anything on the machine itself: the XDG layout under the user data
@@ -171,6 +171,9 @@ internal sealed class ShellFixture : IAsyncDisposable
     internal static string RepoRoot => Metadata("CodalusRepoRoot");
 
     /// <summary>A built-in plugin's build output (a folder with its manifest).</summary>
+    /// <summary>An empty built-in plugins folder: a fixture without plugins starts no plugin host.</summary>
+    public static string NoPlugins { get; } = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "codalus-no-plugins")).FullName;
+
     public static string PluginBin(string project) => Path.Combine(RepoRoot, "src", "Plugins", project, "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     internal static string Configuration => Metadata("CodalusConfiguration");

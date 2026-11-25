@@ -376,6 +376,9 @@ public sealed class EditorInsights : IDisposable
     /// <summary>How many times the test lenses were worked out (tests).</summary>
     internal int TestLensUpdates { get; private set; }
 
+    /// <summary>The viewport's inlay hints and inheritance margin applied, once per refresh (tests).</summary>
+    internal int ViewportUpdates { get; private set; }
+
     /// <summary>The test outcomes by the line their test (or class) starts on; the innermost wins a line.</summary>
     private void UpdateTestLenses()
     {
@@ -817,6 +820,9 @@ public sealed class EditorInsights : IDisposable
                 hints = await client.InlayHintsAsync(model.Uri, range, token).ConfigureAwait(true);
             }
 
+            // The margin after the hints, and both shown in one update: asked at once and shown as each came (M66's
+            // first version), each file opened took two redraws and two rounds of Updated, and everyday's open_tracked
+            // waited 163% longer for the UI thread on Linux (CI's bisect, run 45564475595).
             InheritanceMarginItem[]? margin = null;
             if (client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast))
             {
@@ -852,11 +858,13 @@ public sealed class EditorInsights : IDisposable
                     }
                 }, TimeSpan.FromSeconds(_emptyHints));
             }
+
             if (margin is not null)
             {
                 Margin.Set(margin, first, last);
             }
 
+            ViewportUpdates++;
             _editor.TextArea.TextView.Redraw();
             Updated?.Invoke(this, EventArgs.Empty);
         }
@@ -941,19 +949,27 @@ public sealed class EditorInsights : IDisposable
             var (first, last) = VisibleLines();
             var start = _editor.Document.GetLineByNumber(Math.Max(1, first - 5)).Offset;
             var end = _editor.Document.GetLineByNumber(Math.Min(_editor.Document.LineCount, last + 5)).EndOffset;
-            foreach (var segment in _lenses.FindOverlappingSegments(start, end - start).Where(l => !l.Resolved).ToList())
+            var shown = _lenses;
+            var failure = await BoundedResolve.RunAsync(
+                shown.FindOverlappingSegments(start, end - start).Where(l => !l.Resolved).ToList(),
+                segment => client.ResolveCodeLensAsync(segment.Lens, token),
+                () => !token.IsCancellationRequested && !_disposed && model.Version == version && ReferenceEquals(shown, _lenses),
+                (segment, resolved) =>
+                {
+                    if (resolved.Command is { } command)
+                    {
+                        segment.Resolve(command);
+                        _editor.TextArea.TextView.Redraw(_editor.Document.GetLineByOffset(segment.StartOffset));
+                    }
+                }).ConfigureAwait(true);
+            if (failure is OperationCanceledException && (token.IsCancellationRequested || _disposed || model.Version != version || !ReferenceEquals(shown, _lenses)))
             {
-                var resolved = await client.ResolveCodeLensAsync(segment.Lens, token).ConfigureAwait(true);
-                if (token.IsCancellationRequested || _disposed || model.Version != version)
-                {
-                    return;
-                }
+                return; // stale: a newer edit's lenses are on their way
+            }
 
-                if (resolved.Command is { } command)
-                {
-                    segment.Resolve(command);
-                    _editor.TextArea.TextView.Redraw(_editor.Document.GetLineByOffset(segment.StartOffset));
-                }
+            if (failure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
 
             Updated?.Invoke(this, EventArgs.Empty);

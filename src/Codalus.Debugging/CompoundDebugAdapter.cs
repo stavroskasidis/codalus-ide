@@ -95,6 +95,27 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// </summary>
     public bool BreakAllOnStop { get; set; }
 
+    /// <summary>
+    /// In an independent session: whether its threads carry their program's name (<c>App: Main Thread</c>) while it has
+    /// only one program. True for multiple startup projects, an AppHost's and compose's sessions; false for one
+    /// project's F5 (#547), which is a session of one program so that a project started from Solution Explorer
+    /// (Debug → Start New Instance) can join it: its threads are named as in any one-program session until a second
+    /// program joins, and from then on by their program.
+    /// </summary>
+    public bool NamesSoleProgram { get; init; } = true;
+
+    /// <summary>Whether a program's threads and exit carry its name: an independent session's, once it names them (<see cref="NamesSoleProgram"/>).</summary>
+    public bool NamesPrograms
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return Independent && (NamesSoleProgram || _parts.Count > 1);
+            }
+        }
+    }
+
     /// <summary>A program of an independent session started (its process id) or ended (its exit code).</summary>
     public event EventHandler<CompoundPartEvent>? PartChanged;
 
@@ -716,7 +737,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// adapter is disconnected, ending the program, and disposed; the other programs go on. The session ends with it
     /// only when it was the last one and no place is <see cref="Reserve"/>d. Nothing happens when it ended already.
     /// </summary>
-    public async Task EndPartAsync(int index, CancellationToken cancellationToken)
+    /// <param name="terminateDebuggee">False detaches from the program, which goes on (the Processes window's Detach Process, #547).</param>
+    public async Task EndPartAsync(int index, CancellationToken cancellationToken, bool terminateDebuggee = true)
     {
         if (!Independent)
         {
@@ -737,11 +759,13 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         var adapter = part.Adapter;
         try
         {
-            await adapter.DisconnectAsync(terminateDebuggee: true, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+            await adapter.DisconnectAsync(terminateDebuggee, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException or OperationCanceledException)
         {
-            // Ended all the same below.
+            // Ended all the same below. A cancellation is the session's end: the last program's end ends the session,
+            // whose token the caller may have given (Terminate Process on the last program, #547; Linux smoke, run
+            // 45670700961).
         }
 
         // Its end through Closed (EndWith) and this one are the same: whichever comes first ends it.
@@ -1159,6 +1183,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     public async Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken)
     {
         var result = new List<DapThread>();
+        var named = NamesPrograms;
         foreach (var part in Parts())
         {
             if (part.Starting && !part.Stopped)
@@ -1172,7 +1197,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 foreach (var thread in await part.Adapter.ThreadsAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 && !Independent ? thread.Name : $"{part.Name}: {thread.Name}", thread.Frozen));
+                    result.Add(new DapThread(Id(thread.Id, part), named || (part.Index != 0 && !Independent) ? $"{part.Name}: {thread.Name}" : thread.Name, thread.Frozen));
                 }
             }
             catch (DapException) when (part.Index != 0 || Independent)

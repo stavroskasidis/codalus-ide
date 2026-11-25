@@ -200,8 +200,8 @@ internal sealed partial class DesignerSession
         return type.GetConstructor(Type.EmptyTypes) is { IsPublic: true } ? (DesignerValue.NewOf(DesignerTypes.NameOf(type)), false) : null;
     }
 
-    /// <summary>A local's name without its number, as the classic IDE names it: the type's name, camel-cased (<c>gridLevelNode</c>).</summary>
-    private static string LocalStem(Type type)
+    /// <summary>A local's name without its number, as the classic IDE names it: the type's name, camel-cased in C# (<c>gridLevelNode</c>), as is in Visual Basic.</summary>
+    private string LocalStem(Type type)
     {
         var name = type.Name;
         if (name.IndexOf('`', StringComparison.Ordinal) is var tick and > 0)
@@ -209,7 +209,7 @@ internal sealed partial class DesignerSession
             name = name[..tick];
         }
 
-        return char.ToLowerInvariant(name[0]) + name[1..];
+        return DesignerLanguages.NameStem(_language, name);
     }
 
     /// <summary>Two statements the code would write the same.</summary>

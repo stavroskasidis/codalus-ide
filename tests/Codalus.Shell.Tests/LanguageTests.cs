@@ -4,6 +4,8 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using AvaloniaEdit.Folding;
+using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
 
 namespace Codalus.Shell.Tests;
@@ -33,6 +35,43 @@ public sealed class LanguageTests
     }
 
     [AvaloniaFact]
+    public async Task A_grammar_that_cant_be_compiled_leaves_the_file_without_one_and_says_why()
+    {
+        await using var f = ShellFixture.Create();
+        var grammar = Path.Combine(f.UserData, "broken.tmLanguage.json");
+        await File.WriteAllTextAsync(grammar, "{ not a grammar", TestContext.Current.CancellationToken);
+        var languages = f.Shell.Workbench.LanguageDefinitions;
+        languages.Register(new Workbench.Languages.LanguageDefinition("brokenlang", "Broken") { Extensions = [".brk"] });
+        languages.RegisterGrammar(new Workbench.Languages.GrammarDefinition("source.brokenlang", "brokenlang", grammar));
+
+        // The language has a scope, but no tokenizer comes of it: the editor keeps no colorizer that never tokenizes.
+        var editor = await OpenAsync(f, "file.brk", "hello\nworld\n");
+        Assert.Equal("brokenlang", editor.Model.LanguageId);
+        Assert.Null(editor.GrammarScope);
+        Assert.Null(editor.Grammar);
+        Assert.Contains("the grammar source.brokenlang could not be compiled", f.Shell.LanguageLog.GetText(), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task An_edit_tokenizes_again_the_lines_whose_state_it_changed()
+    {
+        await using var f = ShellFixture.Create();
+        var lines = string.Join('\n', Enumerable.Range(0, 300).Select(i => $"a{i} {{ color: red; }}")) + "\n";
+        var css = await OpenAsync(f, "site.css", lines);
+        await ShellFixture.PumpUntil(css.GrammarComplete, seconds: 20, describe: css.DescribeGrammar);
+        bool InComment(int line) => css.GrammarScopesAt(line, 1)?.Contains("comment.block.css") == true;
+        Assert.False(InComment(300));
+
+        // A comment opened on the first line runs to the end of the file; closed on the second, the lines after it come back.
+        css.Editor.Document.Insert(0, "/* ");
+        await ShellFixture.PumpUntil(() => InComment(300) && css.GrammarComplete(), seconds: 20, describe: css.DescribeGrammar);
+        css.Editor.Document.Insert(css.Editor.Document.GetLineByNumber(2).Offset, "*/\n");
+        await ShellFixture.PumpUntil(() => !InComment(301) && css.GrammarComplete(), seconds: 20, describe: css.DescribeGrammar);
+        Assert.True(InComment(1));
+        Assert.Equal(css.Editor.Document.LineCount, css.Grammar?.LineCount);
+    }
+
+    [AvaloniaFact]
     public async Task Files_get_their_language_and_grammar_colors()
     {
         await using var f = ShellFixture.Create();
@@ -55,6 +94,13 @@ public sealed class LanguageTests
 
         var script = await OpenAsync(f, "build", "#!/usr/bin/env bash\necho hi\n");
         Assert.Equal("shellscript", script.Model.LanguageId);
+
+        // JSX files take the JSX grammars: an element is a tag, not TypeScript's type assertion and comparisons.
+        var component = await OpenAsync(f, "Card.tsx", "export function Card() {\n  return <div className=\"a\">{x}</div>;\n}\n");
+        Assert.Equal("typescriptreact", component.Model.LanguageId);
+        Assert.Equal("source.tsx", component.GrammarScope);
+        await ShellFixture.PumpUntil(() => component.GrammarScopesAt(2, 11)?.Contains("entity.name.tag.tsx") == true, seconds: 20, describe: component.DescribeGrammar);
+        Assert.Equal("source.js.jsx", f.Shell.TextMate.ScopeFor("javascriptreact"));
 
         // C# keeps Roslyn's semantic coloring, without a grammar.
         var cs = await OpenAsync(f, "Program.cs", "class C { }\n");
@@ -414,6 +460,18 @@ public sealed class LanguageTests
         await f.RunAsync("editor.action.commentLine");
         Assert.Contains("<!-- <Nullable>enable</Nullable> -->", xml.Model.Text.Text, StringComparison.Ordinal);
 
+        // Brackets VS Code's configurations list as ["{", "}"] close too (Go's, Rust's, Java's, Lua's), not only those
+        // written as objects: TextMateSharp's reading dropped them.
+        var go = await OpenAsync(f, "main.go", "package main\n\nfunc main() \n");
+        go.Editor.CaretOffset = go.Model.Text.GetLineByNumber(3).EndOffset;
+        go.Editor.TextArea.Focus();
+        f.Type("{");
+        Assert.EndsWith("func main() {}\n", go.Model.Text.Text, StringComparison.Ordinal);
+        foreach (var language in new[] { "rust", "java", "lua" })
+        {
+            Assert.Contains(f.Shell.TextMate.ConfigurationFor(language)!.AutoClosingPairs, p => p is { Open: "(", Close: ")" });
+        }
+
         var json = await OpenAsync(f, "data.json", "\n");
         json.Editor.CaretOffset = 0;
         json.Editor.TextArea.Focus();
@@ -434,5 +492,77 @@ public sealed class LanguageTests
         var indent = json.Editor.Options.IndentationString;
         Assert.EndsWith("\n[\n" + indent + "\n]", json.Model.Text.Text, StringComparison.Ordinal);
         Assert.Equal(json.Model.Text.TextLength - 2, json.Editor.CaretOffset);
+    }
+
+    [AvaloniaFact]
+    public async Task Collapse_to_definitions_folds_members_and_keeps_their_type_open()
+    {
+        await using var f = ShellFixture.Create();
+        const string Code = """
+            using System;
+            using System.Threading;
+
+            namespace Contoso.Services;
+
+            public sealed class OrderService
+            {
+                private readonly int _retries = 3;
+
+                public bool Place(string user)
+                {
+                    return user.Length > _retries;
+                }
+
+                #region Helpers
+                public void Reset()
+                {
+                    Console.WriteLine();
+                }
+                #endregion
+            }
+            """;
+        var editor = await OpenAsync(f, "OrderService.txt", Code);
+        await ShellFixture.PumpUntil(() => editor.Folding.AllFoldings.Any(), seconds: 10);
+
+        // Without member foldings (indentation here, or another language server) it collapses everything.
+        await f.ExecuteAsync("editor.action.foldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.True(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+
+        // The C# host's ranges (0-based lines): the type, its members, the usings, a region.
+        int Line(string marker) => editor.Model.Text.GetLineByOffset(Code.IndexOf(marker, StringComparison.Ordinal)).LineNumber - 1;
+        editor.ApplyFoldings(
+        [
+            new FoldingRange(Line("using System;"), Line("using System.Threading;")) { Kind = FoldingKinds.Imports, CollapsedText = "using …" },
+            new FoldingRange(Line("public sealed class"), Line("#endregion") + 1),
+            new FoldingRange(Line("public bool Place"), Line("return user") + 1) { Kind = FoldingKinds.Member },
+            new FoldingRange(Line("#region"), Line("#endregion")) { Kind = FoldingKinds.Region, CollapsedText = "Helpers" },
+            new FoldingRange(Line("public void Reset"), Line("Console.WriteLine") + 1) { Kind = FoldingKinds.Member },
+        ]);
+        FoldingSection At(string marker) => editor.Folding.AllFoldings.Single(s => editor.Model.Text.GetLineByOffset(s.StartOffset).LineNumber - 1 == Line(marker));
+
+        // A type collapsed before (as the bug left it) opens again; so does the region that holds a member.
+        At("public sealed class").IsFolded = true;
+        At("#region").IsFolded = true;
+        await f.ExecuteAsync("editor.action.foldAll");
+        Assert.False(At("public sealed class").IsFolded);
+        Assert.False(At("#region").IsFolded);
+        Assert.True(At("using System;").IsFolded);
+        Assert.True(At("public bool Place").IsFolded);
+        Assert.True(At("public void Reset").IsFolded);
+
+        await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+
+        // Toggle All Outlining: with nothing collapsed it collapses everything (the type too); with anything collapsed it
+        // expands everything.
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.True(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.foldAll");
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
     }
 }

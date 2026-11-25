@@ -26,7 +26,7 @@ Constraints:
 
 **Grammars**
 1. Hand-written AvaloniaEdit highlighting definitions (XSHD). Few exist, and plugins would need a format nobody else uses.
-2. **TextMate grammars through TextMateSharp** (MIT), the engine AvaloniaEdit already integrates (AvaloniaEdit.TextMate, MIT). Its bundled grammars are VS Code's (MIT), and plugins can reuse any VS Code grammar unchanged.
+2. **TextMate grammars through TextMateSharp** (MIT), the engine AvaloniaEdit already integrates (AvaloniaEdit.TextMate, MIT). Its bundled grammars are VS Code's (MIT), and plugins can reuse any VS Code grammar unchanged. *Amended 2026-11-23:* the engine is now Tint (MIT, sebastienros/tint), which bundles the same VS Code grammars and themes and compiles each grammar once for every tokenizer; TextMateSharp and AvaloniaEdit.TextMate are gone.
 
 **LSP types**
 1. Generate the full LSP 3.17 model from `metaModel.json`, as the roadmap suggested.
@@ -53,11 +53,12 @@ Constraints:
 **Highlighting**
 - TextMate grammars color every language except C#, which keeps Roslyn's semantic tokens.
 - The bundled registry loads on the first non-C# file, not at startup.
-- Tokenizing runs on AvaloniaEdit.TextMate's background thread.
+- Tokenizing runs off the UI thread: each editor's `TintColorizer` tokenizes from its first edited line on, on the thread pool, from a snapshot of the document, until a line ends in the state it ended in before, and stops while the editor is hidden. Every tokenizer comes from one shared registry.
 - Themes map to Dark+, Light+ and High Contrast Dark.
 - Semantic tokens from other servers are remapped by name from their legend to the shell's.
 
 **Language configuration**
+- VS Code's `language-configuration.json` files of the built-in languages (MIT) are embedded in the shell, as TextMateSharp.Grammars shipped them; plugins bring their own.
 - Drives line and block comments (Toggle, Comment, Uncomment), auto-closing pairs and typing over them (setting `editor.autoClosingBrackets`).
 - Drives folding when the server has none: XML elements, region markers and indentation.
 - Drives word completion when no server completes.

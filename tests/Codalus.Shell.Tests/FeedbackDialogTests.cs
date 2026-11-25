@@ -137,6 +137,36 @@ public sealed class FeedbackDialogTests
     }
 
     [AvaloniaFact]
+    public async Task Report_a_Problem_attaches_the_last_debug_session_s_log_redacted()
+    {
+        // A session that went wrong left its own account on disk (DebugSessionLog, ADR 0108): its end is attached under
+        // the IDE log's, through the same box, with the same redaction.
+        await using var f = ShellFixture.Create();
+        Fake(f);
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        f.Shell.DebugSessions.Begin();
+        f.Shell.DebugSessions.Write($"Starting {Path.Combine(home, "src", "App", "App.dll")} (.NET) with token={Secret}…\n");
+        f.Shell.DebugSessions.Write("App's .NET runtime didn't start in 30 seconds\n");
+
+        var view = await OpenAsync(f, "help.reportProblem");
+        var dialog = f.Shell.Feedback;
+        await ShellFixture.PumpUntil(() => dialog.Preview.Contains("11.0.100-test", StringComparison.Ordinal), describe: () => dialog.Preview);
+        var preview = Named<SelectableTextBlock>(view, "PreviewText").Text!;
+        Assert.Contains("--- The last debug session's log, the last 3 lines", preview, StringComparison.Ordinal);
+        Assert.Contains("App's .NET runtime didn't start in 30 seconds", preview, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine("~", "src", "App", "App.dll"), preview, StringComparison.Ordinal);
+        Assert.DoesNotContain(Secret, preview, StringComparison.Ordinal);
+        Assert.Contains("of the last debug session's", dialog.IncludeLogsLabel, StringComparison.Ordinal);
+
+        // Unchecked, neither log goes.
+        Named<CheckBox>(view, "IncludeLogs").IsChecked = false;
+        ShellFixture.Pump();
+        Assert.DoesNotContain("--- The last debug session's log", dialog.Preview, StringComparison.Ordinal);
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => !dialog.IsOpen);
+    }
+
+    [AvaloniaFact]
     public async Task Without_the_logs_box_only_the_environment_is_attached_and_Escape_cancels()
     {
         await using var f = ShellFixture.Create();

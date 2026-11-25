@@ -109,15 +109,20 @@ internal sealed class TestTree(ITestController controller)
 
     private static string RunnerKey(RunnerTest test) => test.Project + "|" + test.TargetFramework + "|" + test.Key;
 
-    /// <summary>Rebuilds the items of the given projects and removes items of projects no longer listed.</summary>
-    public void Update(IReadOnlyCollection<ProjectTests> projects)
+    /// <summary>
+    /// Rebuilds the items of the given projects (of <paramref name="rebuild"/>'s only, when given: the others keep the
+    /// items they have) and removes items of projects no longer listed.
+    /// </summary>
+    public void Update(IReadOnlyCollection<ProjectTests> projects, IReadOnlySet<string>? rebuild = null)
     {
         lock (_gate)
         {
             var roots = new List<TestItem>();
             foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
             {
-                roots.Add(BuildProject(project));
+                // A document's edit changes its project's tests only: a solution's other test projects (thousands of
+                // methods) were built again at each pause in typing.
+                roots.Add(rebuild is not null && !rebuild.Contains(project.Path) && controller.Find(project.Path) is { } kept ? kept : BuildProject(project));
             }
 
             controller.Items.Replace(roots);
@@ -253,7 +258,12 @@ internal sealed class TestTree(ITestController controller)
         method.Uri = entry.Uri;
         method.Range = entry.Range;
         var tests = entry.Tests;
-        method.Traits = tests.SelectMany(t => t.Traits).Distinct().ToList();
+        // A new list each time was a change: every method told the shell so after each update.
+        var traits = tests.SelectMany(t => t.Traits).Distinct().ToList();
+        if (!method.Traits.SequenceEqual(traits))
+        {
+            method.Traits = traits;
+        }
 
         // One runner test that is the method itself: the method item is the test.
         if (tests.Count == 1 && !multiFramework && !entry.Parameterized && IsPlain(tests[0], methodName))
@@ -298,7 +308,10 @@ internal sealed class TestTree(ITestController controller)
         var leaf = Item(id, label, new ItemInfo(ItemKind.Test, project.Path, Type: test.Type, Method: test.Method, TargetFramework: test.TargetFramework, RunnerKey: test.Key));
         leaf.Uri = test.File is { } file ? new Uri(file).AbsoluteUri : null;
         leaf.Range = test.Line is { } line and > 0 ? new TestRange(line - 1, 0, line - 1, 0) : null;
-        leaf.Traits = test.Traits;
+        if (!leaf.Traits.SequenceEqual(test.Traits))
+        {
+            leaf.Traits = test.Traits;
+        }
         leaf.Description = multiFramework ? test.TargetFramework : null;
         leaf.Children.Replace([]);
         Map(test, id);

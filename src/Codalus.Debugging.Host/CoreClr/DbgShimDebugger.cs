@@ -84,7 +84,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
             if (!attached.Task.Wait(attached.Task.IsCompleted ? TimeSpan.Zero : RuntimeStartTimeout))
             {
-                throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => LoadedRuntime(shim, id))}");
+                throw new ClrStartTimeoutException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => LoadedRuntime(shim, id))}");
             }
 
             return attached.Task.Result;
@@ -202,7 +202,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
                 if (started.Elapsed >= RuntimeStartTimeout)
                 {
-                    throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => RuntimeLocator.Find(id, program) is [var loaded, ..] ? loaded : null)}");
+                    throw new ClrStartTimeoutException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => RuntimeLocator.Find(id, program) is [var loaded, ..] ? loaded : null)}");
                 }
 
                 Thread.Sleep(20);

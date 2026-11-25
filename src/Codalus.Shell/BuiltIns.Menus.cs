@@ -186,6 +186,7 @@ internal static partial class BuiltIns
             Item(EditCaretsMenu, "editor.action.selectHighlights", "1-carets"),
 
             Item(EditOutliningMenu, "editor.action.toggleFold", "1-outlining"),
+            Item(EditOutliningMenu, "editor.action.toggleAllFolds", "1-outlining"),
             Item(EditOutliningMenu, "editor.action.foldAll", "1-outlining"),
             Item(EditOutliningMenu, "editor.action.unfoldAll", "1-outlining"),
 
@@ -454,7 +455,7 @@ internal static partial class BuiltIns
             Item(Window, "workbench.toggleFullScreen", "5-screen"),
             Item(Window, "workbench.toggleDistractionFree", "5-screen"),
 
-            // Help. The Start page comes from the welcome plugin ("navigation").
+            // Help. The Start page is first ("navigation", ShellHost.StartPage).
             Item(Help, "workbench.showLogs", "help"),
             Item(Help, "help.setUp", "help"),
             Item(Help, "help.checkEnvironment", "help"),
@@ -536,12 +537,20 @@ internal static partial class BuiltIns
             Sub(Context, EditorSnippetsMenu, "Snippet", "6-more"),
             Item(EditorSnippetsMenu, "editor.action.insertSnippet", "1-snippets"),
             Item(EditorSnippetsMenu, "editor.action.surroundWithSnippet", "1-snippets"),
+            // The classic IDE's Git ▸, in its order; then the line's history and other comparisons.
             Sub(Context, EditorGitMenu, "Git", "6-more", "gitRepository"),
-            Item(EditorGitMenu, "git.lineHistory", "1-history", when: "gitRepository"),
-            Item(EditorGitMenu, "git.showCommit", "1-history", when: "gitRepository"),
-            Item(EditorGitMenu, "git.compareWith", "2-compare", when: "gitRepository"),
+            Item(EditorGitMenu, "git.commit", "1-commit", "Commit or Stash…", "gitRepository"),
+            Item(EditorGitMenu, "git.undoFileChanges", "1-commit", "Undo Changes", "gitRepository && gitActiveFileChanged"),
+            Item(EditorGitMenu, "git.fileHistory", "2-history", "View History", "gitRepository"),
+            Item(EditorGitMenu, "git.showDiff", "2-history", "Compare with Unmodified…", "gitRepository"),
+            Item(EditorGitMenu, "git.toggleBlame", "2-history", "Blame (Annotate)", "gitRepository"),
+            Item(EditorGitMenu, "git.ignoreAndUntrack", "3-ignore", "Ignore and Untrack item", "gitRepository && !gitActiveFileIgnored"),
+            Item(EditorGitMenu, "git.lineHistory", "4-more", when: "gitRepository"),
+            Item(EditorGitMenu, "git.showCommit", "4-more", when: "gitRepository"),
+            Item(EditorGitMenu, "git.compareWith", "4-more", when: "gitRepository"),
             Sub(Context, EditorOutliningMenu, "Outlining", "6-more"),
             Item(EditorOutliningMenu, "editor.action.toggleFold", "1-outlining"),
+            Item(EditorOutliningMenu, "editor.action.toggleAllFolds", "1-outlining"),
             Item(EditorOutliningMenu, "editor.action.foldAll", "1-outlining"),
             Item(EditorOutliningMenu, "editor.action.unfoldAll", "1-outlining"),
             Item(Context, "edit.cut", "7-clipboard", keys: EditKeys("edit.cut", platform)),
