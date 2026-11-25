@@ -253,17 +253,33 @@ public static class InstallPlans
         // Linux.
         var options = new List<InstallPlan>();
         var packageRoot = shellRoot is not null && s_linuxPackageRoots.Any(r => SameFolder(r, shellRoot, facts.Platform)) ? shellRoot : null;
-        if (pinned is null && facts.PackageCandidate is { } candidate && Package(facts.LinuxDistribution, $"dotnet-sdk-{channel}") is { } install)
+        var sdk = $"dotnet-sdk-{channel}";
+        string? tooOld = null;
+        if (pinned is null && facts.PackageCandidate is { } candidate && Package(facts.LinuxDistribution, sdk) is { } install)
         {
-            var sdk = $"dotnet-sdk-{channel}";
-            options.Add(new InstallPlan(tool.Id, InstallKind.Terminal, $"{sdk} {candidate}{withRuntime} from the distribution's packages (sudo asks for your password)", install)
+            // A package whose runtime can't run what's wanted isn't offered: installing it would change nothing (Fedora 45's
+            // dotnet-sdk-11.0 is 11.0.100~rc.3, whose 11.0.0-rc.3 runtime isn't the 11.0.0 the hosts need; dnf says
+            // "Nothing to do"). The option that fits then says why.
+            // The least runtime that does: the one the hosts ask for on the runtime's row, else the channel's first
+            // release, or the preview or release candidate the IDE runs on (the SDK's row asks for no patch).
+            var needed = tool.Id == "dotnet-runtime" && tool.WantedVersion is { } asked && Channel(asked, fallback: string.Empty) == channel ? asked
+                : wanted.Contains('-', StringComparison.Ordinal) && Channel(wanted, fallback: string.Empty) == channel ? wanted
+                : $"{channel}.0";
+            if (PackageRuntime(candidate) is { } packageRuntime && EnvironmentCheck.CompareVersions(packageRuntime, needed) < 0)
             {
-                AddsToPath = packageRoot,
-                Option = "package",
-                Title = $"{sdk} {candidate} from the distribution's packages",
-                Note = shellRoot is not null && packageRoot is null ? NotSeen("/usr/lib/dotnet") : null,
-                Recommended = shellRoot is null || packageRoot is not null,
-            });
+                tooOld = $"Your distribution's {sdk} is {candidate}, which doesn't have the .NET {needed} runtime that's needed, so it isn't offered.";
+            }
+            else
+            {
+                options.Add(new InstallPlan(tool.Id, InstallKind.Terminal, $"{sdk} {candidate}{withRuntime} from the distribution's packages (sudo asks for your password)", install)
+                {
+                    AddsToPath = packageRoot,
+                    Option = "package",
+                    Title = $"{sdk} {candidate} from the distribution's packages",
+                    Note = shellRoot is not null && packageRoot is null ? NotSeen("/usr/lib/dotnet") : null,
+                    Recommended = shellRoot is null || packageRoot is not null,
+                });
+            }
         }
 
         if (facts.IsSdkSnap)
@@ -288,8 +304,46 @@ public static class InstallPlans
             options = [dotnetInstall with { Recommended = true }, .. options];
         }
 
+        if (tooOld is not null)
+        {
+            options[0] = options[0] with { Note = options[0].Note is { } note ? $"{tooOld} {note}" : tooOld };
+        }
+
         options.Add(page);
         return options;
+    }
+
+    /// <summary>
+    /// The runtime a distribution's SDK package brings, from the version its package manager gives
+    /// (<see cref="PackageCandidate"/>), or null when it can't be read: the epoch (<c>1:</c>) and the distribution's
+    /// release (after the first <c>-</c>) go, and a <c>~</c> starts a prerelease (<c>11.0.100~rc.3.26522.148</c> brings
+    /// <c>11.0.0-rc.3.26522.148</c>). A 1xx SDK's patch is its runtime's (<c>11.0.105</c>: <c>11.0.5</c>); a later feature
+    /// band's isn't, so its runtime counts as the channel's <c>.0</c>, the least it can be.
+    /// </summary>
+    public static string? PackageRuntime(string packageVersion)
+    {
+        var version = packageVersion.Trim();
+        if (version.IndexOf(':', StringComparison.Ordinal) is var epoch and >= 0)
+        {
+            version = version[(epoch + 1)..];
+        }
+
+        if (version.IndexOf('-', StringComparison.Ordinal) is var release and > 0)
+        {
+            version = version[..release];
+        }
+
+        var tilde = version.IndexOf('~', StringComparison.Ordinal);
+        var label = tilde < 0 ? null : version[(tilde + 1)..];
+        var parts = (tilde < 0 ? version : version[..tilde]).Split('.');
+        if (parts.Length < 3 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor)
+            || !int.TryParse(parts[2], out var sdkPatch) || sdkPatch < 100 || label is { Length: 0 })
+        {
+            return null;
+        }
+
+        var patch = label is null && sdkPatch < 200 ? sdkPatch - 100 : 0;
+        return $"{major}.{minor}.{patch}{(label is null ? string.Empty : "-" + label)}";
     }
 
     /// <summary>The channel of the SDK installed for a .NET row: the one it names, a pinned version's, else the IDE's.</summary>

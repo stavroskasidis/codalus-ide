@@ -113,7 +113,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         _shell = shell;
         _closed = _closing.Token;
         CodePath = codePath;
-        DesignerPath = codePath[..^".cs".Length] + ".Designer.cs";
+        DesignerPath = WinFormsDesignerService.DesignerFileOf(codePath);
         Id = IdFor(codePath);
         Title = Localizer.Format("msg.winFormsDesigner.title", "{0} [Design]", System.IO.Path.GetFileName(codePath));
         _status = Localizer.Format("msg.winFormsDesigner.opening", "Opening {0} in the designer…", System.IO.Path.GetFileName(codePath));
@@ -125,7 +125,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     public override string? FilePath => CodePath;
 
-    public override string? TabIcon => Controls.FileIcons.Form;
+    public override string? TabIcon => Controls.FileIcons.FormOf(CodePath);
 
     public static string IdFor(string codePath) => "winforms:" + codePath;
 
@@ -1081,12 +1081,15 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         return assembly;
     }
 
-    /// <summary>The classic IDE's name for a new component: its type's name, first letter lowercased, and the first free number (<c>button1</c>).</summary>
+    /// <summary>
+    /// The classic IDE's name for a new component: its type's name, first letter lowercased in C# (<c>button1</c>), as
+    /// the type spells it in Visual Basic (<c>Button1</c>), and the first free number.
+    /// </summary>
     public string NewName(string type)
     {
         var simple = type[(type.LastIndexOf('.') + 1)..];
-        var stem = char.ToLowerInvariant(simple[0]) + simple[1..];
-        var taken = new HashSet<string>(_model?.Components.Select(c => c.Name) ?? [], StringComparer.Ordinal);
+        var stem = DesignerLanguages.NameStem(_model?.Language, simple);
+        var taken = new HashSet<string>(_model?.Components.Select(c => c.Name) ?? [], DesignerLanguages.NameComparer(_model?.Language));
         foreach (var component in _components)
         {
             taken.Add(component.Name);

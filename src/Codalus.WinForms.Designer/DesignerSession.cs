@@ -48,6 +48,9 @@ internal sealed partial class DesignerSession : IDisposable
     /// <summary>The name the IDE chose for the component a Toolbox item creates next (#66), with its type: the name service gives it once.</summary>
     private (string Name, Type Type)? _pendingName;
 
+    /// <summary>The form's language (<see cref="DesignerLanguages"/>): the case of the names the designer gives new components.</summary>
+    private string _language = DesignerLanguages.CSharp;
+
     public DesignerSession(HostWindow window)
     {
         _window = window;
@@ -126,6 +129,7 @@ internal sealed partial class DesignerSession : IDisposable
         }
 
         var model = parameters.Model;
+        _language = model.Language;
         var rootType = _types.Find(model.BaseType) ?? throw new InvalidOperationException($"The base type {model.BaseType} wasn't found (build the project).");
         Enter($"loading the design surface for {model.BaseType}");
         _surface = new DesignSurface(_services);

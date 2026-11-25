@@ -2,6 +2,11 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 1.1.0
+
+**New since 1.0.0:**
+- **Visual Basic forms in the Windows Forms designer** ([user guide](docs/user-guide/windows-desktop.md#visual-basic-forms)): a Visual Basic project's `Form1.vb` opened as code, as only C#'s forms opened in the designer. It now opens in the designer and works as C#'s does, written as the classic IDE writes Visual Basic, in your file's own style: new controls are `Friend WithEvents` fields named `Button1`, event handlers have `Handles` clauses in the form's code, and Add New Item has Visual Basic's Form and User Control.
+
 ## 1.0.0
 
 1.0 is the first stable release of Codalus IDE, the free, open-source (MIT) IDE for .NET on Windows, macOS and Linux. 0.1.0 had the editor, the project system, NuGet, build and run, debugging on netcoredbg, testing, Git, the terminal, profiling, the data tools, containers, web and Blazor, and Avalonia. The releases since added the rest, and from 1.0 on an update within 1.x keeps your settings, the command line and your user data working. The user guide's [What's new in 1.0](docs/user-guide/whats-new.md) has the same in more detail.

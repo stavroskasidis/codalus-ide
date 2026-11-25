@@ -108,6 +108,24 @@ public sealed class IssueReportTests : IDisposable
     }
 
     [Fact]
+    public void The_last_debug_session_s_log_follows_the_ide_log_and_counts_as_logs()
+    {
+        var debug = Problem() with { DebugLog = "+0.010 s  Starting App (.NET)…\n+31.002 s  App's .NET runtime didn't start in 30 seconds" };
+        var text = IssueReport.AttachmentsText(debug);
+        Assert.Contains("--- The last debug session's log, the last 2 lines", text, StringComparison.Ordinal);
+        Assert.True(text.IndexOf("--- Codalus IDE log", StringComparison.Ordinal) < text.IndexOf("--- The last debug session's log", StringComparison.Ordinal));
+        Assert.EndsWith("didn't start in 30 seconds", text, StringComparison.Ordinal);
+
+        // Only the session's log: it is attached alone, and it counts as logs (too long for the link, it goes to a file).
+        var alone = Problem(logs: null) with { DebugLog = "+0.010 s  Starting App (.NET)…" };
+        Assert.DoesNotContain("--- Codalus IDE log", IssueReport.AttachmentsText(alone), StringComparison.Ordinal);
+        Assert.Contains("--- The last debug session's log", IssueReport.AttachmentsText(alone), StringComparison.Ordinal);
+        Assert.True(IssueReport.HasLogs(alone));
+        Assert.False(IssueReport.HasLogs(Problem(logs: null)));
+        Assert.False(IssueReport.HasLogs(Feature() with { DebugLog = "x" }));
+    }
+
+    [Fact]
     public void A_problem_opens_the_bug_report_form_with_each_field_by_its_id()
     {
         var link = IssueReport.Build(Problem(), "codalus-log.txt");

@@ -4,7 +4,9 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Rename;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.CodeAnalysis.VisualBasic;
 using Location = Codalus.LanguageServices.Protocol.Location;
+using SyntaxKind = Microsoft.CodeAnalysis.CSharp.SyntaxKind;
 
 namespace Codalus.LanguageServices.Host.WinForms;
 
@@ -13,7 +15,8 @@ namespace Codalus.LanguageServices.Host.WinForms;
 /// InitializeComponent through the project's compilation, <c>codalus/winforms/edit</c> writes the designer's changes as
 /// minimal edits (and event handlers in the code file), and <c>codalus/winforms/toolbox</c> lists the components the
 /// project, the projects it references and (#454) its referenced packages declare. Reading and writing both happen here, on the same syntax, so the
-/// code and the designer's model can't drift apart.
+/// code and the designer's model can't drift apart. A Visual Basic form (<c>Form1.vb</c>, <c>Form1.Designer.vb</c>) is read
+/// and written the same way in its own syntax, its events hooked by <c>Handles</c> clauses (<see cref="VisualBasicHandles"/>).
 /// </summary>
 internal static class WinFormsFeature
 {
@@ -21,17 +24,18 @@ internal static class WinFormsFeature
     private const string FormType = "System.Windows.Forms.Form";
     private const string ComponentType = "System.ComponentModel.Component";
 
-    /// <summary>A form's code file (<c>MainForm.cs</c>) and designer file (<c>MainForm.Designer.cs</c>) from either.</summary>
+    /// <summary>A form's code file (<c>MainForm.cs</c>, <c>MainForm.vb</c>) and designer file (<c>MainForm.Designer.cs</c>, <c>MainForm.Designer.vb</c>) from either.</summary>
     public static (string Code, string Designer) Files(string path)
     {
         path = Path.GetFullPath(path);
+        var extension = DesignerLanguages.Extension(DesignerLanguages.OfPath(path));
         var name = Path.GetFileName(path);
-        if (name.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase))
+        if (name.EndsWith(".Designer" + extension, StringComparison.OrdinalIgnoreCase))
         {
-            return (Path.Combine(Path.GetDirectoryName(path)!, name[..^".Designer.cs".Length] + ".cs"), path);
+            return (Path.Combine(Path.GetDirectoryName(path)!, name[..^(".Designer" + extension).Length] + extension), path);
         }
 
-        return (path, Path.ChangeExtension(path, ".Designer.cs"));
+        return (path, Path.ChangeExtension(path, ".Designer" + extension));
     }
 
     /// <summary>What reading a form needs: the designer file's text and document, the compilation's view of its class.</summary>
@@ -73,14 +77,60 @@ internal static class WinFormsFeature
         /// </summary>
         public bool WithoutProjectTypes { get; init; }
 
-        public CSharpParseOptions? ParseOptions { get; init; }
+        public ParseOptions? ParseOptions { get; init; }
 
         /// <summary>The designer file's tree as the compilation has it.</summary>
         public required SyntaxTree DesignerTree { get; init; }
 
+        /// <summary>The form's language (<see cref="DesignerLanguages"/>).</summary>
+        public required string Language { get; init; }
+
+        /// <summary>A Visual Basic project's root namespace, which its classes are in without saying so.</summary>
+        public string? RootNamespace { get; init; }
+
+        public bool IsVisualBasic => Language == DesignerLanguages.VisualBasic;
+
         public DesignerSource Read(SourceText text) =>
-            DesignerReader.Read(text.ContentEquals(DesignerText) ? DesignerTree : CSharpSyntaxTree.ParseText(text, ParseOptions, DesignerPath), BaseType, GlobalUsings, Resolver);
+            DesignerReader.Read(text.ContentEquals(DesignerText) ? DesignerTree : Parse(text, DesignerPath, ParseOptions), BaseType, GlobalUsings, Resolver, RootNamespace);
+
+        /// <summary>The model with, for a Visual Basic form, the events its <c>Handles</c> clauses hook (in the code file's text <paramref name="code"/> and the designer file's <paramref name="designer"/>).</summary>
+        public DesignerModel WithHandles(DesignerModel model, SourceText? code, SourceText designer) => IsVisualBasic
+            ? VisualBasicHandles.WithHandles(model, (component, written) => DeclaredEvent(model, component, written),
+                code is null ? null : Parse(code, CodePath, ParseOptions).GetRoot(), Parse(designer, DesignerPath, ParseOptions).GetRoot())
+            : model;
+
+        /// <summary>The project's compilation, when the form was read through it.</summary>
+        public Compilation? Compilation { get; init; }
+
+        /// <summary>
+        /// An event of <paramref name="component"/> (the root when empty) as its declaration spells it, from the compilation:
+        /// Visual Basic's <c>Handles Button1.click</c> hooks <c>Click</c>. As written without a compilation or such an event.
+        /// </summary>
+        private string DeclaredEvent(DesignerModel model, string component, string written)
+        {
+            var typeName = component.Length == 0 ? model.BaseType : model.Components.FirstOrDefault(c => c.Name == component)?.Type;
+            if (typeName is null || Compilation?.GetTypeByMetadataName(typeName) is not { } type)
+            {
+                return written;
+            }
+
+            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                if (current.GetMembers().OfType<IEventSymbol>().FirstOrDefault(e => string.Equals(e.Name, written, StringComparison.OrdinalIgnoreCase)) is { } declared)
+                {
+                    return declared.Name;
+                }
+            }
+
+            return written;
+        }
     }
+
+    /// <summary>A form file's tree in its language.</summary>
+    private static SyntaxTree Parse(SourceText text, string path, ParseOptions? options, CancellationToken cancellationToken = default) =>
+        DesignerLanguages.OfPath(path) == DesignerLanguages.VisualBasic
+            ? VisualBasicSyntaxTree.ParseText(text, options as VisualBasicParseOptions, path, cancellationToken)
+            : CSharpSyntaxTree.ParseText(text, options as CSharpParseOptions, path, cancellationToken);
 
     /// <summary>
     /// A file's text as the designer sent it (<paramref name="held"/>: its unsaved <c>.resx</c> files), else as the editor
@@ -148,37 +198,55 @@ internal static class WinFormsFeature
             code = solution.GetDocument(codeId);
         }
 
-        var parseOptions = designer?.Project.ParseOptions as CSharpParseOptions;
-        var codeTree = codeText is null ? null : CSharpSyntaxTree.ParseText(codeText, parseOptions, codePath, cancellationToken);
+        var language = DesignerLanguages.OfPath(designerPath);
+        var isVisualBasic = language == DesignerLanguages.VisualBasic;
+        var parseOptions = designer?.Project.ParseOptions;
+        var codeTree = codeText is null ? null : Parse(codeText, codePath, parseOptions, cancellationToken);
         var designerTree = designer is not null && await designer.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false) is { } tree && (await tree.GetTextAsync(cancellationToken).ConfigureAwait(false)).ContentEquals(designerText)
             ? tree
-            : CSharpSyntaxTree.ParseText(designerText, parseOptions, designerPath, cancellationToken);
-        var found = DesignerSyntax.FindInitializeComponent(await designerTree.GetRootAsync(cancellationToken).ConfigureAwait(false));
+            : Parse(designerText, designerPath, parseOptions, cancellationToken);
+        var designerRoot = await designerTree.GetRootAsync(cancellationToken).ConfigureAwait(false);
+        var (classNode, className) = isVisualBasic
+            ? VisualBasicDesignerSyntax.FindInitializeComponent(designerRoot) is var (vbClass, _) ? ((SyntaxNode?)vbClass.ClassStatement, vbClass.ClassStatement.Identifier.ValueText) : (null, null)
+            : DesignerSyntax.FindInitializeComponent(designerRoot) is var (csClass, _) ? (csClass, csClass.Identifier.Text) : (null, null);
         var resolver = new ReplayDesignerTypeResolver();
-        string[] globalUsings = DesignerReader.WindowsFormsImplicitUsings;
+        string[] globalUsings = isVisualBasic ? VisualBasicDesignerSyntax.WindowsFormsImplicitImports : DesignerReader.WindowsFormsImplicitUsings;
+        string? rootNamespace = null;
+        Compilation? compilation = null;
         INamedTypeSymbol? type = null;
         string? baseType = null;
         var withoutProjectTypes = true;
-        if (designer is not null && found is var (classSyntax, _) && await designer.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false) is { } model
+        if (designer is not null && classNode is not null && await designer.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false) is { } model
             && model.SyntaxTree == designerTree)
         {
             resolver.Semantic = new SemanticDesignerTypeResolver(model);
             resolver.SemanticTree = designerTree;
-            type = model.GetDeclaredSymbol(classSyntax, cancellationToken);
+            compilation = model.Compilation;
+            type = model.GetDeclaredSymbol(classNode, cancellationToken) as INamedTypeSymbol;
             baseType = type?.BaseType is { TypeKind: not TypeKind.Error } baseSymbol ? SemanticDesignerTypeResolver.Name(baseSymbol) : null;
             withoutProjectTypes = baseType is null || model.Compilation.GetTypeByMetadataName(ControlType) is null;
-            IEnumerable<string> compilationUsings = model.Compilation.SyntaxTrees
-                .SelectMany(t => t.GetCompilationUnitRoot(cancellationToken).Usings)
-                .Where(u => !u.GlobalKeyword.IsKind(SyntaxKind.None) && u.Alias is null && u.StaticKeyword.IsKind(SyntaxKind.None) && u.Name is not null)
-                .Select(u => u.Name!.ToString().Replace("global::", string.Empty, StringComparison.Ordinal));
+            if (model.Compilation.Options is VisualBasicCompilationOptions vbOptions)
+            {
+                // A Visual Basic project's imports are its compilation's (the SDK's and the project's <Import> items).
+                rootNamespace = vbOptions.RootNamespace is { Length: > 0 } root ? root : null;
+                globalUsings = [.. vbOptions.GlobalImports.Select(i => i.Clause).OfType<Microsoft.CodeAnalysis.VisualBasic.Syntax.SimpleImportsClauseSyntax>()
+                    .Where(c => c.Alias is null).Select(c => VisualBasicDesignerSyntax.StripGlobal(c.Name.ToString())).Distinct(StringComparer.OrdinalIgnoreCase)];
+            }
+            else
+            {
+                IEnumerable<string> compilationUsings = model.Compilation.SyntaxTrees
+                    .SelectMany(t => t.GetCompilationUnitRoot(cancellationToken).Usings)
+                    .Where(u => !u.GlobalKeyword.IsKind(SyntaxKind.None) && u.Alias is null && u.StaticKeyword.IsKind(SyntaxKind.None) && u.Name is not null)
+                    .Select(u => u.Name!.ToString().Replace("global::", string.Empty, StringComparison.Ordinal));
 
-            // Miscellaneous Files' global usings aren't the project's (#76): while the project loads, the SDK's implicit
-            // usings for Windows Forms stay, as without a compilation, so new code keeps the file's short names.
-            globalUsings = [.. (WorkspaceManager.IsMiscellaneous(designer.Project) ? DesignerReader.WindowsFormsImplicitUsings.Concat(compilationUsings) : compilationUsings)
-                .Distinct(StringComparer.Ordinal)];
+                // Miscellaneous Files' global usings aren't the project's (#76): while the project loads, the SDK's implicit
+                // usings for Windows Forms stay, as without a compilation, so new code keeps the file's short names.
+                globalUsings = [.. (WorkspaceManager.IsMiscellaneous(designer.Project) ? DesignerReader.WindowsFormsImplicitUsings.Concat(compilationUsings) : compilationUsings)
+                    .Distinct(StringComparer.Ordinal)];
+            }
         }
 
-        baseType ??= SyntacticBaseType(codeTree, designerTree, found?.Class.Identifier.Text) ?? FormType;
+        baseType ??= SyntacticBaseType(codeTree, designerTree, className) ?? FormType;
         // Without the framework's references (a project not restored yet), the base type's name decides.
         var (designable, why) = Designable(type is { BaseType.TypeKind: not TypeKind.Error } ? type : null, baseType);
         return new Context
@@ -199,6 +267,9 @@ internal static class WinFormsFeature
             WithoutProjectTypes = withoutProjectTypes,
             ParseOptions = parseOptions,
             DesignerTree = designerTree,
+            Language = language,
+            RootNamespace = rootNamespace,
+            Compilation = compilation,
         };
     }
 
@@ -206,6 +277,18 @@ internal static class WinFormsFeature
     {
         foreach (var tree in new[] { codeTree, designerTree })
         {
+            if (tree?.Options.Language == LanguageNames.VisualBasic)
+            {
+                if (tree.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.VisualBasic.Syntax.ClassBlockSyntax>()
+                        .FirstOrDefault(c => string.Equals(c.ClassStatement.Identifier.ValueText, className, StringComparison.OrdinalIgnoreCase) && c.Inherits.Count > 0) is { } block
+                    && VisualBasicDesignerSyntax.InheritsOf(block) is { } inherits)
+                {
+                    return new SyntacticDesignerTypeResolver(VisualBasicDesignerSyntax.NamespaceOf(block, rootNamespace: null)).FullName(inherits);
+                }
+
+                continue;
+            }
+
             if (tree?.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == className && c.BaseList is not null) is { } declaration
                 && declaration.BaseList!.Types.FirstOrDefault()?.Type is { } baseSyntax)
             {
@@ -285,7 +368,8 @@ internal static class WinFormsFeature
         try
         {
             var source = context.Read(context.DesignerText);
-            return Result(source.Model, null, null);
+            var codeText = context.IsVisualBasic ? await TextOfAsync(context.Code, context.CodePath, openText, cancellationToken).ConfigureAwait(false) : null;
+            return Result(context.WithHandles(source.Model, codeText, context.DesignerText), null, null);
         }
         catch (DesignerReadException ex)
         {
@@ -321,11 +405,25 @@ internal static class WinFormsFeature
         var text = context.DesignerText;
         var documents = new List<TextDocumentEdit>();
         Location? handlerLocation = null;
+
+        // A Visual Basic form's code file as the edits change it (its handlers and their Handles clauses), diffed once at the end.
+        var codeBefore = context.IsVisualBasic ? await TextOfAsync(context.Code, context.CodePath, openText, cancellationToken).ConfigureAwait(false) : null;
+        var codeText = codeBefore;
+        string? located = null;
         try
         {
             var original = context.Read(text);
             foreach (var edit in parameters.Edits)
             {
+                if (context.IsVisualBasic && edit.Kind is DesignerEditKinds.AddEvent or DesignerEditKinds.RemoveEvent or DesignerEditKinds.RemoveComponent)
+                {
+                    var handler = edit.Kind == DesignerEditKinds.AddEvent ? edit.Handler ?? DefaultHandler(original.Model, edit.Component, edit.Event!) : null;
+                    var signature = handler is null ? default : await HandlerSignatureAsync(context, original.Model, edit, cancellationToken).ConfigureAwait(false);
+                    (text, codeText) = EditVisualBasic(context, writer, text, codeText, edit, handler, signature.Parameters, signature.DelegateType);
+                    located = handler ?? located;
+                    continue;
+                }
+
                 switch (edit.Kind)
                 {
                     case DesignerEditKinds.AddEvent:
@@ -346,7 +444,18 @@ internal static class WinFormsFeature
 
                     case DesignerEditKinds.RenameComponent:
                         text = writer.Apply(text, edit);
-                        documents.AddRange(await RenameElsewhereAsync(context, edit.Component, edit.NewName!, openText, version, cancellationToken).ConfigureAwait(false));
+                        foreach (var renamed in await RenameElsewhereAsync(context, edit.Component, edit.NewName!, openText, version, cancellationToken).ConfigureAwait(false))
+                        {
+                            // A Visual Basic form's Handles clauses in its code file are renamed with the code file's other changes.
+                            if (codeText is not null && codeBefore is not null && Paths.Comparer.Equals(DocumentUris.ToPath(renamed.TextDocument.Uri) ?? string.Empty, context.CodePath) && codeText.ContentEquals(codeBefore))
+                            {
+                                codeText = codeText.WithChanges(renamed.Edits.Select(e => new TextChange(Positions.ToSpan(codeText, e.Range), e.NewText)));
+                                continue;
+                            }
+
+                            documents.Add(renamed);
+                        }
+
                         break;
 
                     default:
@@ -358,6 +467,26 @@ internal static class WinFormsFeature
         catch (Exception ex) when (ex is DesignerReadException or InvalidOperationException or ArgumentException)
         {
             return Fail(ex.Message);
+        }
+
+        if (codeText is not null && codeBefore is not null && !codeText.ContentEquals(codeBefore))
+        {
+            var codeChanges = LineDiff.Compute(codeBefore, codeText);
+            documents.Add(new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(context.CodePath), version(context.CodePath)),
+                [.. codeChanges.Select(c => new TextEdit(Positions.ToRange(codeBefore, c.Span), c.NewText ?? string.Empty))]));
+        }
+
+        if (located is not null)
+        {
+            // The handler, in the class's file that declares it, as the edits left it.
+            foreach (var (filePath, file) in new[] { (context.CodePath, codeText), (context.DesignerPath, text) })
+            {
+                if (file is not null && VisualBasicHandles.HandlerPosition(file, filePath, context.ParseOptions, context.Read(text).Model.ClassName, located) is { } at)
+                {
+                    handlerLocation = new Location(DocumentUris.FromPath(filePath), new Protocol.Range(at, at));
+                    break;
+                }
+            }
         }
 
         var changes = LineDiff.Compute(context.DesignerText, text);
@@ -380,7 +509,7 @@ internal static class WinFormsFeature
         DesignerModel? after;
         try
         {
-            after = context.Read(text).Model;
+            after = context.WithHandles(context.Read(text).Model, codeText, text);
         }
         catch (DesignerReadException)
         {
@@ -388,6 +517,74 @@ internal static class WinFormsFeature
         }
 
         return new WinFormsEditResult(new WorkspaceEdit([.. documents]), after, null) { Handler = handlerLocation };
+    }
+
+    /// <summary>
+    /// A Visual Basic form's event edits and component removals (ADR 0073, Visual Basic forms), in its designer file's
+    /// text and its code file's: a new handler hooked by a <c>Handles</c> clause (its component's field made
+    /// <c>WithEvents</c> when it isn't), or, for an event hooked by <c>AddHandler</c> already and a local's, in
+    /// InitializeComponent (<see cref="VisualBasicHandles.UsesHandles"/>); a removed event's or component's <c>Handles</c>
+    /// items removed from both files (a method stays, as the classic IDE leaves it).
+    /// </summary>
+    private static (SourceText Designer, SourceText? Code) EditVisualBasic(
+        Context context, DesignerWriter writer, SourceText text, SourceText? code, DesignerEdit edit, string? handler, string[]? parameters, string? delegateType)
+    {
+        var source = context.Read(text);
+        var className = source.Model.ClassName;
+        SourceText? Remove(SourceText? file, string path, Func<string, string, string, bool> which) =>
+            file is null ? null : VisualBasicHandles.Remove(file, path, context.ParseOptions, className, which);
+        bool Is(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        switch (edit.Kind)
+        {
+            case DesignerEditKinds.RemoveComponent:
+            {
+                var before = source.Model.Components.Where(c => !c.IsRoot).Select(c => c.Name).ToList();
+                text = writer.Apply(text, edit);
+                var after = context.Read(text).Model.Components.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var removed = before.Where(n => !after.Contains(n)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                bool Gone(string component, string _, string __) => component.Length > 0 && removed.Contains(component);
+                return (Remove(text, context.DesignerPath, Gone)!, Remove(code, context.CodePath, Gone));
+            }
+
+            case DesignerEditKinds.RemoveEvent:
+            {
+                text = writer.Apply(text, edit);
+                bool Hooked(string component, string eventName, string _) => Is(component, edit.Component) && Is(eventName, edit.Event!);
+                return (Remove(text, context.DesignerPath, Hooked)!, Remove(code, context.CodePath, Hooked));
+            }
+        }
+
+        // AddEvent.
+        var eventName = edit.Event!;
+        if (code is null)
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(context.CodePath)} doesn't exist: the event handler goes there.");
+        }
+
+        if (!VisualBasicHandles.UsesHandles(source, edit.Component, eventName))
+        {
+            text = writer.Apply(text, edit with { Handler = handler, DelegateType = edit.DelegateType ?? delegateType });
+            var declared = VisualBasicHandles.HandlerPosition(text, context.DesignerPath, context.ParseOptions, className, handler!) is not null
+                || VisualBasicHandles.HandlerPosition(code, context.CodePath, context.ParseOptions, className, handler!) is not null;
+            return (text, declared ? code : VisualBasicHandles.AddMethod(code, context.CodePath, context.ParseOptions, className, handler!, parameters ?? [], handles: null));
+        }
+
+        // Another method's Handles item for the event goes: an event has one handler in the designer.
+        bool Other(string component, string name, string method) => Is(component, edit.Component) && Is(name, eventName) && !Is(method, handler!);
+        text = Remove(VisualBasicHandles.WithEvents(source, edit.Component), context.DesignerPath, Other)!;
+        code = Remove(code, context.CodePath, Other)!;
+        if (VisualBasicHandles.AddTo(code, context.CodePath, context.ParseOptions, className, handler!, edit.Component, eventName) is { } inCode)
+        {
+            return (text, inCode);
+        }
+
+        if (VisualBasicHandles.AddTo(text, context.DesignerPath, context.ParseOptions, className, handler!, edit.Component, eventName) is { } inDesigner)
+        {
+            return (inDesigner, code);
+        }
+
+        return (text, VisualBasicHandles.AddMethod(code, context.CodePath, context.ParseOptions, className, handler!, parameters ?? [],
+            VisualBasicHandles.ItemText(edit.Component, eventName)));
     }
 
     /// <summary>The classic IDE's name for a new handler: <c>button1_Click</c>, <c>MainForm_Load</c>.</summary>
@@ -421,6 +618,21 @@ internal static class WinFormsFeature
         }
 
         parameters ??= [("System.Object", "sender"), ("System.EventArgs", "e")];
+        if (context.IsVisualBasic)
+        {
+            // Visual Basic: sender As Object, e As EventArgs (through the code file's and the project's imports).
+            var vbModel = new DesignerModel
+            {
+                ClassName = model.ClassName,
+                Language = DesignerLanguages.VisualBasic,
+                Namespace = model.Namespace,
+                BaseType = model.BaseType,
+                Imports = [.. (context.CodeTree is null ? [] : VisualBasicDesignerSyntax.ImportsOf(context.CodeTree.GetRoot(cancellationToken))).Concat(context.GlobalUsings).Distinct(StringComparer.OrdinalIgnoreCase)],
+            };
+            var vbGenerator = new VisualBasicDesignerCodeGenerator(vbModel, string.Empty, "\n");
+            return ([.. parameters.Select(p => $"{p.Name} As {vbGenerator.Type(p.Type)}")], delegateType);
+        }
+
         var codeModel = new DesignerModel
         {
             ClassName = model.ClassName,
@@ -448,7 +660,7 @@ internal static class WinFormsFeature
                 continue;
             }
 
-            var root = await CSharpSyntaxTree.ParseText(text, context.ParseOptions, path, cancellationToken).GetRootAsync(cancellationToken).ConfigureAwait(false);
+            var root = await CSharpSyntaxTree.ParseText(text, context.ParseOptions as CSharpParseOptions, path, cancellationToken).GetRootAsync(cancellationToken).ConfigureAwait(false);
             var method = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == className)
                 .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(m => m.Identifier.Text == handler);
             if (method is not null)
@@ -463,7 +675,7 @@ internal static class WinFormsFeature
             throw new InvalidOperationException($"{Path.GetFileName(context.CodePath)} doesn't exist: the event handler goes there.");
         }
 
-        var codeRoot = await CSharpSyntaxTree.ParseText(codeText, context.ParseOptions, context.CodePath, cancellationToken).GetRootAsync(cancellationToken).ConfigureAwait(false);
+        var codeRoot = await CSharpSyntaxTree.ParseText(codeText, context.ParseOptions as CSharpParseOptions, context.CodePath, cancellationToken).GetRootAsync(cancellationToken).ConfigureAwait(false);
         if (codeRoot.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == className) is not { } type)
         {
             throw new InvalidOperationException($"{Path.GetFileName(context.CodePath)} doesn't declare {className}: the event handler goes there.");
@@ -499,7 +711,8 @@ internal static class WinFormsFeature
     private static async Task<IEnumerable<TextDocumentEdit>> RenameElsewhereAsync(
         Context context, string name, string newName, Func<string, SourceText?> openText, Func<string, int?> version, CancellationToken cancellationToken)
     {
-        if (context.Class?.GetMembers(name).OfType<IFieldSymbol>().FirstOrDefault() is not { } field)
+        // A Visual Basic WithEvents field is a property to the compiler (renaming it renames its Handles clauses too).
+        if (context.Class?.GetMembers(name).FirstOrDefault(m => m is IFieldSymbol or IPropertySymbol { IsWithEvents: true }) is not { } field)
         {
             return [];
         }
@@ -546,7 +759,7 @@ internal static class WinFormsFeature
     /// </summary>
     public static async Task<WinFormsToolboxResult> ToolboxAsync(Solution solution, string projectPath, CancellationToken cancellationToken, IReadOnlyList<string>? chosen = null)
     {
-        var project = solution.Projects.FirstOrDefault(p => p.FilePath is { } path && Paths.Comparer.Equals(path, Path.GetFullPath(projectPath)) && p.Language == LanguageNames.CSharp);
+        var project = solution.Projects.FirstOrDefault(p => p.FilePath is { } path && Paths.Comparer.Equals(path, Path.GetFullPath(projectPath)) && p.Language is LanguageNames.CSharp or LanguageNames.VisualBasic);
         if (project is null)
         {
             return new WinFormsToolboxResult([]);
@@ -713,6 +926,9 @@ internal sealed class ReplayDesignerTypeResolver : IDesignerTypeResolver
     private readonly Dictionary<string, string> _names = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _enums = new(StringComparer.Ordinal);
 
+    /// <summary>Each member name as written (<c>text</c>) and as declared (<c>Text</c>), from the compilation's read.</summary>
+    private readonly Dictionary<string, string> _members = new(StringComparer.Ordinal);
+
     public SemanticDesignerTypeResolver? Semantic { get; set; }
 
     /// <summary>The tree <see cref="Semantic"/>'s model is of; other trees (edited text) replay what it said.</summary>
@@ -756,4 +972,24 @@ internal sealed class ReplayDesignerTypeResolver : IDesignerTypeResolver
 
     public bool? IsEnum(string fullName) =>
         Semantic?.IsEnum(fullName) ?? (_enums.TryGetValue(fullName, out var isEnum) ? isEnum : new SyntacticDesignerTypeResolver(null).IsEnum(fullName));
+
+    /// <summary>
+    /// Through the compilation for the file as read; for edited text, as that read named the same spelling: a Visual Basic
+    /// name ignores case, so <c>text</c> is <c>Text</c> wherever the file writes it.
+    /// </summary>
+    public string MemberName(SyntaxNode name, string written)
+    {
+        if (name.SyntaxTree == SemanticTree && Semantic is { } semantic)
+        {
+            var declared = semantic.MemberName(name, written);
+            if (!string.Equals(declared, written, StringComparison.Ordinal))
+            {
+                _members[written] = declared;
+            }
+
+            return declared;
+        }
+
+        return _members.GetValueOrDefault(written, written);
+    }
 }

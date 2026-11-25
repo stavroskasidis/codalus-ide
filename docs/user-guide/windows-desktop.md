@@ -39,9 +39,9 @@ File → New Project lists **WPF Application**, **WPF Class Library**, **WPF Use
 - **Resource Dictionary**: a `.xaml` file of resources to merge.
 
 In a Windows Forms project:
-- **Form** and **User Control**: the `.cs` file and its `.Designer.cs`.
+- **Form** and **User Control**: the `.cs` file and its `.Designer.cs`; in a Visual Basic project, the `.vb` file and its `.Designer.vb`, in the project's root namespace as the classic IDE's Visual Basic templates make them.
 
-Solution Explorer nests a window's `.xaml.cs` under its `.xaml`, and a form's `.Designer.cs` and `.resx` under its `.cs`. A strongly typed resource class (`Resources.Designer.cs`) nests under its `.resx`.
+Solution Explorer nests a window's `.xaml.cs` under its `.xaml`, and a form's `.Designer.cs` and `.resx` under its `.cs` (a Visual Basic form's `.Designer.vb` and `.resx` under its `.vb`). A strongly typed resource class (`Resources.Designer.cs`) nests under its `.resx`.
 
 ## Editing WPF XAML
 
@@ -103,7 +103,7 @@ These run only on Windows, like the app, and are checked by the Windows test run
 
 ## The Windows Forms designer
 
-On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
+On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. A Visual Basic form's `.vb` file opens in it the same way ([Visual Basic forms](#visual-basic-forms)). To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
 The designer draws the form with your app's own .NET and Windows Forms, as the classic IDE's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply. A form you open while its project is still loading opens in the designer too; once the project has loaded, the designer reads it again.
 - **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent (for a control in a split container, that panel). `Ctrl+A` (or Edit → **Select All**) selects every component of the form, as the classic IDE does: the controls inside containers and the [component tray](#the-component-tray)'s components too. Moved with the arrow keys or a drag, a control inside a selected container moves with its container.
@@ -188,6 +188,16 @@ The `.resx` files are saved with the form (`Ctrl+S`), and undo takes back the co
 ### Data binding
 
 A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSource` set to one of your classes, such as `typeof(Customer)`) can bind its controls' properties to the class's members: the Properties window's **(DataBindings)** row, at the top of **Data**, expands into a control's bindable properties (`Text`, `Checked`, `Tag`…), each with a list of the binding sources' members (`customerBindingSource - Name`). The code gets `textBox1.DataBindings.Add(new Binding("Text", customerBindingSource, "Name", true))`; **(none)** removes it. The classic IDE's Data Sources window isn't there: set the binding source's `DataSource` in the Properties window or the code.
+
+### Visual Basic forms
+
+A Visual Basic project's forms and user controls (`Form1.vb` with `Form1.Designer.vb`) open in the designer and work as C#'s do: the Toolbox, the Properties window, menus, collections, localizable forms and data binding. The designer writes Visual Basic as the classic IDE does, in your file's own style (for .NET, or for .NET Framework with `Me.` and full type names):
+- a new control is a `Friend WithEvents` field, named as Visual Basic names it (`Button1`, `FileToolStripMenuItem`);
+- an event handler is a method in `Form1.vb` with a `Handles` clause: `Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click`, and `Handles MyBase.Load` for the form's own events. A method that already exists gets the event added to its `Handles` clause. Removing an event, or deleting its control, takes it out of the clause and leaves the method;
+- a form whose fields aren't `WithEvents` and whose events are hooked with `AddHandler` in `InitializeComponent` (written by hand for .NET Framework) opens too: those events keep their `AddHandler`, and a control that gets a new event handler becomes `WithEvents`, which .NET's Windows Forms analyzers ask for (`WFO3011`, `WFO3012`);
+- names ignore case, as Visual Basic's do: a name that differs from another only in case is taken, renaming a control renames its uses and its `Handles` clauses in the form's code, and a property written in another case than its declaration's (`button1.text = "Go"`) is that property, changed where it is.
+
+An image from the project's resources is a Visual Basic project's `My Project\Resources.resx`, written `Global.WinFormsApp1.My.Resources.Resources.Logo`.
 
 **Code the designer can't read** (an `if` or a loop in `InitializeComponent`, a lambda as an event handler, a call to one of the form's own methods, a field that isn't a component) opens as code instead, at that line, and a notification says why, as in the classic IDE. The .NET SDK's `WFO3000` analyzers already flag most of it as errors.
 

@@ -267,7 +267,9 @@ public sealed class RemoteShellTests
         f.Shell.Debugger.Breakpoints.Toggle(program, line);
         await f.RunAsync("debug.start");
         // It once waited the whole 300 s with nothing to show for it (Windows CI, run 40956611737): the failure says
-        // where F5 got to, the build or the launch.
+        // where F5 got to, the build or the launch. TODO(issue): end the wait at a failed build, with its errors: on the
+        // Mac session's run of fbba0582 the build failed at once (the machine's workloads changed meanwhile, docs/ci-flakes.md)
+        // and the wait still ran its 300 s.
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300, describe: () => Describe(f, remote));
         try
         {

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Codalus.Debugging.Host.Mono;
 
 namespace Codalus.Debugging.Host.NetFx;
 
@@ -519,6 +520,17 @@ internal sealed record ClrExited(int? ExitCode) : ClrEvent;
 
 /// <summary>A failure of the debuggee's runtime, with the message to show.</summary>
 internal class ClrException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
+
+/// <summary>
+/// A launch that ran past one of the start's limits (the launcher's report of the program, its runtime's start): the
+/// program is ended, and the client may start again (<see cref="CoreClrAdapter.StartTimeoutCode"/>). The first start of
+/// a program just built is the slow one on macOS (its first launch is scanned) and on a loaded machine; the next start
+/// is quick (a review of 1.0 on macOS: "the first time I tried this I got a crash").
+/// </summary>
+internal sealed class ClrStartTimeoutException(string message) : ClrException(message), IDapErrorCode
+{
+    public string ErrorCode => CoreClrAdapter.StartTimeoutCode;
+}
 
 /// <summary>A func-eval threw <see cref="Exception"/> in the debuggee.</summary>
 internal sealed class ClrEvalException(IClrValue exception, string message) : ClrException(message)

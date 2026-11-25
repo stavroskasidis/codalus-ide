@@ -9,6 +9,15 @@ namespace Codalus.Debugging.Host.Mono;
 internal sealed class DapRequestException(string message) : Exception(message);
 
 /// <summary>
+/// An error with a code the client acts on: the response's <c>message</c> is the code (DAP's "raw error in short form"),
+/// and its <c>body.error.format</c> the exception's text, which the client shows.
+/// </summary>
+internal interface IDapErrorCode
+{
+    string ErrorCode { get; }
+}
+
+/// <summary>
 /// The server side of the Debug Adapter Protocol over a pair of streams (<c>Content-Length</c> framing, M20b): requests
 /// are handed to <see cref="Handler"/> one at a time, in order, and answered with its body or its error; events can be
 /// sent from any thread. A handler can send the client a request of its own (<see cref="RequestAsync"/>, the
@@ -146,7 +155,14 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
         }
         catch (Exception ex) when (ex is DapRequestException or InvalidOperationException or ArgumentException or IOException or global::Mono.Debugger.Soft.VMDisconnectedException or global::Mono.Debugger.Soft.InvalidStackFrameException or global::Mono.Debugger.Soft.AbsentInformationException or global::Mono.Debugger.Soft.CommandException or global::Mono.Debugger.Soft.ObjectCollectedException or NotSupportedException or TimeoutException or System.Runtime.InteropServices.COMException)
         {
-            await RespondAsync(seq, command, success: false, null, ex.Message).ConfigureAwait(false);
+            if (ex is IDapErrorCode coded)
+            {
+                await RespondAsync(seq, command, success: false, ErrorBody(ex.Message), coded.ErrorCode).ConfigureAwait(false);
+            }
+            else
+            {
+                await RespondAsync(seq, command, success: false, null, ex.Message).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -186,6 +202,25 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
         var terminated = SendEventAsync(DapEvents.Terminated);
         return Task.WhenAll(exited, terminated).WaitAsync(EndTimeout).ContinueWith(
             static _ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    /// <summary>An error response's body: DAP's <c>error</c> message, <paramref name="text"/> shown to the user as it is.</summary>
+    internal static JsonElement ErrorBody(string text)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("error");
+            writer.WriteStartObject();
+            writer.WriteNumber("id", 1);
+            writer.WriteString("format", text);
+            writer.WriteBoolean("showUser", true);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        return JsonDocument.Parse(buffer.ToArray()).RootElement.Clone();
     }
 
     private Task RespondAsync(int requestSeq, string command, bool success, JsonElement? body, string? message) =>

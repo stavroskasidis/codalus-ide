@@ -121,6 +121,67 @@ public sealed class DotnetInstallOptionsTests
     }
 
     [Fact]
+    public void On_linux_a_package_whose_runtime_is_a_release_candidate_isnt_offered_for_the_release_and_dotnet_install_says_why()
+    {
+        // A user's report: Fedora 45's dotnet-sdk-11.0 was 11.0.100~rc.3 (runtime 11.0.0-rc.3), already installed. The
+        // package was recommended for the hosts' 11.0.0, dnf said "Nothing to do", and the runtime was still missing.
+        var facts = new DotnetInstallFacts(PlatformKind.Linux, "/home/u")
+        {
+            ShellDotnet = "/usr/bin/dotnet",
+            ShellRoot = "/usr/lib64/dotnet",
+            LinuxDistribution = "fedora",
+            PackageCandidate = InstallPlans.PackageCandidate("Name         : dotnet-sdk-11.0\nVersion      : 11.0.100~rc.3.26522.148\nRelease      : 0.13.fc45\n"),
+        };
+        var plans = InstallPlans.DotnetOptions(s_runtime, facts);
+        Assert.Equal(["dotnet-install", "page"], Options(plans));
+        Assert.True(plans[0].Recommended);
+        Assert.StartsWith("Your distribution's dotnet-sdk-11.0 is 11.0.100~rc.3.26522.148, which doesn't have the .NET 11.0.0 runtime that's needed, so it isn't offered.", plans[0].Note, StringComparison.Ordinal);
+        Assert.Contains("/usr/lib64/dotnet", plans[0].Note, StringComparison.Ordinal); // and that the terminal won't see it
+
+        // The SDK's row, on a machine with no .NET yet, asks for the channel's release the same way.
+        var sdk = InstallPlans.DotnetOptions(s_missing, facts with { ShellDotnet = null, ShellRoot = null });
+        Assert.Equal(["dotnet-install", "page"], Options(sdk));
+        Assert.StartsWith("Your distribution's dotnet-sdk-11.0 is", sdk[0].Note, StringComparison.Ordinal);
+
+        // Its release is offered, and so is the candidate for hosts that ask for the release candidate.
+        Assert.Equal(["package", "dotnet-install", "page"], Options(InstallPlans.DotnetOptions(s_runtime, facts with { PackageCandidate = "11.0.100" })));
+        var candidate = s_runtime with { WantedVersion = "11.0.0-rc.2.26472.104" };
+        Assert.Equal(["package", "dotnet-install", "page"], Options(InstallPlans.DotnetOptions(candidate, facts)));
+    }
+
+    [Fact]
+    public void On_linux_a_package_older_than_the_patch_the_hosts_ask_for_isnt_offered()
+    {
+        var facts = new DotnetInstallFacts(PlatformKind.Linux, "/home/u")
+        {
+            ShellDotnet = "/usr/bin/dotnet",
+            ShellRoot = "/usr/lib/dotnet",
+            LinuxDistribution = "ubuntu debian",
+            PackageCandidate = "11.0.101-0ubuntu1~24.04.1",
+        };
+        var patch = s_runtime with { WantedVersion = "11.0.2" };
+        Assert.Equal(["dotnet-install", "page"], Options(InstallPlans.DotnetOptions(patch, facts)));
+        Assert.Equal(["package", "dotnet-install", "page"], Options(InstallPlans.DotnetOptions(patch, facts with { PackageCandidate = "11.0.102-0ubuntu1~24.04.1" })));
+
+        // The SDK's row asks for no patch: the IDE running on a newer one doesn't hide the channel's package.
+        Assert.Equal(["package", "dotnet-install", "page"], Options(InstallPlans.DotnetOptions(s_missing, facts)));
+    }
+
+    [Theory]
+    [InlineData("11.0.100~rc.3.26522.148", "11.0.0-rc.3.26522.148")] // dnf's Version (Fedora)
+    [InlineData("11.0.100~preview.7.25380.108-0ubuntu1", "11.0.0-preview.7.25380.108")] // apt's, with Ubuntu's revision
+    [InlineData("11.0.100-0ubuntu1~24.04.1", "11.0.0")] // the ~ of Ubuntu's revision isn't a prerelease
+    [InlineData("11.0.105-1.fc45", "11.0.5")]
+    [InlineData("1:11.0.103-1", "11.0.3")] // an epoch
+    [InlineData("11.0.204", "11.0.0")] // a later feature band: its runtime's patch isn't its own
+    [InlineData("11.0.100-1.1", "11.0.0")] // zypper's version-release
+    [InlineData("11.0", null)]
+    [InlineData("11.0.0", null)] // a runtime's version, not an SDK's
+    [InlineData("11.0.100~", null)]
+    public void A_packages_version_gives_the_runtime_its_sdk_brings(string packageVersion, string? runtime) =>
+        Assert.Equal(runtime, InstallPlans.PackageRuntime(packageVersion));
+
+    [Fact]
     public void On_linux_with_dotnet_in_the_home_folder_dotnet_install_fits_and_the_package_says_the_terminal_wont_see_it()
     {
         var facts = new DotnetInstallFacts(PlatformKind.Linux, "/home/u")

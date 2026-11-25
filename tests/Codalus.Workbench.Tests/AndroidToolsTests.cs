@@ -228,6 +228,14 @@ public sealed class AndroidToolsTests : IDisposable
                 Input = "y\ny\n",
             }));
 
+        // dotnet workload doesn't ask for permission itself outside Windows: under sudo, by dotnet's full path, in a
+        // root the user can't write.
+        Assert.Equal("sudo /usr/local/share/dotnet/dotnet workload restore '/Users/me/My App/App.csproj'", Elevation.WorkloadCommand(PlatformKind.MacOS, "/usr/local/share/dotnet/dotnet", writable: false, ["workload", "restore", "/Users/me/My App/App.csproj"]));
+        Assert.Equal("sudo /usr/share/dotnet/dotnet workload install maui-android", Elevation.WorkloadCommand(PlatformKind.Linux, "/usr/share/dotnet/dotnet", writable: false, ["workload", "install", "maui-android"]));
+        Assert.Equal("dotnet workload restore /home/me/src/App/App.csproj", Elevation.WorkloadCommand(PlatformKind.Linux, "/home/me/.dotnet/dotnet", writable: true, ["workload", "restore", "/home/me/src/App/App.csproj"]));
+        Assert.Equal("dotnet workload install maui", Elevation.WorkloadCommand(PlatformKind.MacOS, null, writable: false, ["workload", "install", "maui"]));
+        Assert.Equal("dotnet workload restore \"D:\\My App\\App.csproj\"", Elevation.WorkloadCommand(PlatformKind.Windows, @"C:\Program Files\dotnet\dotnet.exe", writable: false, ["workload", "restore", @"D:\My App\App.csproj"]));
+
         Assert.True(Elevation.CanWrite(_dir));
         Assert.True(Elevation.CanWrite(Path.Combine(_dir, "not", "yet")));
         Assert.Empty(Directory.EnumerateFileSystemEntries(_dir));

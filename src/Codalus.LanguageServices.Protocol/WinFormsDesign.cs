@@ -315,6 +315,33 @@ public sealed record DesignerComponent(string Name, string Type)
     public string? Modifier { get; init; }
 }
 
+/// <summary>The languages a designer file is written in (<see cref="DesignerModel.Language"/>).</summary>
+public static class DesignerLanguages
+{
+    public const string CSharp = "C#";
+
+    /// <summary>Visual Basic: <c>Form1.vb</c> and <c>Form1.Designer.vb</c>, its components <c>Friend WithEvents</c>, its events <c>Handles</c> clauses.</summary>
+    public const string VisualBasic = "VB";
+
+    /// <summary>The language of a form's code or designer file, by its extension.</summary>
+    public static string OfPath(string path) => path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) ? VisualBasic : CSharp;
+
+    /// <summary>A code file's extension in <paramref name="language"/>: <c>.cs</c> or <c>.vb</c>.</summary>
+    public static string Extension(string language) => language == VisualBasic ? ".vb" : ".cs";
+
+    /// <summary>
+    /// A new component's or local's name without its number, as the classic IDE names it in <paramref name="language"/>:
+    /// camel-cased in C# (<c>button</c>, <c>fileToolStripMenuItem</c>), as the type spells it in Visual Basic
+    /// (<c>Button</c>, <c>FileToolStripMenuItem</c>).
+    /// </summary>
+    public static string NameStem(string? language, string name) => name.Length == 0
+        ? name
+        : (language == VisualBasic ? char.ToUpperInvariant(name[0]) : char.ToLowerInvariant(name[0])) + name.Substring(1);
+
+    /// <summary>How <paramref name="language"/> compares names: Visual Basic's ignore case.</summary>
+    public static StringComparer NameComparer(string? language) => language == VisualBasic ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+}
+
 /// <summary>
 /// A form's or user control's InitializeComponent: the class, the root's base type, the namespaces the file sees, its
 /// components (the root first) and statements, and the code style it is written in.
@@ -322,6 +349,12 @@ public sealed record DesignerComponent(string Name, string Type)
 public sealed record DesignerModel
 {
     public required string ClassName { get; init; }
+
+    /// <summary>
+    /// The language the form is written in (<see cref="DesignerLanguages"/>): new components' names follow it (the classic
+    /// IDE names them <c>button1</c> in C#, <c>Button1</c> in Visual Basic), and so does the project's resources class.
+    /// </summary>
+    public string Language { get; init; } = DesignerLanguages.CSharp;
 
     public string? Namespace { get; init; }
 

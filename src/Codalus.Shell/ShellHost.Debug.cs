@@ -54,6 +54,12 @@ public sealed partial class ShellHost
 
     public OutputChannel DebugLog => Workbench.Output.GetOrCreate("codalus.debug", "Debug");
 
+    /// <summary>The folder of the debug sessions' logs: <c>debugger</c> under the logs folder.</summary>
+    public string DebugSessionsFolder => Path.Combine(Paths.Logs, "debugger");
+
+    /// <summary>Each debug session's debugger messages, on disk (<see cref="DebugSessionLog"/>).</summary>
+    public DebugSessionLog DebugSessions { get; private set; } = null!;
+
     private void InitializeDebugging()
     {
         Debugger = new DebugService(DebugAdapterLocator.Resolve)
@@ -67,6 +73,9 @@ public sealed partial class ShellHost
             (_remoteCompanion is { } remote ? await RemoteTypeDisplayAsync(remote, type, modules, cancellationToken).ConfigureAwait(false) : null)
             ?? await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
         Debugger.Ended += (_, _) => UseRemoteCompanion(null);
+        // Each session's debugger messages on disk, the last few kept, for Report a Problem (DebugSessionLog).
+        DebugSessions = new DebugSessionLog(DebugSessionsFolder);
+        DebugSessions.Follow(Debugger);
         // The solution's own code (D44): a module named as one of its projects, or built under one's folder.
         Debugger.IsUserModule = path => path is not null && Solutions.Projects.Values.Any(p =>
             string.Equals(p.Name, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)

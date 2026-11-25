@@ -21,4 +21,11 @@ public static class CoreClrAdapter
     /// <c>clr-dap-&lt;time&gt;-&lt;id&gt;.log</c> there, to diagnose it (as <c>CODALUS_NETCOREDBG_LOG</c> does for netcoredbg).
     /// </summary>
     public const string LogVariable = "CODALUS_CLR_DEBUGGER_LOG";
+
+    /// <summary>
+    /// The error code of a launch that ran past one of the adapter's start limits (its launcher's report of the program,
+    /// the program's runtime's start, 30 seconds each): the adapter ended the program, and the start may be made again
+    /// (<see cref="DebugAdapter.IsClrStartTimeout"/>).
+    /// </summary>
+    public const string StartTimeoutCode = "codalus.startTimeout";
 }

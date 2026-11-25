@@ -7,8 +7,24 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Codalus.LanguageServices.Host.WinForms;
 
-/// <summary>A statement of InitializeComponent with where it is: whole lines, from its indentation to its line break.</summary>
-internal sealed record SourceStatement(DesignerStatement Statement, TextSpan Lines, StatementSyntax? Syntax);
+/// <summary>
+/// A statement of InitializeComponent with where it is: whole lines, from its indentation to its line break; for an
+/// assignment the assigned value (<see cref="Value"/>), for a call its arguments (<see cref="Arguments"/>).
+/// </summary>
+internal sealed record SourceStatement(DesignerStatement Statement, TextSpan Lines, TextSpan? Value = null, TextSpan[]? Arguments = null);
+
+/// <summary>
+/// A field of the designer class: its declaration's span, its name's, every name the declaration declares (C# can
+/// declare several), and its modifiers as written (<c>private</c>, <c>Friend WithEvents</c>).
+/// </summary>
+internal sealed record DesignerField(string Name, TextSpan Declaration, TextSpan Identifier, IReadOnlyList<string> Declared, string Modifiers)
+{
+    /// <summary>A Visual Basic <c>WithEvents</c> field, whose events a method's <c>Handles</c> clause can hook.</summary>
+    public bool IsWithEvents => Modifiers.Split(' ').Contains("WithEvents", StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>A use of a resource key in InitializeComponent: <c>resources.ApplyResources(x, "key")</c>, <c>resources.GetObject("key")</c>.</summary>
+internal sealed record DesignerResourceKey(string Method, string Key, TextSpan Literal);
 
 /// <summary>A designer file read (M41a, ADR 0073): its model, and where each part of it is in the text.</summary>
 internal sealed class DesignerSource
@@ -17,28 +33,54 @@ internal sealed class DesignerSource
 
     public required SyntaxTree Tree { get; init; }
 
-    public required ClassDeclarationSyntax Class { get; init; }
-
-    public required MethodDeclarationSyntax Method { get; init; }
-
     public required DesignerModel Model { get; init; }
+
+    /// <summary>The file's language (<see cref="DesignerLanguages"/>), the model's.</summary>
+    public string Language => Model.Language;
 
     /// <summary>The statements and section comments, in order (parallel to <see cref="DesignerModel.Statements"/>).</summary>
     public required IReadOnlyList<SourceStatement> Statements { get; init; }
 
     /// <summary>The designer class's fields by name (the components', <c>components</c>…).</summary>
-    public required IReadOnlyDictionary<string, FieldDeclarationSyntax> Fields { get; init; }
+    public required IReadOnlyDictionary<string, DesignerField> Fields { get; init; }
 
     /// <summary>One statement's indentation.</summary>
     public required string Indent { get; init; }
 
+    /// <summary>A field's indentation (InitializeComponent's).</summary>
+    public required string FieldIndent { get; init; }
+
     public required string NewLine { get; init; }
 
-    /// <summary>The empty lines of a section comment: <c>// </c> (the classic IDE's, with its space) or <c>//</c>.</summary>
+    /// <summary>The empty lines of a section comment: <c>// </c> (the classic IDE's, with its space) or <c>//</c>; in Visual Basic <c>' </c> or <c>'</c>.</summary>
     public required string SectionRule { get; init; }
 
-    /// <summary>The names of the class's components and locals (not the root).</summary>
-    public HashSet<string> Names { get; } = new(StringComparer.Ordinal);
+    /// <summary>What precedes the name on a section comment's middle line: <c>// </c>, <c>' </c> or <c>'</c>.</summary>
+    public required string SectionPrefix { get; init; }
+
+    /// <summary>Where a statement goes in an empty InitializeComponent: the start of the line after its opening.</summary>
+    public required int BodyStart { get; init; }
+
+    /// <summary>After the last statement, or the start of the line that closes InitializeComponent.</summary>
+    public required int BodyEnd { get; init; }
+
+    /// <summary>
+    /// Where the first component's field goes (after an empty line): after the <c>#endregion</c> that follows
+    /// InitializeComponent, else before the class's closing brace (C#); after InitializeComponent's <c>End Sub</c> (Visual Basic).
+    /// </summary>
+    public required int FirstFieldPoint { get; init; }
+
+    /// <summary>The names of components and locals InitializeComponent uses as names (<c>button1</c>, <c>this.button1</c>, not <c>x.button1</c>), and where.</summary>
+    public required IReadOnlyList<(string Name, TextSpan Span)> NameUses { get; init; }
+
+    /// <summary>The resource keys InitializeComponent uses.</summary>
+    public required IReadOnlyList<DesignerResourceKey> ResourceKeys { get; init; }
+
+    /// <summary>The names of the class's components and locals (not the root); case-insensitive in Visual Basic.</summary>
+    public required HashSet<string> Names { get; init; }
+
+    /// <summary>The language's comparison of names: Visual Basic's ignores case.</summary>
+    public StringComparer NameComparer => Language == DesignerLanguages.VisualBasic ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }
 
 /// <summary>Thrown for code the designer can't read, with the line (zero-based) it's on.</summary>
@@ -66,8 +108,13 @@ internal static class DesignerReader
     /// Reads <paramref name="tree"/>'s InitializeComponent. <paramref name="baseType"/> is the class's base type (from the
     /// compilation, or the code file's base list); <paramref name="resolver"/> names types (null: by syntax).
     /// </summary>
-    public static DesignerSource Read(SyntaxTree tree, string baseType, IEnumerable<string> globalUsings, IDesignerTypeResolver? resolver = null)
+    public static DesignerSource Read(SyntaxTree tree, string baseType, IEnumerable<string> globalUsings, IDesignerTypeResolver? resolver = null, string? rootNamespace = null)
     {
+        if (tree.Options.Language == LanguageNames.VisualBasic)
+        {
+            return VisualBasicDesignerReader.Read(tree, baseType, globalUsings, resolver, rootNamespace);
+        }
+
         var root = tree.GetRoot();
         if (DesignerSyntax.FindInitializeComponent(root) is not var (type, method))
         {
@@ -83,12 +130,13 @@ internal static class DesignerReader
         var ns = DesignerSyntax.NamespaceOf(type);
         var imports = DesignerSyntax.UsingsOf(root).Concat(globalUsings).Distinct(StringComparer.Ordinal).ToArray();
         resolver ??= new SyntacticDesignerTypeResolver(ns);
-        var fields = new Dictionary<string, FieldDeclarationSyntax>(StringComparer.Ordinal);
+        var fields = new Dictionary<string, DesignerField>(StringComparer.Ordinal);
         foreach (var field in type.Members.OfType<FieldDeclarationSyntax>())
         {
+            var declared = field.Declaration.Variables.Select(v => v.Identifier.Text).ToArray();
             foreach (var variable in field.Declaration.Variables)
             {
-                fields[variable.Identifier.Text] = field;
+                fields[variable.Identifier.Text] = new DesignerField(variable.Identifier.Text, field.Span, variable.Identifier.Span, declared, string.Join(' ', field.Modifiers.Select(m => m.Text)));
             }
         }
 
@@ -120,18 +168,18 @@ internal static class DesignerReader
         {
             foreach (var (section, lines) in Sections(text, statement))
             {
-                statements.Add(new SourceStatement(new DesignerStatement { Kind = DesignerStatementKinds.Section, Target = section, Line = text.Lines.GetLineFromPosition(lines.Start).LineNumber }, lines, null));
+                statements.Add(new SourceStatement(new DesignerStatement { Kind = DesignerStatementKinds.Section, Target = section, Line = text.Lines.GetLineFromPosition(lines.Start).LineNumber }, lines));
             }
 
             var read = reader.Statement(statement);
-            statements.Add(new SourceStatement(read, LinesOf(text, statement.Span), statement));
+            statements.Add(new SourceStatement(read, LinesOf(text, statement.Span), ValueSpan(statement), ArgumentSpans(statement)));
             if (read.Kind == DesignerStatementKinds.Create && read.Target is not ("components" or "") && read.Value?.Type is { } createdType)
             {
                 var isLocal = statement is LocalDeclarationStatementSyntax;
                 components.Add(new DesignerComponent(read.Target, createdType)
                 {
                     IsLocal = isLocal,
-                    Modifier = !isLocal && fields.TryGetValue(read.Target, out var field) ? string.Join(' ', field.Modifiers.Select(m => m.Text)) : null,
+                    Modifier = !isLocal && fields.TryGetValue(read.Target, out var field) ? field.Modifiers : null,
                 });
             }
         }
@@ -148,26 +196,70 @@ internal static class DesignerReader
             UsesThis = reader.UsesThis,
             QualifiedNames = reader.Qualified,
         };
-        var source = new DesignerSource
+        var sectionRule = SectionRuleOf(text, statements);
+        return new DesignerSource
         {
             Text = text,
             Tree = tree,
-            Class = type,
-            Method = method,
             Model = model,
             Statements = statements,
             Fields = fields,
             Indent = IndentOf(text, body),
+            FieldIndent = IndentationAt(text, method.SpanStart),
             NewLine = NewLineOf(text),
-            SectionRule = SectionRuleOf(text, statements),
+            SectionRule = sectionRule,
+            SectionPrefix = "// ",
+            BodyStart = statements.Count > 0 ? statements[0].Lines.Start : text.Lines.GetLineFromPosition(body.OpenBraceToken.Span.End).EndIncludingLineBreak,
+            BodyEnd = body.Statements.LastOrDefault() is { } last ? LinesOf(text, last.Span).End : text.Lines.GetLineFromPosition(body.CloseBraceToken.SpanStart).Start,
+            FirstFieldPoint = EndRegionAfter(text, method) ?? text.Lines.GetLineFromPosition(type.CloseBraceToken.SpanStart).Start,
+            NameUses = NameUsesOf(body, names),
+            ResourceKeys = ResourceKeysOf(body),
+            Names = names,
         };
-        foreach (var name in names)
+    }
+
+    /// <summary>The value an assignment statement assigns.</summary>
+    private static TextSpan? ValueSpan(StatementSyntax statement) =>
+        statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax assignment } ? assignment.Right.Span : null;
+
+    /// <summary>A call statement's arguments.</summary>
+    private static TextSpan[]? ArgumentSpans(StatementSyntax statement) =>
+        statement is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax invocation } ? [.. invocation.ArgumentList.Arguments.Select(a => a.Span)] : null;
+
+    /// <summary>A line's indentation at <paramref name="position"/>.</summary>
+    public static string IndentationAt(SourceText text, int position)
+    {
+        var content = text.Lines.GetLineFromPosition(position).ToString();
+        return content[..(content.Length - content.TrimStart().Length)];
+    }
+
+    /// <summary>After the <c>#endregion</c> line that follows InitializeComponent, if there is one.</summary>
+    private static int? EndRegionAfter(SourceText text, MethodDeclarationSyntax method)
+    {
+        foreach (var trivia in method.GetLastToken().GetNextToken().LeadingTrivia)
         {
-            source.Names.Add(name);
+            if (trivia.IsKind(SyntaxKind.EndRegionDirectiveTrivia))
+            {
+                return text.Lines.GetLineFromPosition(trivia.SpanStart).EndIncludingLineBreak;
+            }
         }
 
-        return source;
+        return null;
     }
+
+    /// <summary><c>button1</c> and <c>this.button1</c> in InitializeComponent (not <c>Foo.button1</c>, a member of something else).</summary>
+    private static List<(string, TextSpan)> NameUsesOf(BlockSyntax body, HashSet<string> names) =>
+        [.. body.DescendantNodes().OfType<IdentifierNameSyntax>()
+            .Where(i => names.Contains(i.Identifier.Text) && !(i.Parent is MemberAccessExpressionSyntax access && access.Name == i && access.Expression is not ThisExpressionSyntax))
+            .Select(i => (i.Identifier.Text, i.Identifier.Span))];
+
+    /// <summary>The keys of <c>resources.ApplyResources(x, "key")</c>, <c>resources.GetObject("key")</c> and <c>resources.GetString("key")</c>.</summary>
+    private static List<DesignerResourceKey> ResourceKeysOf(BlockSyntax body) =>
+        [.. body.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Where(i => i.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "resources" } }
+                && i.ArgumentList.Arguments.LastOrDefault()?.Expression is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression })
+            .Select(i => new DesignerResourceKey(((MemberAccessExpressionSyntax)i.Expression).Name.Identifier.Text,
+                ((LiteralExpressionSyntax)i.ArgumentList.Arguments[^1].Expression).Token.ValueText, i.ArgumentList.Arguments[^1].Expression.Span))];
 
     /// <summary>The field a creation's left side assigns (<c>button1</c>, <c>this.button1</c>, <c>components</c>), or null.</summary>
     private static string? FieldName(ExpressionSyntax left) => left switch
@@ -222,7 +314,7 @@ internal static class DesignerReader
         return braceIndent + (braceIndent.Contains('\t', StringComparison.Ordinal) ? "\t" : "    ");
     }
 
-    private static string NewLineOf(SourceText text) =>
+    internal static string NewLineOf(SourceText text) =>
         text.Lines.Count > 1 && text.Lines[0].EndIncludingLineBreak - text.Lines[0].End == 2 ? "\r\n" : "\n";
 
     /// <summary>The rule lines of the file's section comments; the classic IDE's (<c>// </c>) for a file that has none.</summary>
