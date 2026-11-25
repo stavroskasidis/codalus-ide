@@ -51,7 +51,7 @@ public sealed partial class ShellHost
         MemoryWindow = new MemoryViewModel(Debugger);
         ParallelStacksWindow = new ParallelStacksViewModel(Debugger);
         ParallelWatchWindow = new ParallelWatchViewModel(Debugger);
-        ProcessesWindow = new ProcessesViewModel(Debugger, Run);
+        ProcessesWindow = new ProcessesViewModel(Debugger, Run, EndDebuggedProcessAsync);
         DebugLocation = new DebugLocationViewModel(Debugger, ProcessesWindow);
         Toolbar.DebugLocation = DebugLocation;
         ExceptionSettingsWindow = new ExceptionSettingsViewModel(Debugger.ExceptionSettings);

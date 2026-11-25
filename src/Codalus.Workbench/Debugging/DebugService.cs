@@ -564,7 +564,12 @@ public sealed class DebugService : IAsyncDisposable
     /// is reported in the Debug Console and the others go on.
     /// </summary>
     /// <param name="compound">A compound session even for one program, so programs can join it later (<see cref="AddLaunch"/>, M17b).</param>
-    public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken, bool compound = false)
+    /// <param name="joinable">
+    /// A compound session too, which looks like a one-program session until another program joins (#547: one
+    /// project's F5, which Debug → Start New Instance can add programs to): its threads and exit don't carry the
+    /// program's name until then (<see cref="CompoundDebugAdapter.NamesSoleProgram"/>).
+    /// </param>
+    public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken, bool compound = false, bool joinable = false)
     {
         if (launches.Count == 0)
         {
@@ -577,7 +582,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var parts = launches.Select((launch, index) => Part(launch, index, cancellationToken)).ToList();
-        if (parts.Count == 1 && !compound)
+        if (parts.Count == 1 && !compound && !joinable)
         {
             await StartAsync(parts[0].CreateAsync, adapter => parts[0].StartAsync(adapter), attached: false, [parts[0].Process], cancellationToken, parts[0].ConfiguredAsync).ConfigureAwait(false);
             return;
@@ -586,7 +591,11 @@ public sealed class DebugService : IAsyncDisposable
         await StartAsync(
             async ct =>
             {
-                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true) { BreakAllOnStop = BreakAllProcesses?.Invoke() ?? true };
+                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true)
+                {
+                    BreakAllOnStop = BreakAllProcesses?.Invoke() ?? true,
+                    NamesSoleProgram = !joinable || parts.Count > 1,
+                };
                 compound.Reserve(parts.Count - 1); // the session waits for the others, even if the first program ends at once
                 compound.PartChanged += OnPartChanged;
                 return compound;
@@ -671,6 +680,49 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         await session.EndPartAsync(index, _session.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The Processes window's Terminate Process and Detach Process (#547): the program at <paramref name="index"/> of
+    /// <see cref="Processes"/> alone, the others going on. In a session of independent programs it ends (or is detached
+    /// from) by itself, and the session ends with its last program; in another session the program is the session's,
+    /// which ends (Stop, or Detach All when every program can be left running).
+    /// </summary>
+    public async Task EndProcessAsync(int index, bool detach)
+    {
+        DebugProcess? process;
+        lock (_gate)
+        {
+            process = index >= 0 && index < _processes.Count ? _processes[index] : null;
+        }
+
+        if (process is null || process.Ended || (detach && !process.CanDetach))
+        {
+            return;
+        }
+
+        if (_adapter is not CompoundDebugAdapter { Independent: true } session)
+        {
+            await (detach ? DetachAsync() : StopAsync()).ConfigureAwait(false);
+            return;
+        }
+
+        // A program netcoredbg attached to in the terminal or a console window: its disconnect only detaches, so it is
+        // ended here (as KillTerminalPrograms does), or, detached from, left out of the session's Stop.
+        var held = false;
+        if (process.Id is { } pid)
+        {
+            lock (_gate)
+            {
+                held = _terminalProcesses.Remove(pid);
+            }
+        }
+
+        await session.EndPartAsync(index, _session.Token, terminateDebuggee: !detach).ConfigureAwait(false);
+        if (!detach && held && process.Id is { } ended)
+        {
+            KillProgram(ended);
+        }
     }
 
     /// <summary>
@@ -792,7 +844,7 @@ public sealed class DebugService : IAsyncDisposable
                 index,
                 new DebugProcess(launch.Name, null, window ? DebugProcess.ConsoleWindow : DebugProcess.Launched, null),
                 async ct => await StartDesktopClrAdapterAsync(ct, Is32BitDesktopClrProgram(launch.Plan.FileName)).ConfigureAwait(false),
-                adapter => ((DebugAdapter)adapter).LaunchAsync(DesktopClrArguments(launch.Plan, window), DapJsonContext.Default.NetFxDebugArguments, cancellationToken));
+                adapter => ((DebugAdapter)adapter).LaunchAsync(DesktopClrArguments(launch.Plan, window) with { StopAtEntry = launch.StopAtEntry }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken));
         }
 
         if (launch.Remote is { } remote)
@@ -803,8 +855,8 @@ public sealed class DebugService : IAsyncDisposable
                 new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
                 async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct, remote.LocalBuild).ConfigureAwait(false),
                 adapter => remote.Adapter.IsCodalus
-                    ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
-                    : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
+                    ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments) with { StopAtEntry = launch.StopAtEntry }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering, StopAtEntry = launch.StopAtEntry }, DapJsonContext.Default.LaunchArguments, cancellationToken));
         }
 
         if (UseCodalusAdapter(launch.Plan))
@@ -830,7 +882,7 @@ public sealed class DebugService : IAsyncDisposable
                 new DebugProcess(launch.Name, null, console is null ? DebugProcess.Launched : inWindow ? DebugProcess.ConsoleWindow : DebugProcess.Terminal, null),
                 async ct => await StartCoreClrAdapterAsync(ct, console, RunsAsX64OnAppleSilicon(launch.Plan)).ConfigureAwait(false),
                 adapter => ((DebugAdapter)adapter).LaunchAsync(
-                    CoreClrArguments(launch.Plan) with { Console = console is null ? null : inWindow ? "externalTerminal" : "integratedTerminal" },
+                    CoreClrArguments(launch.Plan) with { Console = console is null ? null : inWindow ? "externalTerminal" : "integratedTerminal", StopAtEntry = launch.StopAtEntry },
                     DapJsonContext.Default.NetFxDebugArguments,
                     cancellationToken));
         }
@@ -844,6 +896,13 @@ public sealed class DebugService : IAsyncDisposable
             // to netcoredbg uses the Debug Console too.
             if ((window ? ConsoleWindows : Terminal) is { } terminal && StartupHook is { } hook && !(OperatingSystem.IsMacOS() && !window && UsesCodalusAdapter))
             {
+                if (launch.StopAtEntry)
+                {
+                    // netcoredbg's stopAtEntry is a launch's: this program is attached to. TODO(issue): stop it at its
+                    // entry point too (a breakpoint at the entry method's first line, read from its PDB).
+                    Output?.Invoke(this, DebugOutput.Diagnostic($"[{launch.Name}] netcoredbg doesn't stop at the entry point of a program it attaches to in {(window ? "a console window" : "the integrated terminal")}: it runs to its first breakpoint. The Codalus debugger (debug.adapter) stops there.\n"));
+                }
+
                 HeldLaunch? held = null;
                 return new LaunchPart(
                     launch.Name,
@@ -895,7 +954,7 @@ public sealed class DebugService : IAsyncDisposable
             index,
             new DebugProcess(launch.Name, null, DebugProcess.Launched, null),
             async ct => await StartForPlanAsync(launch.Plan, ct).ConfigureAwait(false),
-            adapter => ((DebugAdapter)adapter).LaunchAsync(Arguments(launch.Plan), cancellationToken));
+            adapter => ((DebugAdapter)adapter).LaunchAsync(Arguments(launch.Plan) with { StopAtEntry = launch.StopAtEntry }, cancellationToken));
     }
 
     /// <summary>A program of an independent compound session started or ended: its index is its place in <see cref="Processes"/> (<see cref="JoinAsync"/>).</summary>
@@ -1040,6 +1099,21 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Whether the session is a compound one that a browser can join.</summary>
     public bool IsCompound => _adapter is CompoundDebugAdapter;
+
+    /// <summary>
+    /// Whether a program can join the running session (<see cref="AddLaunch"/>): a session of independent programs
+    /// (one project's F5, multiple startup projects, an AppHost's, compose's) with room for another.
+    /// </summary>
+    public bool CanAddLaunch
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _adapter is CompoundDebugAdapter { Independent: true } && _processes.Count < CompoundDebugAdapter.MaxParts;
+            }
+        }
+    }
 
     /// <summary>
     /// The browser joins the running compound session: <paramref name="start"/> starts vscode-js-debug, which opens
@@ -2605,7 +2679,7 @@ public sealed class DebugService : IAsyncDisposable
             case DapEvents.Exited when DebugAdapter.Read(e.Body, DapJsonContext.Default.ExitedEvent) is { } exited:
                 _exitCode = exited.ExitCode;
                 _exitReported = true;
-                var program = _adapter is CompoundDebugAdapter { Independent: true } programs ? $"[{programs.PartNames[0]}] " : string.Empty;
+                var program = _adapter is CompoundDebugAdapter { NamesPrograms: true } programs ? $"[{programs.PartNames[0]}] " : string.Empty;
                 Output?.Invoke(this, DebugOutput.Diagnostic($"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
                 break;
             case DapEvents.Terminated:

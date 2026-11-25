@@ -1542,6 +1542,44 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             && _shell.Solutions.Projects.TryGetValue(orderedProject, out var orderedInfo) && CompileOrder.Of(orderedInfo).Contains(ordered, SolutionService.PathComparer));
         _shell.Workbench.Context.Set("explorerItemIsProjectFile", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } projectFile } && SolutionTree.IsProjectFile(projectFile));
         _shell.Workbench.Context.Set("explorerProjectLoaded", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } loadedFile } && _shell.Solutions.Solution?.Projects.Any(p => SolutionService.PathComparer.Equals(p.Path, loadedFile)) == true);
+        SetStartableContext(value);
+    }
+
+    /// <summary>
+    /// <c>explorerItemStartable</c> (#547, the Debug ▸ submenu): the selected project starts, as a program (OutputType
+    /// Exe or WinExe) or through its launch profiles' Roslyn component profile (an analyzer or generator debugged on its
+    /// target). A library's launch settings are read off the UI thread, and the key is set once they are, if it's still
+    /// the selection.
+    /// </summary>
+    private void SetStartableContext(ExplorerRowViewModel? value)
+    {
+        var project = value?.Node is { Kind: ExplorerNodeKind.Project, IsUnloaded: false, ProjectPath: { } path } ? path : null;
+        var executable = project is not null && _shell.Runs.IsExecutable(project);
+        _shell.Workbench.Context.Set("explorerItemStartable", executable);
+        if (project is null || executable || !_shell.Solutions.Projects.ContainsKey(project))
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            var folder = System.IO.Path.GetDirectoryName(project) ?? string.Empty;
+            foreach (var settings in new[] { System.IO.Path.Combine(folder, "Properties", "launchSettings.json"), System.IO.Path.Combine(folder, "My Project", "launchSettings.json") })
+            {
+                var (profiles, _) = await Codalus.Workbench.Build.LaunchSettings.ReadAsync(settings, CancellationToken.None).ConfigureAwait(false);
+                if (profiles.Any(p => p.CommandName == Codalus.Workbench.Build.LaunchProfile.RoslynComponent))
+                {
+                    Ui.Post(() =>
+                    {
+                        if (Selected?.Node.ProjectPath is { } selected && SolutionService.PathComparer.Equals(selected, project) && Selected.Node.Kind == ExplorerNodeKind.Project)
+                        {
+                            _shell.Workbench.Context.Set("explorerItemStartable", true);
+                        }
+                    });
+                    return;
+                }
+            }
+        });
     }
 
     public ExplorerNode? Root => _root;

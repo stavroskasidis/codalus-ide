@@ -173,6 +173,7 @@ internal static partial class BuiltIns
         });
         Add("project.runCustomTool", "Run Custom Tool", "Project", p => shell.RunCustomToolAsync(p), "solutionOpen");
         Add("run.startWithoutDebugging", "Start Without Debugging", "Debug", p => shell.StartWithoutDebuggingAsync(p), Idle);
+        Add("run.startProjectWithoutDebugging", "Start Project Without Debugging", "Debug", shell.StartProjectWithoutDebuggingAsync, Idle); // Solution Explorer's Debug ▸ (#547)
         // From .NET 6 (M33): for an older startup project the command is disabled, and the menu says why.
         Add("run.startWithHotReload", "Start with Hot Reload", "Debug", shell.StartWithHotReloadAsync, Idle + " && hotReloadSupported");
         Add("run.applyCodeChanges", "Apply Code Changes (Hot Reload)", "Debug", _ => shell.ApplyCodeChangesAsync(), "hotReloadRunning");
@@ -208,6 +209,7 @@ internal static partial class BuiltIns
             new(location, command, shell) { Group = group, Order = order, When = WhenClause.Parse(when), Title = title };
 
         const string Context = SolutionExplorerView.ContextMenuLocation;
+        const string Startable = "explorerItemKind == project && explorerItemStartable";
         menus.Add(
         [
             // The menu bar is BuiltIns.Menus.cs.
@@ -218,7 +220,12 @@ internal static partial class BuiltIns
             Item(Context, "build.rebuildProject", "0-build", 2, "explorerItemKind == project", "Rebuild"),
             Item(Context, "build.cleanProject", "0-build", 3, "explorerItemKind == project", "Clean"),
             Item(Context, "run.setStartupProject", "4-solution", 0, "explorerItemKind == project"),
-            Item(Context, "run.configureStartupProjects", "4-solution", 1, "explorerItemKind == solution"),
+            // Debug ▸ (#547): the classic IDE's, for a project that starts (a program, or a Roslyn component's profile).
+            MenuItemRule.ForSubmenu(Context, SolutionExplorerView.DebugMenuLocation, "Debug", shell) with { Group = "4-solution", Order = 1, When = WhenClause.Parse(Startable) },
+            Item(SolutionExplorerView.DebugMenuLocation, "debug.startNewInstance", "1-start", 0, Startable),
+            Item(SolutionExplorerView.DebugMenuLocation, "run.startProjectWithoutDebugging", "1-start", 1, Startable, "Start Without Debugging"),
+            Item(SolutionExplorerView.DebugMenuLocation, "debug.stepIntoNewInstance", "1-start", 2, Startable),
+            Item(Context, "run.configureStartupProjects", "4-solution", 2, "explorerItemKind == solution"),
             Item(Context, "project.runCustomTool", "1-open", 9, "explorerItemInProject && explorerItemName =~ /(?i)\\.(resx|tt)$/"),
         ]);
     }
