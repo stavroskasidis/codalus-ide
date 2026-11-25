@@ -113,7 +113,7 @@ public sealed partial class ShellHost
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(ViewModels.DebugConsoleViewModel.ToolWindowId, focus: false);
-            await Debugger.LaunchAsync([new DebugLaunch($"{project.Name} ({framework})", plan) { Console = ConsoleFor(info) }], CancellationToken.None).ConfigureAwait(true);
+            await Debugger.LaunchAsync([new DebugLaunch($"{project.Name} ({framework})", plan) { Console = ConsoleFor(info) }], CancellationToken.None, joinable: true).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException)
         {

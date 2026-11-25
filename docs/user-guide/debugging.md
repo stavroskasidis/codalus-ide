@@ -14,7 +14,7 @@ On Windows, **.NET Framework** programs (and their tests) are debugged by Codalu
 | Attach to Process on a Remote Machine (over SSH, in a container, in WSL) | Debug menu |
 | Stop (terminates a launched program and waits until it has ended, detaches from an attached one) | `Shift+F5` |
 | Detach All (an attached program, or one launched in the terminal, keeps running) | Debug menu |
-| Restart | `Ctrl+Shift+F5` |
+| Restart (every program of the session comes back: F5's, and each one Start New Instance added) | `Ctrl+Shift+F5` |
 | Break All | `Ctrl+Alt+Break` (`⌘⌥P` on macOS) |
 
 **Break All** stops every thread, and the Call Stack shows the first thread running code of your own (or, when no thread is, the first that has managed frames). When no thread is running .NET code at all (a program that is still starting, or one running only native code), the Call Stack shows **[External Code]**: continue, and Break All again shows the program's code once it runs. Choose another thread in the Call Stack's thread list or the Threads window. Pressed while the debugger is still attaching to a program on this machine (one that is slow to attach to, such as a packaged WinUI app starting on a busy machine), Break All waits until the debugger has attached, up to a minute, then stops the program.
@@ -39,6 +39,17 @@ F5 then builds the solution once and starts the projects in that order. Those se
 - the session ends when the last program ends.
 
 The choice is saved with the solution, for you only, in `.codalus/state/` next to it (not in the solution file; see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)).
+
+### Starting another project while you debug
+
+Right-click a project that starts (a program, or a library with an [analyzer or generator profile](#analyzers-and-source-generators)) in Solution Explorer and choose **Debug**, as in the classic IDE:
+- **Start New Instance** builds that project and starts it under the debugger with its launch profile. With nothing being debugged it starts as F5 would start it; while you debug, it **joins the running session**, as one more program: F5 the API, then add its client without stopping it or setting up multiple startup projects. Start it twice for two instances.
+- **Start Without Debugging** runs that project (Ctrl+F5 runs the startup project).
+- **Step Into New Instance** does what Start New Instance does, and stops at the program's first line: the first statement of `Main`, of top-level statements, or of an async `Main`.
+
+A program that joins is part of the session as [several startup projects](#several-startup-projects) are: its threads are named after it once a second program runs, it stops at its own breakpoints, and the Processes window lists it. Right-click a program in the **Processes** window to **Terminate Process** or **Detach Process** (for one attached to, or with a console of its own) while the others go on. **Restart** brings back every program, and Stop ends them all.
+
+Some sessions and projects don't take part yet, and say so instead: a session attached to a process, a web app debugged with its page, a Blazor WebAssembly app, an Aspire AppHost, a container profile, a mobile or packaged app, and projects in a remote window. Stop the session to debug one of them, or start it without debugging.
 
 ### Debugging on other machines
 
@@ -355,6 +366,7 @@ The Codalus debugger's own limits:
 - symbols found on a server give a module its lines and names; its source files still come from your disk (embedded sources and Source Link aren't read by the debugger yet)
 - F# expressions are read as C#'s subset
 - Edit and Continue doesn't cover modules built with Windows PDBs
+- Start New Instance adds only programs that run on this machine or in WSL to a running session, and only to a session of such programs ([Starting another project while you debug](#starting-another-project-while-you-debug))
 - the async call stack is for state machines only, and ends at `Task.WhenAll`, `Task.WhenAny` and `ContinueWith`; runtime async has none, and its limits for Step Out of a resumed method ([Async code](#async-code-and-runtime-async-net-11))
 
 These are netcoredbg's, when you choose it as the fallback; [the Codalus debugger](#the-codalus-debugger) does the first eight:
@@ -367,6 +379,7 @@ These are netcoredbg's, when you choose it as the fallback; [the Codalus debugge
 - no `new`, lambdas or generic methods in expressions, and hit counts and logpoints stop the program at each hit
 - with several startup projects, a stop in one program doesn't pause the others (on Windows, a program netcoredbg paused that way didn't always go on)
 - no data breakpoints and no mixed-mode debugging
+- Step Into New Instance doesn't stop at the entry point of a program netcoredbg attaches to in the integrated terminal or a console window: it runs to its first breakpoint
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
 - dumps written on another operating system don't open
 - no console input for a program debugged with the Debug Console (set `debug.console` to `integratedTerminal`)
