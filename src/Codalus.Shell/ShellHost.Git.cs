@@ -192,6 +192,7 @@ public sealed partial class ShellHost
         Workbench.Context.Set("gitRepository", Git.Status is not null);
         Workbench.Context.Set("gitMerging", Git.Status?.IsMerging ?? false);
         UpdateGitDepthStatus();
+        UpdateActiveFileGitKeys();
         _ = UpdateHasRemoteAsync();
         if (Git.Status is not { } status)
         {

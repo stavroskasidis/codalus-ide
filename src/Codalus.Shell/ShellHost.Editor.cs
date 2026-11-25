@@ -251,6 +251,7 @@ public sealed partial class ShellHost : IEditorServices
         // Lines of code outside the editor (Find Results, the WCF Test Client's response) take the editor's colors (M34h).
         Editor.CodeColors.Configure(Languages.LanguageIdOf, id => TextMate.TokenizerFor(id), id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
         ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
+        TextMate.Changed += (_, _) => Ui.Post(() => Editor.CodeColors.LanguagesChanged(Languages.LanguageIdOf)); // a plugin's grammars
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.DocumentClosed += (_, document) => OnDiffClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
@@ -1422,6 +1423,7 @@ public sealed partial class ShellHost : IEditorServices
         Workbench.Context.Set("editorExtension", ActiveEditor?.Model.Path is { } activePath ? Path.GetExtension(activePath).ToLowerInvariant() : null);
         FollowXamlEditor();
         OnHistoryDocumentChanged();
+        UpdateActiveFileGitKeys();
         if (ActiveEditor is { Controller: { } controller } editor)
         {
             controller.CaretChanged -= OnCaretChanged;

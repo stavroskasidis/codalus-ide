@@ -5,6 +5,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 ## 1.1.0
 
 **New since 1.0.0:**
+- **The editor's Git menu, as the classic IDE's** ([user guide](docs/user-guide/git.md#in-the-editor)): right-click → Git has Commit or Stash…, Undo Changes (the file back to the last commit, after asking), View History, Compare with Unmodified…, Blame (Annotate) and Ignore and Untrack item, before View Line History, Show Commit for Line and Compare with Branch or Commit.
 - **Visual Basic forms in the Windows Forms designer** ([user guide](docs/user-guide/windows-desktop.md#visual-basic-forms)): a Visual Basic project's `Form1.vb` opened as code, as only C#'s forms opened in the designer. It now opens in the designer and works as C#'s does, written as the classic IDE writes Visual Basic, in your file's own style: new controls are `Friend WithEvents` fields named `Button1`, event handlers have `Handles` clauses in the form's code, and Add New Item has Visual Basic's Form and User Control.
 
 ## 1.0.0
