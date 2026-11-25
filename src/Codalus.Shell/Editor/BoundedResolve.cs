@@ -9,7 +9,7 @@ namespace Codalus.Shell.Editor;
 internal static class BoundedResolve
 {
     /// <summary>How many resolves are in flight at once.</summary>
-    public const int Window = 4;
+    public const int Window = 1; // bisect V2 (was 4)
 
     /// <summary>
     /// Resolves <paramref name="items"/>, applying each answer while <paramref name="current"/> holds; returns the first
