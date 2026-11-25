@@ -5,6 +5,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 ## 1.1.0
 
 **New since 1.0.0:**
+- **Launch profiles of several startup projects in the toolbar** ([user guide](docs/user-guide/debugging.md#launch-profiles-of-several-projects), [#543](https://github.com/stavroskasidis/codalus-ide/issues/543)): the startup project box lists `<Multiple Startup Projects>` and your named sets of startup projects after the projects, so switching between one project and several is one choice, and the Start button says which. The Startup Projects page names the sets and keeps them in the classic IDE's launch files next to the solution (`.slnLaunch`, `.slnxLaunch`), shared for your team to commit or kept to you in their `.user` file, and each project of a set has its own launch profile. Fixed with it: with multiple startup projects on, the toolbar named one project while Start started several.
 - **Visual Basic forms in the Windows Forms designer** ([user guide](docs/user-guide/windows-desktop.md#visual-basic-forms)): a Visual Basic project's `Form1.vb` opened as code, as only C#'s forms opened in the designer. It now opens in the designer and works as C#'s does, written as the classic IDE writes Visual Basic, in your file's own style: new controls are `Friend WithEvents` fields named `Button1`, event handlers have `Handles` clauses in the form's code, and Add New Item has Visual Basic's Form and User Control.
 
 ## 1.0.0

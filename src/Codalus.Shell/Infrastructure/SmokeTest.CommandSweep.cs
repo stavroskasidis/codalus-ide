@@ -1622,7 +1622,7 @@ internal sealed partial class SmokeTest
             shell.SetStartupProject(startup);
         }
 
-        if (shell.Runs.MultipleStartup != before.MultipleStartup || !shell.Runs.StartupEntries.SequenceEqual(before.StartupEntries))
+        if (shell.Runs.MultipleStartup != before.MultipleStartup || !shell.Runs.StartupEntries.SequenceEqual(before.StartupEntries) || shell.Runs.ChosenLaunchSet != before.LaunchSet)
         {
             lock (saw)
             {
@@ -1630,6 +1630,10 @@ internal sealed partial class SmokeTest
             }
 
             shell.Runs.SetStartupProjects(before.MultipleStartup, before.StartupEntries, before.StartupProject);
+            if (before.LaunchSet is not null)
+            {
+                shell.Runs.SelectLaunchSet(before.LaunchSet);
+            }
         }
 
         await RestoreSweepSettingsAsync(before.UserSettings, saw).ConfigureAwait(true);
@@ -1639,11 +1643,11 @@ internal sealed partial class SmokeTest
     }
 
     private sealed record SweepBaseline(HashSet<string> ToolWindows, HashSet<ShellDocument> Documents, int Running, string? StartupProject, string? UserSettings,
-        bool MultipleStartup, IReadOnlyList<Workbench.Build.StartupEntry> StartupEntries)
+        bool MultipleStartup, IReadOnlyList<Workbench.Build.StartupEntry> StartupEntries, string? LaunchSet)
     {
         public static SweepBaseline Capture(ShellHost shell, Window window) =>
             new([.. shell.Layout.OpenToolWindows.Select(t => t.Id)], [.. shell.Layout.Documents], shell.Runs.Running.Count, shell.Runs.StartupProject,
-                File.Exists(shell.Paths.SettingsFile) ? File.ReadAllText(shell.Paths.SettingsFile) : null, shell.Runs.MultipleStartup, shell.Runs.StartupEntries);
+                File.Exists(shell.Paths.SettingsFile) ? File.ReadAllText(shell.Paths.SettingsFile) : null, shell.Runs.MultipleStartup, shell.Runs.StartupEntries, shell.Runs.ChosenLaunchSet);
     }
 
     /// <summary>Puts back the user settings a command changed (a toggle, a theme): the next commands run with the sweep's.</summary>

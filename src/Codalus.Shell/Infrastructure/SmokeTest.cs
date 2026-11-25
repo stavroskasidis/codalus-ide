@@ -1958,7 +1958,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
     }
 
-    /// <summary>Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session.</summary>
+    /// <summary>
+    /// Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session; as a named
+    /// set saved in the solution's launch file and chosen in the toolbar (ADR 0109).
+    /// </summary>
     private async Task DebugCompoundStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
@@ -1978,8 +1981,36 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         page.Rows.Single(r => r.Name == "Debuggee").Action = Workbench.Build.StartupAction.Start;
         page.Apply();
         Check(shell.Runs.StartupTargets.Count == 2, "two projects start");
+
+        // A named set (ADR 0109), shared: saved in Sessions.slnxLaunch, the classic IDE's launch file. The step runs
+        // twice (under the Codalus debugger again): the second time the page reads it from the file.
+        if (page.Sets.FirstOrDefault(s => s.Name == "Both") is { } both)
+        {
+            page.SelectedSet = both;
+        }
+        else
+        {
+            page.NewSet();
+            page.SetName = "Both";
+        }
+
+        page.IsShared = true;
+        page.Rows.Single(r => r.Name == "Partner").Action = Workbench.Build.StartupAction.Start;
+        page.Rows.Single(r => r.Name == "Debuggee").Action = Workbench.Build.StartupAction.Start;
+        await page.ApplyAsync().ConfigureAwait(true);
+        var launchFile = Path.Combine(Sessions, "Sessions.slnxLaunch");
+        Check(File.Exists(launchFile) && File.ReadAllText(launchFile).Contains("\"Name\": \"Both\"", StringComparison.Ordinal), $"the named set is saved in Sessions.slnxLaunch ({page.Status})");
+        Check(shell.Runs.ActiveLaunchSet?.Name == "Both" && shell.Runs.StartupTargets.Count == 2, "Start starts the named set's two projects");
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("smoke-test-startup-projects.png");
+
+        // The toolbar lists the sets after the projects: back to one project, then the set chosen there again.
+        shell.SetStartupProject(Path.Combine(Sessions, "Debuggee", "Debuggee.csproj"));
+        await WaitAsync(() => shell.Toolbar.StartupProjects.Any(c => c.Name == "Both") && shell.Toolbar.StartupProject?.Name == "Debuggee", "the toolbar lists the named set and shows the single project").ConfigureAwait(true);
+        Check(shell.Toolbar.StartupProjects.Any(c => c.Name == ShellHost.MultipleStartupProjectsLabel), "the toolbar lists <Multiple Startup Projects>");
+        shell.Toolbar.StartupProject = shell.Toolbar.StartupProjects.Single(c => c.Name == "Both");
+        await WaitAsync(() => shell.Runs.ActiveLaunchSet?.Name == "Both" && shell.Toolbar.StartLabel == "Both", "choosing the set in the toolbar makes Start start it").ConfigureAwait(true);
+        Check(shell.Runs.StartupTargets.Count == 2, "two projects start");
 
         var debuggee = SessionSource("Debuggee", "Program.cs");
         var partner = SessionSource("Partner", "Program.cs");

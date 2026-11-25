@@ -4,7 +4,10 @@ using Codalus.Shell.Infrastructure;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>A project in the toolbar's startup project list.</summary>
+/// <summary>
+/// An entry of the toolbar's startup project list: a project (<see cref="Path"/> its path), or a pseudo-path the shell
+/// reads (a folder's launch configuration, a set of startup projects, ADR 0109).
+/// </summary>
 public sealed record StartupProjectChoice(string Name, string Path)
 {
     public override string ToString() => Name;
@@ -92,6 +95,9 @@ public sealed class ToolbarViewModel : ObservableObject
 
     public ICommand StartWithoutDebuggingCommand => _command("run.startWithoutDebugging");
 
+    /// <summary>The Start drop-down's entry while a set of startup projects is chosen (ADR 0109).</summary>
+    public ICommand ConfigureStartupProjectsCommand => field ??= _command("run.configureStartupProjects");
+
     public ICommand BreakAllCommand => _command("debug.pause");
 
     public ICommand StopCommand => _command(_isDebugging ? "debug.stop" : "run.stop");
@@ -160,6 +166,9 @@ public sealed class ToolbarViewModel : ObservableObject
             }
         }
     }
+
+    /// <summary>Whether Start starts a set of startup projects (ADR 0109): the drop-down then offers Configure Startup Projects.</summary>
+    public bool IsStartupSet { get; private set; }
 
     /// <summary>The Start button's text: the startup project and its launch profile, or "Start".</summary>
     public string StartLabel
@@ -237,14 +246,19 @@ public sealed class ToolbarViewModel : ObservableObject
         }
     }
 
-    /// <summary>The executable projects, the startup project and its launch profile.</summary>
-    public void SetStartup(IReadOnlyList<StartupProjectChoice> projects, string? startup, string? profile)
+    /// <summary>
+    /// The executable projects (and the sets of startup projects), the chosen one and its launch profile. A set of
+    /// startup projects has no profile of its own: its name is the Start button's text.
+    /// </summary>
+    public void SetStartup(IReadOnlyList<StartupProjectChoice> projects, string? startup, string? profile, bool startupSet = false)
     {
         _updating = true;
         try
         {
+            IsStartupSet = startupSet;
             Replace(StartupProjects, projects);
-            StartupProject = StartupProjects.FirstOrDefault(p => Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(p.Path, startup));
+            StartupProject = StartupProjects.FirstOrDefault(p => string.Equals(p.Path, startup, StringComparison.Ordinal))
+                             ?? StartupProjects.FirstOrDefault(p => Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(p.Path, startup));
             StartLabel = StartupProject is null ? "Start" : profile is null || profile == StartupProject.Name ? StartupProject.Name : $"{StartupProject.Name}: {profile}";
         }
         finally

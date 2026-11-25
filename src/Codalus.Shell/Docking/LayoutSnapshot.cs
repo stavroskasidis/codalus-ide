@@ -157,8 +157,11 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
     /// <summary>Whether several startup projects start together (M14c); null or false: the single startup project.</summary>
     public bool? MultipleStartupProjects { get; init; }
 
-    /// <summary>The startup projects' actions, in start order (M14c).</summary>
+    /// <summary>The unnamed set's startup projects: their actions and launch profiles, in start order (M14c, ADR 0109).</summary>
     public IReadOnlyList<SessionStartupProject>? StartupProjects { get; init; }
+
+    /// <summary>The named set of the solution's launch files Start starts (ADR 0109); null: the unnamed set, or a single project.</summary>
+    public string? LaunchSet { get; init; }
 
     /// <summary>The active solution configuration (ADR 0070); reopened with it while the solution still has it.</summary>
     public string? Configuration { get; init; }
@@ -201,8 +204,11 @@ public sealed record SessionGitRepositories
 /// <summary>The Error List's filters, kept with the solution: what it shows and from which source (0: build and IntelliSense, 1: build, 2: IntelliSense).</summary>
 public sealed record SessionErrorList(bool ShowErrors = true, bool ShowWarnings = true, bool ShowMessages = true, int Source = 0, bool CurrentDocumentOnly = false);
 
-/// <summary>A project of multiple startup projects: <see cref="Action"/> is <c>Start</c> or <c>StartWithoutDebugging</c>.</summary>
-public sealed record SessionStartupProject(string Path, string Action);
+/// <summary>
+/// A project of multiple startup projects: <see cref="Action"/> is <c>Start</c> or <c>StartWithoutDebugging</c>, and
+/// <see cref="Profile"/> its launch profile (ADR 0109; a session from before has none, and takes the project's chosen one).
+/// </summary>
+public sealed record SessionStartupProject(string Path, string Action, string? Profile = null);
 
 /// <summary>A data tip pinned to a line (1-based), kept with the solution.</summary>
 public sealed record SessionDataTip(string Path, int Line, string Expression, string? Comment = null);
