@@ -144,9 +144,11 @@ internal static class VisualBasicStructure
             switch (node)
             {
                 case NamespaceBlockSyntax or TypeBlockSyntax or EnumBlockSyntax:
-                case MethodBlockBaseSyntax or PropertyBlockSyntax or EventBlockSyntax:
                 case MultiLineLambdaExpressionSyntax:
                     Add(node.SpanStart, node.Span.End);
+                    break;
+                case MethodBlockBaseSyntax or PropertyBlockSyntax or EventBlockSyntax:
+                    Add(node.SpanStart, node.Span.End, FoldingKinds.Member); // Collapse to Definitions folds these
                     break;
                 case XmlNodeSyntax when node.Parent is not XmlNodeSyntax:
                     Add(node.SpanStart, node.Span.End); // an XML literal
@@ -157,7 +159,7 @@ internal static class VisualBasicStructure
         // Groups of Imports.
         if (root is CompilationUnitSyntax { Imports: { Count: > 1 } imports })
         {
-            Add(imports[0].SpanStart, imports[^1].Span.End, "imports", "Imports …");
+            Add(imports[0].SpanStart, imports[^1].Span.End, FoldingKinds.Imports, "Imports …");
         }
 
         // #Region … #End Region, and runs of comment lines.
@@ -167,7 +169,7 @@ internal static class VisualBasicStructure
         {
             if (comments.Count > 1)
             {
-                Add(comments[0].SpanStart, comments[^1].Span.End, "comment");
+                Add(comments[0].SpanStart, comments[^1].Span.End, FoldingKinds.Comment);
             }
 
             comments.Clear();
@@ -182,7 +184,7 @@ internal static class VisualBasicStructure
                     break;
                 case SyntaxKind.EndRegionDirectiveTrivia when regions.Count > 0:
                     var (start, title) = regions.Pop();
-                    Add(start, trivia.Span.End, "region", title.Length > 0 ? title : "#Region");
+                    Add(start, trivia.Span.End, FoldingKinds.Region, title.Length > 0 ? title : "#Region");
                     break;
                 case SyntaxKind.CommentTrivia or SyntaxKind.DocumentationCommentTrivia:
                     if (comments.Count > 0 && text.Lines.GetLinePosition(trivia.SpanStart).Line > text.Lines.GetLinePosition(comments[^1].Span.End).Line + 1)
