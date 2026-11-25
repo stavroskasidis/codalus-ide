@@ -28,6 +28,9 @@ public sealed class DiffInsightsTests
         DiffDocumentTests.Git(folder, "config", "user.email", "ada@example.com");
         DiffDocumentTests.Git(folder, "config", "commit.gpgsign", "false");
         DiffDocumentTests.Git(folder, "config", "core.autocrlf", "false");
+        // As any repository does: the C# host writes its reference assemblies into obj after a pass, while the test
+        // stages (Windows CI, run 45531407937: git add met a .tmp file renamed away).
+        File.WriteAllText(Path.Combine(folder, ".gitignore"), "bin/\nobj/\n");
         DiffDocumentTests.Git(folder, "add", ".");
         DiffDocumentTests.Git(folder, "commit", "-q", "-m", "initial");
         Assert.True(await f.Shell.Git.OpenAsync(folder, CancellationToken.None));
