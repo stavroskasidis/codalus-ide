@@ -824,54 +824,80 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             await Task.Run(async () =>
             {
                 var batch = new List<FindResultRow>();
-                foreach (var file in files)
+
+                // A few files read ahead of the search, taken in the files' order: the matches, the limit and the files
+                // counted are those of reading them one after another, without waiting for each read in turn.
+                const int ReadAhead = 8;
+                var reads = new Queue<Task<string?>>();
+                var next = 0;
+                async Task<string?> ReadAsync(string file)
                 {
-                    cts.Token.ThrowIfCancellationRequested();
-                    string text;
                     try
                     {
-                        text = openTexts.TryGetValue(file, out var open) ? open : await File.ReadAllTextAsync(file, cts.Token).ConfigureAwait(false);
+                        return openTexts.TryGetValue(file, out var open) ? open : await File.ReadAllTextAsync(file, cts.Token).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
-                        continue;
+                        return null;
                     }
+                }
 
-                    if (text.Contains('\0', StringComparison.Ordinal))
+                try
+                {
+                    foreach (var file in files)
                     {
-                        continue; // binary
-                    }
-
-                    var found = false;
-                    var lineNumber = 0;
-                    foreach (var line in text.Split('\n'))
-                    {
-                        lineNumber++;
-                        if (MatchLine(file, lineNumber, line.TrimEnd('\r'), regex) is { } row)
+                        cts.Token.ThrowIfCancellationRequested();
+                        while (reads.Count < ReadAhead && next < files.Count)
                         {
+                            reads.Enqueue(ReadAsync(files[next++]));
+                        }
+
+                        if (await reads.Dequeue().ConfigureAwait(false) is not { } text)
+                        {
+                            continue;
+                        }
+
+                        if (text.Contains('\0', StringComparison.Ordinal) || !MayMatch(regex, text, options.UseRegex))
+                        {
+                            continue; // binary, or the text doesn't hold the words
+                        }
+
+                        var found = false;
+                        ForEachLine(text, (lineNumber, line) =>
+                        {
+                            if (!regex.IsMatch(line) || MatchLine(file, lineNumber + 1, line.ToString(), regex) is not { } row)
+                            {
+                                return true;
+                            }
+
                             batch.Add(row);
                             found = true;
-                            if (++lines >= MaxMatches)
-                            {
-                                break;
-                            }
+                            return ++lines < MaxMatches;
+                        });
+
+                        if (found)
+                        {
+                            matchedFiles++;
+                        }
+
+                        if (batch.Count >= 200 || lines >= MaxMatches)
+                        {
+                            await PostAsync(batch, cts.Token).ConfigureAwait(false);
+                            batch = [];
+                        }
+
+                        if (lines >= MaxMatches)
+                        {
+                            break;
                         }
                     }
-
-                    if (found)
+                }
+                finally
+                {
+                    // Reads still running when the search stopped: observed, their texts dropped.
+                    foreach (var read in reads)
                     {
-                        matchedFiles++;
-                    }
-
-                    if (batch.Count >= 200 || lines >= MaxMatches)
-                    {
-                        await PostAsync(batch, cts.Token).ConfigureAwait(false);
-                        batch = [];
-                    }
-
-                    if (lines >= MaxMatches)
-                    {
-                        break;
+                        _ = read.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
                     }
                 }
 
@@ -906,19 +932,58 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         BaseSummary = $"Occurrences replaced: {occurrences}    Changed lines: {rows.Count}    Files changed: {files}";
     }
 
+    /// <summary>A line of a text: its zero-based index and its characters without the line break (<c>\r\n</c> or <c>\n</c>).</summary>
+    internal delegate bool LineVisitor(int index, ReadOnlySpan<char> line);
+
+    /// <summary>
+    /// Visits the lines of <paramref name="text"/> as <c>Split('\n')</c> numbers them (a trailing newline ends with an
+    /// empty line), each without its trailing <c>\r</c>s, until <paramref name="visit"/> returns false; no string per line.
+    /// </summary>
+    internal static void ForEachLine(string text, LineVisitor visit)
+    {
+        var start = 0;
+        for (var index = 0; ; index++)
+        {
+            var newline = text.IndexOf('\n', start);
+            var end = newline < 0 ? text.Length : newline;
+            if (!visit(index, text.AsSpan(start, end - start).TrimEnd('\r')) || newline < 0)
+            {
+                return;
+            }
+
+            start = newline + 1;
+        }
+    }
+
+    /// <summary>
+    /// Whether a file's text may hold a match, asked once of the whole text for a search of words (no regular
+    /// expression, which may span lines where the line-by-line search wouldn't): most files of a search don't.
+    /// </summary>
+    internal static bool MayMatch(Regex regex, string text, bool isRegex)
+    {
+        if (isRegex)
+        {
+            return true;
+        }
+
+        try
+        {
+            return regex.IsMatch(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return true; // a whole file over the per-line limit: searched line by line
+        }
+    }
+
     /// <summary>A row for <paramref name="line"/> when it matches: its trimmed text with every match highlighted.</summary>
     internal static FindResultRow? MatchLine(string path, int lineNumber, string line, Regex regex)
     {
         Match? first = null;
-        var highlights = new List<int>();
+        List<int>? highlights = null;
         const int MaxShown = 400;
-        var indent = line.Length - line.TrimStart().Length;
-        var shown = line.Trim();
-        if (shown.Length > MaxShown)
-        {
-            shown = shown[..MaxShown] + "…";
-        }
-
+        var indent = 0;
+        var shown = string.Empty;
         foreach (Match match in regex.Matches(line))
         {
             if (match.Length == 0)
@@ -926,10 +991,21 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
                 continue; // an empty match (^, \b…) finds nothing to show
             }
 
-            first ??= match;
+            if (first is null)
+            {
+                first = match;
+                highlights = [];
+                indent = line.Length - line.TrimStart().Length;
+                shown = line.Trim();
+                if (shown.Length > MaxShown)
+                {
+                    shown = shown[..MaxShown] + "…";
+                }
+            }
+
             for (var i = Math.Max(0, match.Index - indent); i < Math.Min(match.Index - indent + match.Length, Math.Min(shown.Length, MaxShown)); i++)
             {
-                highlights.Add(i);
+                highlights!.Add(i);
             }
         }
 

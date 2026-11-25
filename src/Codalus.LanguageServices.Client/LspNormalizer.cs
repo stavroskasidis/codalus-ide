@@ -44,6 +44,13 @@ public static partial class LspNormalizer
             return result;
         }
 
+        // Definitions and references (a symbol's thousands) are plain locations from our own servers: left as they are.
+        if (method is Methods.Definition or Methods.Implementation or Methods.References or "textDocument/declaration" or "textDocument/typeDefinition"
+            && IsNarrowedLocations(result))
+        {
+            return result;
+        }
+
         JsonNode? node = method switch
         {
             Methods.Initialize => InitializeResult(JsonNode.Parse(result.GetRawText())),
@@ -68,6 +75,13 @@ public static partial class LspNormalizer
     /// <summary>Normalizes <c>textDocument/publishDiagnostics</c> parameters (numeric codes).</summary>
     public static JsonElement PublishDiagnostics(JsonElement parameters)
     {
+        // Every file's diagnostics, after each pass: our own servers send them narrowed (a severity on each, string
+        // codes), checked in place without the node round trip.
+        if (IsNarrowedPublishDiagnostics(parameters))
+        {
+            return parameters;
+        }
+
         var node = JsonNode.Parse(parameters.GetRawText());
         if (node?["diagnostics"] is JsonArray diagnostics)
         {
@@ -78,6 +92,57 @@ public static partial class LspNormalizer
         }
 
         return Element(node);
+    }
+
+    /// <summary>Whether <see cref="Diagnostic(JsonObject)"/> would leave every diagnostic as it is: a numeric severity on each, codes strings or absent.</summary>
+    private static bool IsNarrowedPublishDiagnostics(JsonElement parameters)
+    {
+        if (parameters.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        if (!parameters.TryGetProperty("diagnostics", out var diagnostics) || diagnostics.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (diagnostics.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var diagnostic in diagnostics.EnumerateArray())
+        {
+            if (diagnostic.ValueKind != JsonValueKind.Object
+                || !diagnostic.TryGetProperty("severity", out var severity) || severity.ValueKind != JsonValueKind.Number
+                || (diagnostic.TryGetProperty("code", out var code) && code.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether <see cref="Locations(JsonNode?)"/> would leave the result as it is: an array of locations (no links).</summary>
+    private static bool IsNarrowedLocations(JsonElement result)
+    {
+        if (result.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var item in result.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("uri", out var uri) || uri.ValueKind != JsonValueKind.String
+                || item.TryGetProperty("targetUri", out _))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static JsonElement Element(JsonNode? node)

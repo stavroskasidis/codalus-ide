@@ -181,15 +181,28 @@ public sealed class SolutionTreeCache
     private Dictionary<string, Entry> _projects = new(SolutionService.PathComparer);
     private Dictionary<string, Entry> _built = new(SolutionService.PathComparer);
 
+    // A project's files and folders, kept while its evaluation and disk listing stand: its design-time build's inputs
+    // (each project's, as the open goes on) changed only its Dependencies, and a 5,000-file project's whole tree was
+    // made again for each.
+    private Dictionary<string, ContentsEntry> _contents = new(SolutionService.PathComparer);
+    private Dictionary<string, ContentsEntry> _builtContents = new(SolutionService.PathComparer);
+
+    private sealed record ContentsEntry(ProjectInfo Info, IReadOnlyList<DirectoryEntry>? Disk, IReadOnlyList<ExplorerNode> Nodes);
+
     private sealed record Entry(SolutionProjectInfo Project, ProjectInfo? Info, bool Trusted, CompilerInputsInfo? Inputs, IReadOnlyList<DirectoryEntry>? Disk, ExplorerNode Node);
 
     /// <summary>The projects whose subtrees the last build reused (tests).</summary>
     public int Reused { get; private set; }
 
+    /// <summary>The projects whose files and folders the last build reused, their Dependencies made again (tests).</summary>
+    public int ContentsReused { get; private set; }
+
     internal void Begin()
     {
         _built = new Dictionary<string, Entry>(SolutionService.PathComparer);
+        _builtContents = new Dictionary<string, ContentsEntry>(SolutionService.PathComparer);
         Reused = 0;
+        ContentsReused = 0;
     }
 
     internal ExplorerNode Project(SolutionProjectInfo project, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs, IReadOnlyList<DirectoryEntry>? disk)
@@ -202,13 +215,32 @@ public sealed class SolutionTreeCache
             return cached.Node;
         }
 
-        var entry = new Entry(project, info, trusted, inputs, disk, SolutionTree.Project(project, info, trusted, inputs, disk));
+        var entry = new Entry(project, info, trusted, inputs, disk, SolutionTree.Project(project, info, trusted, inputs, disk, Contents));
         _built[project.Path] = entry;
         return entry.Node;
+
+        IReadOnlyList<ExplorerNode> Contents(ProjectInfo loaded, IReadOnlyList<DirectoryEntry>? listing)
+        {
+            if (_contents.TryGetValue(project.Path, out var kept) && ReferenceEquals(kept.Info, loaded) && ReferenceEquals(kept.Disk, listing))
+            {
+                ContentsReused++;
+            }
+            else
+            {
+                kept = new ContentsEntry(loaded, listing, SolutionTree.Contents(project.Path, loaded, listing));
+            }
+
+            _builtContents[project.Path] = kept;
+            return kept.Nodes;
+        }
     }
 
     /// <summary>Keeps the projects of this build only (a removed project's subtree goes with it).</summary>
-    internal void End() => _projects = _built;
+    internal void End()
+    {
+        _projects = _built;
+        _contents = _builtContents;
+    }
 }
 
 /// <summary>
@@ -416,7 +448,12 @@ public static class SolutionTree
     public static bool IsSolutionOrProjectFile(string path) =>
         IsProjectFile(path) || System.IO.Path.GetExtension(path).ToLowerInvariant() is ".sln" or ".slnx" or ".slnf" or ".sqlproj" or ".dcproj";
 
-    public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null, IReadOnlyList<DirectoryEntry>? disk = null)
+    public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null, IReadOnlyList<DirectoryEntry>? disk = null) =>
+        Project(entry, info, trusted, inputs, disk, null);
+
+    /// <summary>As <see cref="Project(SolutionProjectInfo, ProjectInfo?, bool, CompilerInputsInfo?, IReadOnlyList{DirectoryEntry}?)"/>, its files from <paramref name="contents"/> (<see cref="SolutionTreeCache"/>).</summary>
+    internal static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs, IReadOnlyList<DirectoryEntry>? disk,
+        Func<ProjectInfo, IReadOnlyList<DirectoryEntry>?, IReadOnlyList<ExplorerNode>>? contents)
     {
         var node = new ExplorerNode("p:" + entry.Path, ExplorerNodeKind.Project, entry.Name)
         {
@@ -464,7 +501,7 @@ public static class SolutionTree
                 : info.IsNonSdkStyle ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyle", "(non-SDK-style)")
                 : info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
             IsWarning = info.CannotBuildReason is not null,
-            Children = [.. cannotBuild, .. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],
+            Children = [.. cannotBuild, .. dependencies is null ? [] : new[] { dependencies }, .. contents is null ? Contents(entry.Path, info, disk) : contents(info, disk)],
         };
     }
 
@@ -795,12 +832,12 @@ public static class SolutionTree
         // here cost a 300-project solution 6,000 checks on the UI thread for each build of the tree (M56).
         var missing = new HashSet<string>(inputs?.MissingAnalyzers ?? [], SolutionService.PathComparer);
         var graph = info.Packages
-            .GroupBy(p => (p.TargetFramework, p.Name.ToLowerInvariant()))
-            .ToDictionary(g => g.Key, g => g.First());
+            .GroupBy(p => (p.TargetFramework, p.Name), PackageKey.Comparer)
+            .ToDictionary(g => g.Key, g => g.First(), PackageKey.Comparer);
         var budget = TransitiveLimit;
         IReadOnlyList<ExplorerNode> Transitive(string parentId, string framework, string package, PackageChain ancestors)
         {
-            if (!graph.TryGetValue((framework, package.ToLowerInvariant()), out var node) || node.Dependencies.Length == 0)
+            if (!graph.TryGetValue((framework, package), out var node) || node.Dependencies.Length == 0)
             {
                 return [];
             }
@@ -818,7 +855,7 @@ public static class SolutionTree
                     break;
                 }
 
-                var version = graph.TryGetValue((framework, dependency.ToLowerInvariant()), out var resolved) ? resolved.Version : null;
+                var version = graph.TryGetValue((framework, dependency), out var resolved) ? resolved.Version : null;
                 var childId = parentId + "|" + dependency;
                 children.Add(new ExplorerNode(childId, ExplorerNodeKind.Dependency, dependency)
                 {
@@ -905,4 +942,22 @@ internal readonly record struct PackageChain(IReadOnlyList<string> Items)
     public bool Contains(string item) => Items.Contains(item, StringComparer.OrdinalIgnoreCase);
 
     public PackageChain With(string item) => new([.. Items, item]);
+}
+
+/// <summary>
+/// A package of a project's graph: its framework, exactly, and its name, whatever its case (NuGet's ids aren't
+/// case-sensitive), compared without a lowered copy of the name for each lookup.
+/// </summary>
+internal static class PackageKey
+{
+    public static IEqualityComparer<(string TargetFramework, string Name)> Comparer { get; } = new KeyComparer();
+
+    private sealed class KeyComparer : IEqualityComparer<(string TargetFramework, string Name)>
+    {
+        public bool Equals((string TargetFramework, string Name) x, (string TargetFramework, string Name) y) =>
+            string.Equals(x.TargetFramework, y.TargetFramework, StringComparison.Ordinal) && string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string TargetFramework, string Name) obj) =>
+            HashCode.Combine(StringComparer.Ordinal.GetHashCode(obj.TargetFramework), StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Name));
+    }
 }

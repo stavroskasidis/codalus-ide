@@ -222,9 +222,30 @@ public sealed partial class GitService
 
     private async Task<string?> GitDirectoryOfAsync(string root, CancellationToken cancellationToken)
     {
+        // Known since the open, while it's there (absorbgitdirs or a move asks git again); a failure isn't kept.
+        if (_gitDirectory is { } known && known.Root == root && Directory.Exists(known.Directory))
+        {
+            return known.Directory;
+        }
+
         var (code, output, _) = await RunAsync(root, ["rev-parse", "--absolute-git-dir"], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
-        return code == 0 && output.Trim().Length > 0 ? output.Trim() : null;
+        if (code != 0 || output.Trim().Length == 0)
+        {
+            return null;
+        }
+
+        if (Root == root)
+        {
+            _gitDirectory = new KnownGitDirectory(root, output.Trim());
+        }
+
+        return output.Trim();
     }
+
+    /// <summary>The open repository's git directory (a worktree's own), with the work tree it is for.</summary>
+    private sealed record KnownGitDirectory(string Root, string Directory);
+
+    private volatile KnownGitDirectory? _gitDirectory;
 
     /// <summary><c>rev-list --left-right --count left...right</c>: the commits only <paramref name="left"/> has, and only <paramref name="right"/>.</summary>
     private async Task<(int Left, int Right)> LeftRightAsync(string root, string left, string right, CancellationToken cancellationToken)

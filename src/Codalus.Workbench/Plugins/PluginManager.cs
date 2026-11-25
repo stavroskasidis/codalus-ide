@@ -798,8 +798,24 @@ public sealed class PluginManager : IAsyncDisposable
     // ------------------------------------------------------------------ views
 
     /// <summary>Children of a tree item (null handle = roots); activates the contributing plugin first.</summary>
+    /// <summary>
+    /// A tree view the shell itself fills (the Start page, M66): its items come from <paramref name="children"/>, in this
+    /// process, through the same view as a plugin's tree.
+    /// </summary>
+    public void RegisterBuiltInTree(string viewId, Func<string?, CancellationToken, Task<IReadOnlyList<TreeItemDto>>> children) => _builtInTrees[viewId] = children;
+
+    /// <summary>A built-in tree's items changed: its view asks again.</summary>
+    public void RefreshBuiltInTree(string viewId, string? handle = null) => TreeViewRefreshed?.Invoke(this, new TreeViewRefreshEventArgs(viewId, handle));
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<string?, CancellationToken, Task<IReadOnlyList<TreeItemDto>>>> _builtInTrees = new(StringComparer.Ordinal);
+
     public async Task<IReadOnlyList<TreeItemDto>> GetTreeChildrenAsync(string viewId, string? handle, CancellationToken cancellationToken)
     {
+        if (_builtInTrees.TryGetValue(viewId, out var builtIn))
+        {
+            return await builtIn(handle, cancellationToken).ConfigureAwait(false);
+        }
+
         await OnViewOpenedAsync(viewId, cancellationToken).ConfigureAwait(false);
         var owner = Plugins.FirstOrDefault(p => p.State == PluginState.Active && p.ActivationEvents.Contains("onView:" + viewId));
         if (owner is null || GetHost(owner.HostGroup) is not { IsRunning: true } host)

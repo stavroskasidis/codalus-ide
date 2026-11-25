@@ -20,9 +20,13 @@ internal sealed class XamlAttribute
 
     public bool Closed { get; set; }
 
-    public string? Prefix => Name.IndexOf(':') is var i and > 0 ? Name[..i] : null;
+    // Computed once (parses are shared between requests' threads): one field each, "" for no prefix (never a prefix).
+    private string? _localName;
+    private string? _prefix;
 
-    public string LocalName => Name.IndexOf(':') is var i and >= 0 ? Name[(i + 1)..] : Name;
+    public string? Prefix => (_prefix ??= Name.IndexOf(':') is var i and > 0 ? Name[..i] : string.Empty) is { Length: > 0 } prefix ? prefix : null;
+
+    public string LocalName => _localName ??= Name.IndexOf(':') is var i and >= 0 ? Name[(i + 1)..] : Name;
 
     public bool ContainsValue(int offset) => ValueStart >= 0 && offset >= ValueStart && offset <= ValueEnd;
 }
@@ -61,14 +65,29 @@ internal sealed class XamlElement
     /// <summary>Text content directly inside (trimmed), for <c>&lt;x:Double&gt;8&lt;/x:Double&gt;</c> and the like.</summary>
     public string? Text { get; set; }
 
-    public string? Prefix => Name.IndexOf(':') is var i and > 0 ? Name[..i] : null;
+    // Computed once (parses are shared between requests' threads): one field each, "" for no prefix (never a prefix).
+    private string? _localName;
+    private string? _prefix;
+
+    public string? Prefix => (_prefix ??= Name.IndexOf(':') is var i and > 0 ? Name[..i] : string.Empty) is { Length: > 0 } prefix ? prefix : null;
 
     /// <summary>The name without its prefix (<c>Grid</c>, <c>Grid.RowDefinitions</c>).</summary>
-    public string LocalName => Name.IndexOf(':') is var i and >= 0 ? Name[(i + 1)..] : Name;
+    public string LocalName => _localName ??= Name.IndexOf(':') is var i and >= 0 ? Name[(i + 1)..] : Name;
 
     public bool IsPropertyElement => LocalName.Contains('.', StringComparison.Ordinal);
 
-    public XamlAttribute? Attribute(string name) => Attributes.FirstOrDefault(a => a.Name == name);
+    public XamlAttribute? Attribute(string name)
+    {
+        foreach (var attribute in Attributes)
+        {
+            if (attribute.Name == name)
+            {
+                return attribute;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The element and its descendants, in document order.</summary>
     public IEnumerable<XamlElement> DescendantsAndSelf()
@@ -108,12 +127,15 @@ internal sealed class XamlDocument
 
     public List<XamlSyntaxError> Errors { get; } = [];
 
-    public IEnumerable<XamlElement> Elements => Root?.DescendantsAndSelf() ?? [];
+    /// <summary>The root and its descendants, in document order: walked once, after the parse (each feature walks them).</summary>
+    public IReadOnlyList<XamlElement> Elements { get; private set; } = [];
 
+    /// <summary>A parse of <paramref name="text"/>; parses are shared between requests (<see cref="XamlContext"/>) and never changed once made.</summary>
     public static XamlDocument Parse(string text)
     {
         var document = new XamlDocument(text);
         document.Run();
+        document.Elements = document.Root is { } root ? [.. root.DescendantsAndSelf()] : [];
         return document;
     }
 

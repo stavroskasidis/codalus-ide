@@ -137,6 +137,9 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             }
             else
             {
+                // Each framework lists the shared items again: a set, not a scan of the list per item (quadratic in a
+                // project's thousands of files). Ordinal, as the list's comparison was; first seen first.
+                var seen = new HashSet<(string Kind, string Path)>();
                 foreach (var framework in frameworks)
                 {
                     var inner = Load(path, new Dictionary<string, string>(global, StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = framework }, context);
@@ -147,7 +150,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                         imports.AddRange(inner.Imports.Select(i => i.ImportedProject.FullPath));
 
                         // The SDK adds default items (Compile globs…) in the per-framework evaluations only.
-                        items.AddRange(Items(inner).Where(i => !items.Any(e => e.Kind == i.Kind && e.Path == i.Path)));
+                        items.AddRange(Items(inner).Where(i => seen.Add((i.Kind, i.Path))));
 
                         // Package props (Microsoft.NET.Test.Sdk, the testing platform) are imported per framework.
                         test = test.Or(TestProperties.Of(inner));

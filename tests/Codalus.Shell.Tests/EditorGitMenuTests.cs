@@ -72,16 +72,16 @@ public sealed class EditorGitMenuTests
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Files.Count: 0 } && document!.Model.Text.Text == "committed\n");
         await ShellFixture.PumpUntil(() => Equals(context.GetValue("gitActiveFileChanged"), false));
 
-        // Ignore and Untrack: the file stays, its removal is staged, and the entry goes once git ignores it. The flag can
-        // come before the status that has the removal: the status read after the .gitignore's write starts check-ignore,
-        // which on a slow runner answers after `git rm --cached` has run, while that one's status read is still on its
-        // way (Windows CI, PR #549's run 45655870329: the status had only .gitignore). So it waits for both.
+        // Ignore and Untrack: the file stays, its removal is staged, and the entry goes once git ignores it.
         f.Shell.Run("git.ignoreAndUntrack");
-        await ShellFixture.PumpUntil(() => Equals(context.GetValue("gitActiveFileIgnored"), true)
-            && f.Shell.Git.Status?.Files.Any(s => s.Path == file && s.Index == 'D') == true,
-            describe: () => $"ignored: {context.GetValue("gitActiveFileIgnored")}; the status: {string.Join(", ", f.Shell.Git.Status?.Files.Select(s => $"{s.RelativePath} {s.Index}{s.WorkTree}") ?? [])}");
+        await ShellFixture.PumpUntil(() => Equals(context.GetValue("gitActiveFileIgnored"), true));
         Assert.True(File.Exists(file));
         Assert.Equal("/notes.txt\n", File.ReadAllText(Path.Combine(folder, ".gitignore")));
+        // The ignored key comes from git check-ignore, which can answer once the removal is in the index while the status
+        // read it came with was taken before it (macOS and Windows CI, PR #537's run 45658006342 and run 45655870329): the
+        // next read lists the staged removal.
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status!.Files.Any(s => s.Path == file && s.Index == 'D'), 30,
+            () => string.Join(", ", f.Shell.Git.Status!.Files.Select(s => $"{s.RelativePath} {s.Index}{s.WorkTree}")));
         Assert.DoesNotContain("Ignore and Untrack item", Items());
     }
 }

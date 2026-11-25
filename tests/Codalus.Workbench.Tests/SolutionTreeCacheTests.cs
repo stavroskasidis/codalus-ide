@@ -55,6 +55,32 @@ public sealed class SolutionTreeCacheTests
     }
 
     [Fact]
+    public void New_compiler_inputs_keep_a_projects_files_and_make_its_dependencies_again()
+    {
+        var solution = new SolutionInfo(Path.Combine(s_root, "All.slnx"), SolutionFormats.Slnx, [],
+            [new SolutionProjectInfo(ProjectPath(0), "Lib0", null, null)], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
+        var projects = new Dictionary<string, ProjectInfo> { [ProjectPath(0)] = Evaluated(0, "A.cs", "B.cs") with { TargetFrameworks = ["net10.0"] } };
+        CompilerInputsInfo Inputs(params string[] analyzers) =>
+            new(ProjectPath(0), "net10.0", "C#", CompilerInputStates.Ok, null, [.. analyzers.Select(a => "/analyzer:" + Path.Combine(s_root, a))], [], null, null);
+        var cache = new SolutionTreeCache();
+        var first = SolutionTree.Build(solution, projects, new Dictionary<string, CompilerInputsInfo> { [ProjectPath(0)] = Inputs() }, cache: cache);
+        var second = SolutionTree.Build(solution, projects, new Dictionary<string, CompilerInputsInfo> { [ProjectPath(0)] = Inputs("Analyzer.dll") }, cache: cache);
+
+        // The design-time build's inputs: Dependencies show them, the files are the same instances.
+        Assert.Equal(0, cache.Reused);
+        Assert.Equal(1, cache.ContentsReused);
+        var files = (ExplorerNode p) => p.Children.Where(n => n.Kind != ExplorerNodeKind.Dependencies).ToList();
+        Assert.All(files(first.Children[0]).Zip(files(second.Children[0])), pair => Assert.Same(pair.First, pair.Second));
+        Assert.Equal(second, SolutionTree.Build(solution, projects, new Dictionary<string, CompilerInputsInfo> { [ProjectPath(0)] = Inputs("Analyzer.dll") }), new NodeComparer());
+
+        // A new evaluation makes the files again.
+        projects[ProjectPath(0)] = Evaluated(0, "A.cs", "B.cs", "C.cs");
+        var third = SolutionTree.Build(solution, projects, new Dictionary<string, CompilerInputsInfo> { [ProjectPath(0)] = Inputs("Analyzer.dll") }, cache: cache);
+        Assert.Equal(0, cache.ContentsReused);
+        Assert.Equal(["A.cs", "B.cs", "C.cs"], third.Children[0].Children.Where(n => n.Kind == ExplorerNodeKind.File).Select(n => n.Name));
+    }
+
+    [Fact]
     public void A_change_of_the_solution_file_reuses_the_subtrees_of_the_projects_it_left_as_they_were()
     {
         // The build host sends the whole solution again for each change of the solution file (a project or solution folder

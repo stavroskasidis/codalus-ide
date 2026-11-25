@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 
@@ -181,4 +182,32 @@ public static class FramedMessageWriter
     /// <summary>The header for a body of <paramref name="length"/> bytes.</summary>
     public static byte[] Header(int length) =>
         Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture, $"Content-Length: {length}\r\n\r\n"));
+
+    /// <summary>The room <see cref="Frame"/> needs in front of a body: the longest header (an int's ten digits).</summary>
+    public const int HeaderRoom = 32;
+
+    /// <summary>
+    /// A whole frame from <paramref name="buffer"/>, whose first <see cref="HeaderRoom"/> bytes were left for the
+    /// header and the rest is the body: the header is written right before the body, for one write.
+    /// </summary>
+    public static ReadOnlyMemory<byte> Frame(ArrayBufferWriter<byte> buffer)
+    {
+        var length = buffer.WrittenCount - HeaderRoom;
+        Span<byte> header = stackalloc byte[HeaderRoom];
+        "Content-Length: "u8.CopyTo(header);
+        var at = "Content-Length: "u8.Length;
+        if (!length.TryFormat(header[at..], out var digits, provider: CultureInfo.InvariantCulture))
+        {
+            throw new InvalidOperationException("A frame's length didn't fit its header.");
+        }
+
+        at += digits;
+        "\r\n\r\n"u8.CopyTo(header[at..]);
+        at += 4;
+
+        // The frame starts where the header, right-aligned against the body, starts.
+        var memory = System.Runtime.InteropServices.MemoryMarshal.AsMemory(buffer.WrittenMemory);
+        header[..at].CopyTo(memory.Span[(HeaderRoom - at)..HeaderRoom]);
+        return memory[(HeaderRoom - at)..];
+    }
 }

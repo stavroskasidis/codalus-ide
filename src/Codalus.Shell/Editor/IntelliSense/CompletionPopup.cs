@@ -200,7 +200,20 @@ public sealed class IntelliSenseList
         CompletionData? best = null;
         var bestQuality = -1;
         double bestPriority = 0;
-        foreach (var item in _items)
+
+        // A query that only grew (a letter typed) matches a subset of what the last one did, in the same order: only those
+        // are matched again. Any other change (Backspace, a filter, the items) matches every item, 20,000 at a key.
+        var filters = string.Join('|', _filters.Order(StringComparer.Ordinal));
+        var narrowed = _scanned is { } scanned && _scannedQuery is { } before && query.Length > before.Length && query.StartsWith(before, StringComparison.Ordinal)
+            && filters == _scannedFilters && SameItems(scanned);
+        if (!narrowed)
+        {
+            _scanned = [.. _items];
+            _scannedFilters = filters;
+        }
+
+        _scannedQuery = query;
+        foreach (var item in narrowed ? _current : _items)
         {
             if (_filters.Count > 0 && !PassesFilters(item))
             {
@@ -246,6 +259,30 @@ public sealed class IntelliSenseList
         IsSoftSelection = best is not null && (best == suggested && query == _softQuery ? IsSoftSelection : IsSoft(best, query));
         _softQuery = query;
         Filtered?.Invoke(this, EventArgs.Empty);
+    }
+
+    // What the last full match went over: the items, and the filters on.
+    private CompletionData[]? _scanned;
+    private string? _scannedQuery;
+    private string _scannedFilters = string.Empty;
+
+    /// <summary>Whether the items are those of the last full match, the same instances in the same order (they're a public list).</summary>
+    private bool SameItems(CompletionData[] scanned)
+    {
+        if (scanned.Length != _items.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < scanned.Length; i++)
+        {
+            if (!ReferenceEquals(scanned[i], _items[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>The filters on show an item of one of their kinds, or one matching the target type while that filter is on.</summary>

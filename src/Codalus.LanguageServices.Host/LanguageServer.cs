@@ -26,12 +26,15 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly AnalysisSolution _analysis;
     private readonly Xaml.XamlDiagnostics _xamlDiagnostics;
     private readonly TaskCompletionSource _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly CancellationTokenSource _stopping = new();
+    private readonly LoadingWarmUp _loadingWarmUp;
 
     public LanguageServer(JsonRpcConnection connection)
     {
         _connection = connection;
         _razor = new Razor.RazorFeatures(_completion, message => Log(MessageType.Log, message));
         _analysis = new AnalysisSolution(_workspace, message => Log(MessageType.Log, message));
+        _loadingWarmUp = new LoadingWarmUp(_workspace, _stopping.Token, message => Log(MessageType.Log, message));
         _diagnostics = new DiagnosticsService(_workspace, _analysis, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _xamlDiagnostics = new Xaml.XamlDiagnostics(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
@@ -61,6 +64,13 @@ internal sealed class LanguageServer : IAsyncDisposable
             {
                 ApplySettings(options);
             }
+
+            // A client that asks for syntactic tokens again (the shell's editor) takes them for a file's first colors.
+            _coldWait = p.Capabilities is { ValueKind: JsonValueKind.Object } capabilities
+                && capabilities.TryGetProperty("experimental", out var experimental) && experimental.ValueKind == JsonValueKind.Object
+                && experimental.TryGetProperty("codalusSyntacticTokens", out var wait) && wait.TryGetInt32(out var milliseconds) && milliseconds >= 0
+                    ? TimeSpan.FromMilliseconds(milliseconds)
+                    : null;
 
             var version = typeof(LanguageServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
@@ -93,7 +103,12 @@ internal sealed class LanguageServer : IAsyncDisposable
                 new ServerInfo("codalus-lshost", version)));
         });
         _connection.OnNotification(Methods.Initialized, json.EmptyObject, _ => { });
-        _connection.OnRequest(Methods.Shutdown, (_, _) => Task.FromResult<JsonElement?>(null));
+        _connection.OnRequest(Methods.Shutdown, async (_, _) =>
+        {
+            // The reference assemblies the last pass left for the next session, within the shutdown's time.
+            await _diagnostics.FlushReferencesAsync(TimeSpan.FromSeconds(1.5)).ConfigureAwait(false);
+            return (JsonElement?)null;
+        });
         _connection.OnNotification(Methods.Exit, json.EmptyObject, _ => _exit.TrySetResult());
         _connection.OnNotification(Methods.DidChangeConfiguration, json.DidChangeConfigurationParams, p =>
         {
@@ -143,6 +158,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             if (p.Projects.Length > 0)
             {
                 _workspace.UpdateProjects(p.Projects);
+                _loadingWarmUp.ProjectsChanged(); // their files parsed while the rest loads
             }
 
             if (p.Projects.Length > 0 || loadingChanged)
@@ -185,10 +201,12 @@ internal sealed class LanguageServer : IAsyncDisposable
             (xaml, _, _) => Task.FromResult<FoldingRange[]?>(Xaml.XamlAnalysis.Folding(xaml)));
         OnDocument(Methods.SemanticTokensFull, json.SemanticTokensParams, json.SemanticTokens, p => p.TextDocument,
             async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]),
-            razor: async (mapping, _, ct) => await Razor.RazorClassifier.TokensAsync(mapping, null, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
+            razor: async (mapping, _, ct) => await Razor.RazorClassifier.TokensAsync(mapping, null, ct).ConfigureAwait(false), semantics: Semantics.Analysis,
+            cold: (document, _, ct) => SemanticTokensFeature.SyntacticAsync(document, null, ct), answered: t => t.Data.Length > 0);
         OnDocument(Methods.SemanticTokensRange, json.SemanticTokensRangeParams, json.SemanticTokens, p => p.TextDocument,
             async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]),
-            razor: async (mapping, p, ct) => await Razor.RazorClassifier.TokensAsync(mapping, p.Range, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
+            razor: async (mapping, p, ct) => await Razor.RazorClassifier.TokensAsync(mapping, p.Range, ct).ConfigureAwait(false), semantics: Semantics.Analysis,
+            cold: (document, p, ct) => SemanticTokensFeature.SyntacticAsync(document, p.Range, ct), answered: t => t.Data.Length > 0);
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
@@ -401,7 +419,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         }
         else
         {
-            _xamlDiagnostics.OthersChanged();
+            _xamlDiagnostics.OthersChanged(path);
         }
     }
 
@@ -464,9 +482,99 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null,
         Func<Razor.RazorMapping, TParams, CancellationToken, Task<TResult?>>? razor = null,
         Semantics semantics = Semantics.Workspace,
-        Func<string, TParams, CancellationToken, Task<TResult?>>? outside = null)
+        Func<string, TParams, CancellationToken, Task<TResult?>>? outside = null,
+        Func<Document, TParams, CancellationToken, Task<TResult?>>? cold = null,
+        Func<TResult, bool>? answered = null)
     {
+        // The full answer a cold request answered from the syntax while it kept computing, by file: the request after it
+        // (the client's at once, M66) takes it when it asks for the same range of the same text, instead of computing it
+        // again beside it (the request's token source is disposed with its answer, not cancelled, so it runs on).
+        var computing = cold is null ? null : new System.Collections.Concurrent.ConcurrentDictionary<string, (TParams Params, VersionStamp Text, Task<TResult> Full)>(Paths.Comparer);
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
+        {
+            if (cold is null || _coldWait is not { } coldWait || DocumentUris.ToPath(where(p).Uri) is not { } path || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            {
+                return await AnswerAsync(p, ct).ConfigureAwait(false);
+            }
+
+            // A C# file's first answer (its colors): what its syntax gives when the full answer, which needs the
+            // project's compilation, isn't there within a moment of the open, and the one after waits for the full answer.
+            path = Path.GetFullPath(path);
+            if (_coldAnswers.TryAdd(path, ColdAnswer.Partial))
+            {
+                var full = AnswerAsync(p, ct);
+                var quick = await Task.WhenAny(full, Task.Delay(coldWait, CancellationToken.None)).ConfigureAwait(false) == full && full.IsCompletedSuccessfully;
+                if (quick && answered!(full.Result))
+                {
+                    _coldAnswers[path] = ColdAnswer.Full;
+                    return full.Result;
+                }
+
+                // The syntax's answer, unless the full one lands first: on a fast machine it comes soon after the wait, and
+                // the syntax's (a parse of its own) would then hold it back by its time and the client's next request
+                // (CI's same-runner A/B, run 45531093514: full colors 5 to 7% later on Linux).
+                var syntactic = SyntacticAsync(p, ct);
+                if (await Task.WhenAny(full, syntactic).ConfigureAwait(false) == full && full.IsCompletedSuccessfully && answered!(full.Result))
+                {
+                    _ = syntactic.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    _coldAnswers[path] = ColdAnswer.Full;
+                    return full.Result;
+                }
+
+                if (await syntactic.ConfigureAwait(false) is ({ } partial, var text))
+                {
+                    _ = full.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    computing![path] = (p, text, full);
+                    return partial;
+                }
+
+                _coldAnswers.TryRemove(path, out _);
+                var result = await full.ConfigureAwait(false);
+                if (answered!(result))
+                {
+                    _coldAnswers[path] = ColdAnswer.Full;
+                }
+
+                return result;
+            }
+
+            var answer = await FullAsync(path, p, ct).ConfigureAwait(false);
+            if (answered!(answer))
+            {
+                _coldAnswers[path] = ColdAnswer.Full;
+            }
+
+            return answer;
+        });
+
+        // The answer from the syntax alone, with the version of the text it is for; null where there is none.
+        async Task<(TResult? Partial, VersionStamp Text)> SyntacticAsync(TParams p, CancellationToken ct)
+        {
+            if (await WorkspaceManager.FindDocumentAsync(_workspace.CurrentSolution, where(p).Uri, ct).ConfigureAwait(false) is not { } document)
+            {
+                return (default, default);
+            }
+
+            var text = await document.GetTextVersionAsync(ct).ConfigureAwait(false);
+            return (await cold!(document, p, ct).ConfigureAwait(false), text);
+        }
+
+        // The cold request's full answer when this request asks for the same range of the same text, else a new one.
+        async Task<TResult> FullAsync(string path, TParams p, CancellationToken ct)
+        {
+            if (computing!.TryRemove(path, out var earlier) && !earlier.Full.IsFaulted && !earlier.Full.IsCanceled
+                && EqualityComparer<TParams>.Default.Equals(earlier.Params, p)
+                && await WorkspaceManager.FindDocumentAsync(_workspace.CurrentSolution, where(p).Uri, ct).ConfigureAwait(false) is { } current
+                && await current.GetTextVersionAsync(ct).ConfigureAwait(false) == earlier.Text)
+            {
+                Interlocked.Increment(ref _reusedColdAnswers);
+                return await earlier.Full.WaitAsync(ct).ConfigureAwait(false);
+            }
+
+            return await AnswerAsync(p, ct).ConfigureAwait(false);
+        }
+
+        async Task<TResult> AnswerAsync(TParams p, CancellationToken ct)
         {
             var solution = await SolutionForAsync(where(p), semantics, ct).ConfigureAwait(false);
             if (DocumentUris.ToPath(where(p).Uri) is { } xamlPath && Xaml.XamlContext.IsXaml(xamlPath))
@@ -493,7 +601,27 @@ internal sealed class LanguageServer : IAsyncDisposable
             return outside is not null && DocumentUris.ToPath(where(p).Uri) is { } outsidePath
                 ? await outside(outsidePath, p, ct).ConfigureAwait(false) ?? empty!
                 : empty!;
-        });
+        }
+    }
+
+    /// <summary>
+    /// How long a C# file's first token request waits for the full answer before it answers from the syntax: the
+    /// client's <c>codalusSyntacticTokens</c> capability; null (other clients), never.
+    /// </summary>
+    private TimeSpan? _coldWait;
+
+    /// <summary>How many requests took the full answer a cold request had kept computing (tests).</summary>
+    internal int ReusedColdAnswers => Volatile.Read(ref _reusedColdAnswers);
+
+    private int _reusedColdAnswers;
+
+    /// <summary>Each C# file's token answers so far: a partial one (the next waits for the full answer), or a full one.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ColdAnswer> _coldAnswers = new(Paths.Comparer);
+
+    private enum ColdAnswer
+    {
+        Partial,
+        Full,
     }
 
     /// <summary>Which solution a request reads (M34c).</summary>
@@ -592,8 +720,13 @@ internal sealed class LanguageServer : IAsyncDisposable
         _ = Notify(Methods.LogMessage, new LogMessageParams(type, message), ProtocolJsonContext.Default.LogMessageParams);
     }
 
+    /// <summary>The loading warm-up (tests).</summary>
+    internal LoadingWarmUp LoadingWarmUp => _loadingWarmUp;
+
     public ValueTask DisposeAsync()
     {
+        _stopping.Cancel();
+        _stopping.Dispose();
         _diagnostics.Dispose();
         _xamlDiagnostics.Dispose();
         _workspace.Dispose();

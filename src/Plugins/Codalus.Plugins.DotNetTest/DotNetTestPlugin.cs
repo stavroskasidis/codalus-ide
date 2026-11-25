@@ -110,7 +110,9 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
                     }
                 }
 
-                _tree.Update(_projects.Values.ToList());
+                // Only the edited documents' projects (all of them if one left the list meanwhile).
+                var edited = documents.Select(d => d.Project.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                _tree.Update(_projects.Values.ToList(), edited.All(p => _projects.Values.Any(q => string.Equals(q.Path, p, StringComparison.OrdinalIgnoreCase))) ? edited : null);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

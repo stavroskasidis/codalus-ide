@@ -276,14 +276,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("plugins.host", "M1", "Built-in plugins load and run in the plugin host", async () =>
         {
             var builtIn = shell.Plugins.Plugins.Where(p => p.IsBuiltIn).ToList();
-            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.dotnettest"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.Any(p => p.Id == "codalus.dotnettest") && builtIn.All(p => p.Id != "codalus.welcome"), $"the built-in plugins are discovered, the Start page no longer one of them (M66) (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
             Check(builtIn.All(p => p.Id != "codalus.templates"), "the retired Templates plugin isn't loaded (New Project is the IDE's, ADR 0082)");
             var broken = builtIn.Where(p => p.State is PluginState.Invalid or PluginState.Incompatible or PluginState.Failed).ToList();
             Check(broken.Count == 0, $"no built-in plugin is broken ({string.Join(", ", broken.Select(p => $"{p.Id}: {p.State}"))})");
 
-            // The Start page is a plugin tree view: its items come from the out-of-process plugin host. A plugin command
-            // shows it (the layout may have been reset since startup).
-            await WaitAsync(() => shell.Plugins.Plugins.Any(p => p is { Id: "codalus.welcome", State: PluginState.Active }), "the Welcome plugin activates at startup", 90).ConfigureAwait(true);
+            // The Start page is the shell's own tree view (M66), shown as a plugin's: no plugin activates at startup for it.
+            Check(builtIn.All(p => !p.ActivationEvents.Contains("onStartup")), "no built-in plugin starts the plugin host at every launch");
             await shell.RunAsync("welcome.show", []).ConfigureAwait(true);
             await WaitAsync(() => shell.Layout.IsVisible("welcome.view"), "welcome.show shows the Start page", 60).ConfigureAwait(true);
             var tree = (TreeToolViewModel)shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
@@ -371,7 +370,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("editor.highlighting", "M3", "Semantic highlighting and folding", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
-            await WaitAsync(() => greeter.Colorizer.HasTokens, "semantic tokens arrive", 90).ConfigureAwait(true);
+            await WaitAsync(() => greeter.SemanticTokensShown, "semantic tokens arrive", 90).ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.editor.language" && i.Text == "C#"), "the status bar shows C#");
         }, "language.ready").ConfigureAwait(true);
 

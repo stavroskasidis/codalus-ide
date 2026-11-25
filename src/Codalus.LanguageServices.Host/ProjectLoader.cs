@@ -13,8 +13,18 @@ namespace Codalus.LanguageServices.Host;
 /// </summary>
 internal sealed class ProjectLoader
 {
-    private readonly ConcurrentDictionary<string, (DateTime Stamp, PortableExecutableReference Reference)> _metadata = new(Paths.Comparer);
-    private readonly ConcurrentDictionary<string, AnalyzerFileReference> _analyzers = new(Paths.Comparer);
+    private readonly ConcurrentDictionary<string, MetadataEntry> _metadata = new(Paths.Comparer);
+
+    /// <summary>
+    /// A file's reference while its date stands, and the same reference with aliases or embedded interop types
+    /// (<c>/reference:Alias=x.dll</c>, <c>/link:</c>), each made once: a new one at every update was a changed list of
+    /// references, so the project's compilation was dropped each time another project changed.
+    /// </summary>
+    private sealed record MetadataEntry(DateTime Stamp, PortableExecutableReference Reference)
+    {
+        public ConcurrentDictionary<MetadataReferenceProperties, MetadataReference> Derived { get; } = new();
+    }
+    private readonly ConcurrentDictionary<string, Lazy<AnalyzerFileReference>> _analyzers = new(Paths.Comparer);
     private readonly AnalyzerLoader _analyzerLoader = new();
 
     public event EventHandler<string>? Log;
@@ -155,24 +165,111 @@ internal sealed class ProjectLoader
             return null;
         }
 
-        var entry = _metadata.AddOrUpdate(
-            path,
-            p => (stamp, Reference(p)),
-            (p, existing) => existing.Stamp == stamp ? existing : (stamp, Reference(p)));
-        return properties == MetadataReferenceProperties.Assembly ? entry.Reference : entry.Reference.WithProperties(properties);
+        MetadataEntry entry;
+        try
+        {
+            entry = _metadata.AddOrUpdate(
+                path,
+                p => new MetadataEntry(stamp, Reference(p, stamp)),
+                (p, existing) => existing.Stamp == stamp ? existing : new MetadataEntry(stamp, Reference(p, stamp)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
+        {
+            return null; // unreadable now (being replaced, not an assembly): nothing kept, asked again next time
+        }
+
+        return properties == MetadataReferenceProperties.Assembly ? entry.Reference
+            : entry.Derived.GetOrAdd(properties, static (p, reference) => reference.WithProperties(p), entry.Reference);
     }
 
-    private static PortableExecutableReference Reference(string path) =>
-        MetadataReference.CreateFromFile(path, documentation: DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture));
+    private static PortableExecutableReference Reference(string path, DateTime stamp) =>
+        s_shared.TryGetValue(path, out var shared) && shared.Stamp == stamp ? shared.Reference
+            : MapsPackages && IsPackageAssembly(path) ? Mapped(path)
+            : MetadataReference.CreateFromFile(path, documentation: DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture));
 
-    private AnalyzerFileReference Analyzer(string path) => _analyzers.GetOrAdd(path, p =>
+    /// <summary>
+    /// Whether a restored package's assemblies are mapped rather than read into memory: they never change in place (a
+    /// new version is another folder), so the C# host maps them, as the compiler does, instead of keeping a copy of every
+    /// package's bytes in its own memory. Not on Windows, where a mapped file can't be deleted (<c>dotnet nuget locals
+    /// all --clear</c> would fail while the IDE runs). <c>CODALUS_MAP_PACKAGES=0</c> turns it off.
+    /// </summary>
+    internal static bool MapsPackages { get; } = !OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CODALUS_MAP_PACKAGES") != "0";
+
+    /// <summary>An assembly in a restored package's folder: one of its parents has the <c>.nupkg.metadata</c> NuGet writes.</summary>
+    internal static bool IsPackageAssembly(string path)
+    {
+        var directory = Path.GetDirectoryName(path);
+        for (var i = 0; i < 6 && directory is not null; i++, directory = Path.GetDirectoryName(directory))
+        {
+            if (File.Exists(Path.Combine(directory, ".nupkg.metadata")))
+            {
+                return true;
+            }
+
+            if (Path.GetFileName(directory) is "bin" or "obj")
+            {
+                return false; // a project's output, rewritten by builds
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A package assembly mapped, its metadata read now so that a broken file fails here, as a read one does.</summary>
+    private static PortableExecutableReference Mapped(string path)
+    {
+        var documentation = DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture);
+        var metadata = AssemblyMetadata.CreateFromFile(path);
+        try
+        {
+            _ = metadata.GetModules()[0].GetMetadataReader();
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or IOException)
+        {
+            // Not an assembly: unmapped, and read as anywhere else, so the compiler reports it (CS0009) on every OS
+            // (Windows CI, PR #537's run 45527942398: the mapped path had dropped it instead).
+            metadata.Dispose();
+            return MetadataReference.CreateFromFile(path, documentation: documentation);
+        }
+
+        return metadata.GetReference(documentation: documentation, filePath: path);
+    }
+
+    /// <summary>
+    /// References made once for the host (Miscellaneous Files' reference pack, <see cref="Share"/>), taken by the
+    /// projects that reference the same unchanged files instead of reading each assembly a second time.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, (DateTime Stamp, PortableExecutableReference Reference)> s_shared = new(Paths.Comparer);
+
+    /// <summary>Offers <paramref name="references"/> to every project that references the same files while they're unchanged.</summary>
+    internal static void Share(IEnumerable<MetadataReference> references)
+    {
+        foreach (var reference in references.OfType<PortableExecutableReference>())
+        {
+            if (reference.FilePath is { } path)
+            {
+                try
+                {
+                    s_shared[path] = (File.GetLastWriteTimeUtc(path), reference);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
+    // Lazy: projects are read in parallel, and one path's reference (with its failure handler) is made once.
+    private AnalyzerFileReference Analyzer(string path) => _analyzers.GetOrAdd(path, p => new Lazy<AnalyzerFileReference>(() => NewAnalyzer(p))).Value;
+
+    private AnalyzerFileReference NewAnalyzer(string p)
     {
         // Every analyzer the projects name is where another's dependency may be (the compiler's own resolution).
         _analyzerLoader.AddDependencyLocation(p);
         var reference = new AnalyzerFileReference(p, _analyzerLoader);
         reference.AnalyzerLoadFailed += (_, e) => Log?.Invoke(this, AnalyzerFailure(Path.GetFileName(p), e));
         return reference;
-    });
+    }
 
     /// <summary>
     /// Why an analyzer or source generator didn't load. One built for a newer compiler than the host's Roslyn (a new

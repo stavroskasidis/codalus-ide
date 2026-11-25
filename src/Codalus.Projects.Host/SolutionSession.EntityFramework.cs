@@ -265,7 +265,7 @@ internal sealed partial class SolutionSession
     {
         RequireTrusted("Entity Framework");
         var startup = System.IO.Path.GetFullPath(target.StartupProject ?? target.Project);
-        var run = GetRunInfo(startup);
+        var run = GetRunInfo(startup, cancellationToken: cancellationToken);
         if (run.TargetPath is not { } assembly || !File.Exists(assembly))
         {
             throw new InvalidOperationException($"{System.IO.Path.GetFileName(startup)} isn't built; build it first.");

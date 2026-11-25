@@ -86,7 +86,9 @@ public sealed partial class ShellHost
             LaunchMenu menu;
             try
             {
-                var (_, profiles, _) = await Runs.GetProfilesAsync(project, cancel.Token).ConfigureAwait(false);
+                // The profiles alone, from the file: asking the project host for its run information evaluates the
+                // project again, at each project change while the solution loads.
+                var (profiles, _) = await RunService.ReadProfilesAsync(project, cancel.Token).ConfigureAwait(false);
                 menu = new LaunchMenu(
                     name,
                     [.. profiles.Select(p => new LaunchProfileChoice(p.Name, p.IsRunnable ? null : Localizer.Format("msg.launchMenu.profileCantRun", "'{0}' profiles can't run in Codalus IDE.", p.CommandName)))],

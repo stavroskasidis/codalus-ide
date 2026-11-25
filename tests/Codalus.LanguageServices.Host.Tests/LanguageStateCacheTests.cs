@@ -77,6 +77,9 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
             Assert.Single(first.For(page), d => d.Code == "CS4014"); // in the async method only: the build reports it there too
             Assert.Contains(first.For(Path.Combine(_root, "App", "Closed.cs")), d => d.Code == "CS0219");
             Assert.Contains(first.For(Path.Combine(_root, "Lib", "Warnings.cs")), d => d.Code == "CS0219");
+
+            // Lib's reference assembly is emitted after the pass has published.
+            await LanguageFixture.WaitUntilAsync(() => first.Logged("Reference assemblies for the next session: 1 written."), TimeSpan.FromSeconds(60), () => Describe(first));
         }
 
         Assert.True(File.Exists(Path.Combine(_root, "Lib", "obj", LanguageStateCache.StateFile)));
@@ -129,6 +132,7 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
         {
             await first.ReadyAsync();
             await LanguageFixture.WaitUntilAsync(() => first.Has(use, "CS0020"), TimeSpan.FromSeconds(60), () => Describe(first));
+            await LanguageFixture.WaitUntilAsync(() => first.Logged("Reference assemblies for the next session: 2 written."), TimeSpan.FromSeconds(60), () => Describe(first));
         }
 
         Assert.True(File.Exists(Path.Combine(_root, "Mid", "obj", LanguageStateCache.ReferenceFile)));
@@ -152,6 +156,72 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
             await LanguageFixture.WaitUntilAsync(() => third.Logged("3 since the last session, 0 compiled"), TimeSpan.FromSeconds(60), () => Describe(third));
             Assert.False(third.Has(use, "CS0020"));
         }
+    }
+
+    [Fact]
+    public async Task A_body_edited_below_keeps_the_projects_above_and_a_declaration_edited_compiles_them()
+    {
+        // Top divides by Base's constant minus one: 1 / (1 - 1) is an error (CS0020), 1 / (2 - 1) isn't.
+        const string limits = "namespace Base; public static class Limits { public const int Size = 1; public static int Twice(int x) { return x * 2; } }";
+        Write("Base/Limits.cs", limits);
+        Write("Top/Use.cs", "namespace Top; static class Use { const int Ratio = 1 / (Base.Limits.Size - 1); static void M() { int unused = 1; } }");
+        Directory.CreateDirectory(Path.Combine(_root, "Base", "obj"));
+        Directory.CreateDirectory(Path.Combine(_root, "Top", "obj"));
+        var source = Path.Combine(_root, "Base", "Limits.cs");
+        var use = Path.Combine(_root, "Top", "Use.cs");
+        await using var session = await SessionAsync(source, [Project("Base", ["Limits.cs"]), Project("Top", ["Use.cs"], ["Base"])]);
+        await session.ReadyAsync();
+        await LanguageFixture.WaitUntilAsync(() => session.Has(use, "CS0020"), TimeSpan.FromSeconds(60), () => Describe(session));
+
+        // A method body: Top keeps its diagnostics without compiling.
+        var uri = DocumentUris.FromPath(source);
+        await session.Client.DidChangeTextAsync(uri, 2, () => limits.Replace("return x * 2;", "return x + x;", StringComparison.Ordinal), Ct);
+        await LanguageFixture.WaitUntilAsync(() => session.Logged("1 project(s) kept, only method bodies changed below them."), TimeSpan.FromSeconds(60), () => Describe(session));
+        Assert.True(session.Has(use, "CS0020"));
+        Assert.True(session.Has(use, "CS0219"));
+
+        // A constant's value is a declaration: Top compiles again and the error goes.
+        await session.Client.DidChangeTextAsync(uri, 3, () => limits.Replace("Size = 1;", "Size = 2;", StringComparison.Ordinal).Replace("return x * 2;", "return x + x;", StringComparison.Ordinal), Ct);
+        await LanguageFixture.WaitUntilAsync(() => !session.Has(use, "CS0020") && session.Has(use, "CS0219"), TimeSpan.FromSeconds(60), () => Describe(session));
+    }
+
+    [Fact]
+    public async Task Documents_are_parsed_while_the_solution_loads_and_nothing_is_published_before_it_has()
+    {
+        if (Environment.ProcessorCount <= 2)
+        {
+            Assert.Skip("The warm-up leaves machines of two processors to the design-time builds.");
+        }
+
+        var session = new Session(new LanguageHostClient("C# language service", ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly), policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) }), 2);
+        await using (session)
+        {
+            await session.Client.StartAsync(Ct);
+            ProjectData[] projects = [Project("Lib", ["Context.cs", "Warnings.cs"]), Project("App", ["Page.cs", "Closed.cs"], ["Lib"])];
+            await session.Client.UpdateProjectsAsync(projects, Ct, loading: true);
+            await LanguageFixture.WaitUntilAsync(() => session.Logged("Loading: 4 document(s) parsed ahead of the background pass."), TimeSpan.FromSeconds(60), () => Describe(session));
+            Assert.Empty(session.For(Path.Combine(_root, "App", "Closed.cs"))); // the pass waits for the end of the loading
+
+            await session.Client.UpdateProjectsAsync(projects, Ct, loading: false);
+            await session.ReadyAsync();
+            await LanguageFixture.WaitUntilAsync(() => session.Has(Path.Combine(_root, "App", "Closed.cs"), "CS0219"), TimeSpan.FromSeconds(60), () => Describe(session));
+        }
+    }
+
+    [Fact]
+    public async Task A_body_edit_analyzes_its_file_alone_and_the_projects_other_files_keep_theirs()
+    {
+        var context = Path.Combine(_root, "Lib", "Context.cs");
+        var warnings = Path.Combine(_root, "Lib", "Warnings.cs");
+        await using var session = await SessionAsync(context);
+        await session.ReadyAsync();
+        await LanguageFixture.WaitUntilAsync(() => session.Has(warnings, "CS0219"), TimeSpan.FromSeconds(60), () => Describe(session));
+
+        // A method's body: Context.cs alone is analyzed, Warnings.cs (closed) keeps its warning.
+        var uri = DocumentUris.FromPath(context);
+        await session.Client.DidChangeTextAsync(uri, 2, () => LibSource.Replace("internal static int Hidden() => 1;", "internal static int Hidden() => 2;", StringComparison.Ordinal), Ct);
+        await LanguageFixture.WaitUntilAsync(() => session.Logged("analyzed in part (their changed files only)"), TimeSpan.FromSeconds(60), () => Describe(session));
+        Assert.True(session.Has(warnings, "CS0219"));
     }
 
     [Fact]

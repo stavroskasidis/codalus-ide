@@ -128,6 +128,19 @@ public sealed class MarkupHostTests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(_root, "my.schema.json"), """{ "type": "object", "properties": { "port": { "type": "integer", "maximum": 65535 } } }""", ct);
         var (custom, _, _) = await OpenAsync("custom.json", "{ \"$schema\": \"my.schema.json\", \"port\": 70000 }");
         Assert.Contains((await DiagnosticsAsync(custom, d => d.Count > 0, ct)), d => d.Message.Contains("65535", StringComparison.Ordinal));
+
+        // Alternatives: none reported when one fits, else the closest one's problems (the fewest, the first of a tie).
+        await File.WriteAllTextAsync(Path.Combine(_root, "alternatives.schema.json"), """
+            { "type": "object", "properties": {
+              "mode": { "oneOf": [ { "enum": ["a", "b"] }, { "type": "object", "required": ["x", "y"] }, { "type": "object", "required": ["z"] } ] },
+              "nested": { "anyOf": [ { "oneOf": [ { "type": "string" }, { "type": "boolean" } ] }, { "type": "integer" } ] } } }
+            """, ct);
+        var (fits, _, _) = await OpenAsync("fits.json", "{ \"$schema\": \"alternatives.schema.json\", \"mode\": { \"z\": 1 }, \"nested\": true }");
+        var (closest, _, _) = await OpenAsync("closest.json", "{ \"$schema\": \"alternatives.schema.json\", \"mode\": { \"x\": 1 }, \"nested\": [1] }");
+        var problems = await DiagnosticsAsync(closest, d => d.Count > 1, ct);
+        Assert.Contains(problems, d => d.Message.Contains('y', StringComparison.Ordinal) && !d.Message.Contains('z', StringComparison.Ordinal));
+        Assert.DoesNotContain(problems, d => d.Message.Contains("\"z\"", StringComparison.Ordinal));
+        Assert.Empty(_service.Diagnostics.For(fits));
     }
 
     [Fact]

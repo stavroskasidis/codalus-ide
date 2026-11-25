@@ -420,7 +420,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         // be queued: the dispatch loop drains the channel before it ends, so that is the wait then. Returning at once let
         // a turn the end failed finish without the agent's last words (macOS CI, run 44259758111). A marker written
         // before the end is read by the dispatch loop like any message.
-        if (!_inbox.Writer.TryWrite(new Inbound(null, dispatched)))
+        if (!_inbox.Writer.TryWrite(new Inbound(default, dispatched)))
         {
             return _dispatchLoop.WaitAsync(_shutdown.Token)
                 .ContinueWith(static _ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
@@ -664,9 +664,15 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
             _writing[message.Write] = (message.What, System.Diagnostics.Stopwatch.GetTimestamp(), true);
             var body = new ArrayBufferWriter<byte>(256);
+            var framed = Framing != JsonRpcFraming.NewlineDelimited;
+            if (framed)
+            {
+                body.Advance(HeaderRoom); // the Content-Length header goes in front: one write per frame
+            }
+
             try
             {
-                using var writer = new Utf8JsonWriter(body);
+                using var writer = new Utf8JsonWriter(body, s_writerOptions);
                 writer.WriteStartObject();
                 writer.WriteString("jsonrpc", "2.0");
                 if (!message.WriteBody(writer))
@@ -689,17 +695,16 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             {
                 // Never cancel a frame halfway: a header without its body corrupts the stream, and the peer drops the
                 // connection. Cancellation applies while a request is queued only.
-                if (Framing == JsonRpcFraming.NewlineDelimited)
+                if (!framed)
                 {
                     // Utf8JsonWriter escapes control characters in strings, so the body holds no newline of its own.
                     body.Write("\n"u8);
+                    await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
                 }
                 else
                 {
-                    await _writer.WriteAsync(FramedMessageWriter.Header(body.WrittenCount), CancellationToken.None).ConfigureAwait(false);
+                    await _writer.WriteAsync(FramedMessageWriter.Frame(body), CancellationToken.None).ConfigureAwait(false);
                 }
-
-                await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -812,10 +817,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
                 Volatile.Write(ref _received, 1);
 
-                if (!TryCompleteResponse(payload))
+                if (!TryCompleteResponse(payload, out var message))
                 {
                     Interlocked.Increment(ref _queued);
-                    await _inbox.Writer.WriteAsync(new Inbound(payload, null), _shutdown.Token).ConfigureAwait(false);
+                    await _inbox.Writer.WriteAsync(new Inbound(message, null), _shutdown.Token).ConfigureAwait(false);
                 }
             }
         }
@@ -851,13 +856,18 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         Interlocked.Exchange(ref _watchdog, null)?.Dispose();
     }
 
-    /// <summary>Responses are completed directly on the read loop so they never wait behind slow handlers.</summary>
-    private bool TryCompleteResponse(byte[] payload)
+    /// <summary>
+    /// Responses are completed directly on the read loop so they never wait behind slow handlers. Anything else is
+    /// <paramref name="inbound"/>, parsed once here for the dispatch loop.
+    /// </summary>
+    private bool TryCompleteResponse(byte[] payload, out JsonElement inbound)
     {
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
+        inbound = default;
         if (root.TryGetProperty("method", out _) || !root.TryGetProperty("id", out var idElement) || idElement.ValueKind != JsonValueKind.Number)
         {
+            inbound = root.Clone();
             return false;
         }
 
@@ -896,7 +906,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             // and the peer would wait for answers forever without the connection ever being reported lost.
             try
             {
-                await DispatchAsync(inbound.Payload!).ConfigureAwait(false);
+                await DispatchAsync(inbound.Message).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -905,14 +915,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private async Task DispatchAsync(byte[] payload)
+    private async Task DispatchAsync(JsonElement root)
     {
-        JsonElement root;
-        using (var document = JsonDocument.Parse(payload))
-        {
-            root = document.RootElement.Clone();
-        }
-
         var method = root.GetProperty("method").GetString() ?? string.Empty;
         var parameters = root.TryGetProperty("params", out var p) ? p : default;
         if (root.TryGetProperty("id", out var id))
@@ -1140,7 +1144,17 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     }
 
     /// <summary>A message read from the peer, or (with <paramref name="Dispatched"/>) a marker that completes once the messages ahead of it are dispatched.</summary>
-    private readonly record struct Inbound(byte[]? Payload, TaskCompletionSource? Dispatched);
+    /// <summary>Room for <c>Content-Length: N\r\n\r\n</c> in front of a body (<see cref="FramedMessageWriter.Frame"/>).</summary>
+    private const int HeaderRoom = FramedMessageWriter.HeaderRoom;
+
+    /// <summary>
+    /// Text as it is (UTF-8), only what JSON requires escaped (quotes, backslashes, control characters): the default
+    /// encoder wrote every non-ASCII character and each of &lt;, &gt;, &amp;, ' and + as six bytes, which XML, Razor and
+    /// XAML documents are full of. Newlines are still escaped, so newline-delimited framing holds.
+    /// </summary>
+    private static readonly JsonWriterOptions s_writerOptions = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    private readonly record struct Inbound(JsonElement Message, TaskCompletionSource? Dispatched);
 
     /// <summary>
     /// An incoming request's cancellation. A <c>$/cancelRequest</c> (or the connection's end) can find the request

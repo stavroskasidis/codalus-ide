@@ -152,6 +152,10 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
         var core = Project(CoreProject);
         Assert.Equal(["net10.0", "netstandard2.0"], core.TargetFrameworks);
+
+        // Both frameworks list Greeter.cs: once in the project's items, as each framework's own are.
+        Assert.Single(core.Items, i => Path.GetFileName(i.Path) == "Greeter.cs");
+        Assert.Equal(core.Items.Length, core.Items.DistinctBy(i => (i.Kind, i.Path)).Count());
     }
 
     [Fact]
@@ -531,6 +535,50 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitUntilAsync(() => _service.CompilerInputs[CoreProject].TargetFramework == "netstandard2.0");
         Assert.Contains(_service.CompilerInputs[CoreProject].Arguments, a => a.StartsWith("/define:", StringComparison.Ordinal) && a.Contains("NETSTANDARD2_0", StringComparison.Ordinal));
         Assert.Equal("netstandard2.0", _service.ActiveFramework(CoreProject));
+    }
+
+    [Fact]
+    public async Task A_target_failing_in_a_design_time_build_says_why_on_its_own_project()
+    {
+        // The design-time builds log critical events only (errors and warnings): an error still names its project.
+        var app = File.ReadAllText(AppProject);
+        File.WriteAllText(AppProject, app.Replace("</Project>", """
+              <Target Name="CodalusDesignTimeFails" BeforeTargets="CoreCompile">
+                <Error Code="CDX1" Text="The design-time build of App fails here." />
+              </Target>
+            </Project>
+            """, StringComparison.Ordinal));
+        await OpenEvaluatedAsync();
+        await WaitUntilAsync(() => _service.CompilerInputs.TryGetValue(AppProject, out var i) && i.State == CompilerInputStates.Failed,
+            describe: () => string.Join(", ", _service.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)}={i.Value.State}")));
+        Assert.Contains("CDX1: The design-time build of App fails here.", _service.CompilerInputs[AppProject].Error, StringComparison.Ordinal);
+        await WaitUntilAsync(() => _service.CompilerInputs.TryGetValue(CoreProject, out var i) && i.State == CompilerInputStates.Ok);
+        Assert.DoesNotContain("CDX1", _service.CompilerInputs[CoreProject].Error ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_target_failing_on_a_worker_node_says_why_on_its_own_project()
+    {
+        // Enough projects for worker nodes: the error comes from another process, still with its project.
+        var folder = Path.Combine(_root, "Many");
+        var names = Enumerable.Range(0, 7).Select(i => $"P{i}").ToList();
+        foreach (var name in names)
+        {
+            Directory.CreateDirectory(Path.Combine(folder, name));
+            var fails = name == "P5" ? """<Target Name="CodalusDesignTimeFails" BeforeTargets="CoreCompile"><Error Code="CDX2" Text="P5 fails here." /></Target>""" : string.Empty;
+            File.WriteAllText(Path.Combine(folder, name, name + ".csproj"), $"""<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>{fails}</Project>""");
+            File.WriteAllText(Path.Combine(folder, name, "C.cs"), $"namespace {name}; public class C {{ }}");
+        }
+
+        var slnx = Path.Combine(folder, "Many.slnx");
+        File.WriteAllText(slnx, "<Solution>" + string.Concat(names.Select(n => $"""<Project Path="{n}/{n}.csproj" />""")) + "</Solution>");
+        var solution = await _service.OpenAsync(slnx, trusted: true, restore: true, Timeout());
+        string P(string name) => Path.Combine(folder, name, name + ".csproj");
+        await WaitUntilAsync(() => names.All(n => _service.CompilerInputs.TryGetValue(P(n), out var i) && i.State is CompilerInputStates.Ok or CompilerInputStates.Failed && (n == "P5") == (i.State == CompilerInputStates.Failed)),
+            describe: () => string.Join(", ", _service.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)}={i.Value.State} {i.Value.Error}")));
+        Assert.Equal(7, solution.Projects.Length);
+        Assert.Contains("CDX2: P5 fails here.", _service.CompilerInputs[P("P5")].Error, StringComparison.Ordinal);
+        Assert.All(names.Where(n => n != "P5"), n => Assert.DoesNotContain("CDX2", _service.CompilerInputs[P(n)].Error ?? string.Empty, StringComparison.Ordinal));
     }
 
     [Fact]
