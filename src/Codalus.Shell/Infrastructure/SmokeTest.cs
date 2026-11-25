@@ -4732,11 +4732,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // Diagnosing one step: CODALUS_SMOKE_ONLY=<id>[,<id>…] runs those (steps that need an earlier one's state
         // need it listed too).
-        if (Environment.GetEnvironmentVariable("CODALUS_SMOKE_ONLY") is { Length: > 0 } only
-            && !only.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
+        if (Environment.GetEnvironmentVariable("CODALUS_SMOKE_ONLY") is { Length: > 0 } only)
         {
-            Report(id, milestone, title, "skipped", 0, "Not in CODALUS_SMOKE_ONLY.");
-            return;
+            var kept = only.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (!kept.Contains(id, StringComparer.Ordinal))
+            {
+                Report(id, milestone, title, "skipped", 0, "Not in CODALUS_SMOKE_ONLY.");
+                return;
+            }
+
+            // The steps open their solutions in the work folder, which projects.open trusts: a step run without it waited
+            // at the trust prompt, unanswered, to its limit (profiler.cpu on Windows, run 45517439073; web.scaffolding and
+            // profiler.memory before it). projects.newProject checks that its wizard trusts its folder, so it keeps it untrusted.
+            if (!kept.Contains("projects.newProject", StringComparer.Ordinal))
+            {
+                shell.Trust.Trust(Work);
+            }
         }
 
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
