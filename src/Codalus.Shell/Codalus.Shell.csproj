@@ -49,7 +49,6 @@
     <!-- Built-in plugins, each in plugins/<Folder>/: the plugin's id with dashes for dots (discovery reads the id from
          codalus-plugin.json). No folder name has a dot: codesign takes a dotted folder in a macOS app's Contents/MacOS for
          a nested bundle and refuses to sign the app (eng/package.sh checks). -->
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Welcome\Codalus.Plugins.Welcome.csproj" Folder="codalus-welcome" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" Folder="codalus-dotnettest" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" Folder="codalus-github" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" Folder="codalus-azuredevops" />

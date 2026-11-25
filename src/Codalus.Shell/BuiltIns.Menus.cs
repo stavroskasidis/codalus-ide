@@ -454,7 +454,7 @@ internal static partial class BuiltIns
             Item(Window, "workbench.toggleFullScreen", "5-screen"),
             Item(Window, "workbench.toggleDistractionFree", "5-screen"),
 
-            // Help. The Start page comes from the welcome plugin ("navigation").
+            // Help. The Start page is first ("navigation", ShellHost.StartPage).
             Item(Help, "workbench.showLogs", "help"),
             Item(Help, "help.setUp", "help"),
             Item(Help, "help.checkEnvironment", "help"),

@@ -12,7 +12,6 @@
     <ProjectReference Include="..\..\src\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" />
     <!-- Built so the tests can launch them; not referenced as assemblies. -->
     <ProjectReference Include="..\..\src\Codalus.Plugins.Host\Codalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.Welcome\Codalus.Plugins.Welcome.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Codalus.LspConformance.Server\Codalus.LspConformance.Server.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Codalus.AcpAgent.Fake\Codalus.AcpAgent.Fake.csproj" ReferenceOutputAssembly="false" />

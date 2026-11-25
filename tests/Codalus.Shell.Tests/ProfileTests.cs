@@ -71,22 +71,22 @@ public sealed class ProfileTests
     {
         var userData = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-shell-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(userData, "config"));
-        await File.WriteAllTextAsync(Path.Combine(userData, "config", "settings.json"), """{ "plugins.disabled": ["codalus.welcome"] }""", TestContext.Current.CancellationToken);
-        await using var f = ShellFixture.Create(userData);
+        await File.WriteAllTextAsync(Path.Combine(userData, "config", "settings.json"), """{ "plugins.disabled": ["codalus.dotnettest"] }""", TestContext.Current.CancellationToken);
+        await using var f = ShellFixture.Create(userData, builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.DotNetTest"));
         f.Shell.OnInteractive();
         ShellFixture.Pump();
 
-        var welcome = f.Shell.Plugins.Plugins.Single(p => p.Id == "codalus.welcome");
-        Assert.Equal(PluginState.Disabled, welcome.State);
-        Assert.Null(f.Shell.Workbench.Commands.Find("welcome.show"));
-        Assert.True(f.Shell.Plugins.IsTurnedOff("codalus.welcome"));
+        var plugin = f.Shell.Plugins.Plugins.Single(p => p.Id == "codalus.dotnettest");
+        Assert.Equal(PluginState.Disabled, plugin.State);
+        Assert.Null(f.Shell.Workbench.Commands.Find("dotnettest.createUnitTests"));
+        Assert.True(f.Shell.Plugins.IsTurnedOff("codalus.dotnettest"));
 
-        var row = f.Shell.PluginList.Plugins.Single(r => r.Id == "codalus.welcome");
+        var row = f.Shell.PluginList.Plugins.Single(r => r.Id == "codalus.dotnettest");
         Assert.Equal("Turn On", row.ToggleTitle);
         row.ToggleCommand.Execute(null);
-        await ShellFixture.PumpUntil(() => !f.Shell.Plugins.IsTurnedOff("codalus.welcome"));
+        await ShellFixture.PumpUntil(() => !f.Shell.Plugins.IsTurnedOff("codalus.dotnettest"));
 
         // The Plugins window refreshes after the setting is saved.
-        await ShellFixture.PumpUntil(() => f.Shell.PluginList.Plugins.Single(r => r.Id == "codalus.welcome").State.Contains("turned on from the next start", StringComparison.Ordinal));
+        await ShellFixture.PumpUntil(() => f.Shell.PluginList.Plugins.Single(r => r.Id == "codalus.dotnettest").State.Contains("turned on from the next start", StringComparison.Ordinal));
     }
 }
