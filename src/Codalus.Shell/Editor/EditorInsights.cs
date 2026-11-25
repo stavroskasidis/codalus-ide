@@ -376,6 +376,9 @@ public sealed class EditorInsights : IDisposable
     /// <summary>How many times the test lenses were worked out (tests).</summary>
     internal int TestLensUpdates { get; private set; }
 
+    /// <summary>The viewport's inlay hints and inheritance margin applied, once per refresh (tests).</summary>
+    internal int ViewportUpdates { get; private set; }
+
     /// <summary>The test outcomes by the line their test (or class) starts on; the innermost wins a line.</summary>
     private void UpdateTestLenses()
     {
@@ -785,17 +788,21 @@ public sealed class EditorInsights : IDisposable
         var model = Model;
         var version = model.Version;
         var range = new LanguageServices.Protocol.Range(new Position(first - 1, 0), new Position(last, 0));
-        // Both asked at once, the hints shown as soon as they come: the margin's glyphs (a walk of every type in the
-        // range) used to hold them back until both had answered one after the other.
-        Task<InheritanceMarginItem[]>? marginRequest = client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast)
-            ? client.InheritanceMarginAsync(model.Uri, range, token)
-            : null;
         try
         {
             InlayHint[] hints = [];
             if (client?.Capabilities?.InlayHintProvider == true && (Options.InlayParameterNames || Options.InlayTypes))
             {
                 hints = await client.InlayHintsAsync(model.Uri, range, token).ConfigureAwait(true);
+            }
+
+            // The margin after the hints, and both shown in one update: asked at once and shown as each came (M66's
+            // first version), each file opened took two redraws and two rounds of Updated, and everyday's open_tracked
+            // waited 163% longer for the UI thread on Linux (CI's bisect, run 45564475595).
+            InheritanceMarginItem[]? margin = null;
+            if (client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast))
+            {
+                margin = await client.InheritanceMarginAsync(model.Uri, range, token).ConfigureAwait(true);
             }
 
             if (token.IsCancellationRequested || _disposed || model.Version != version)
@@ -828,32 +835,18 @@ public sealed class EditorInsights : IDisposable
                 }, TimeSpan.FromSeconds(_emptyHints));
             }
 
-            _editor.TextArea.TextView.Redraw();
-            Updated?.Invoke(this, EventArgs.Empty);
-            if (marginRequest is null)
+            if (margin is not null)
             {
-                return;
+                Margin.Set(margin, first, last);
             }
 
-            var margin = await marginRequest.ConfigureAwait(true);
-            marginRequest = null;
-            if (token.IsCancellationRequested || _disposed || model.Version != version)
-            {
-                return;
-            }
-
-            Margin.Set(margin, first, last);
+            ViewportUpdates++;
             _editor.TextArea.TextView.Redraw();
             Updated?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
             RetryAfterFailure(ex, _hintTimer);
-        }
-        finally
-        {
-            // The hints failed or went stale while the margin was asked: its answer is dropped, and observed.
-            marginRequest?.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         }
     }
 
