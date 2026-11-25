@@ -502,7 +502,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             path = Path.GetFullPath(path);
             if (_coldAnswers.TryAdd(path, ColdAnswer.Partial))
             {
-                var full = AnswerAsync(p, ct);
+                var full = s_holdColdFull is { } hold ? HeldAsync(hold, p, ct) : AnswerAsync(p, ct);
                 var quick = await Task.WhenAny(full, Task.Delay(coldWait, CancellationToken.None)).ConfigureAwait(false) == full && full.IsCompletedSuccessfully;
                 if (quick && answered!(full.Result))
                 {
@@ -546,6 +546,13 @@ internal sealed class LanguageServer : IAsyncDisposable
 
             return answer;
         });
+
+        // The cold request's full answer, held back (CODALUS_LSHOST_HOLD_COLD_FULL_MS, tests only).
+        async Task<TResult> HeldAsync(TimeSpan hold, TParams p, CancellationToken ct)
+        {
+            await Task.Delay(hold, CancellationToken.None).ConfigureAwait(false);
+            return await AnswerAsync(p, ct).ConfigureAwait(false);
+        }
 
         // The answer from the syntax alone, with the version of the text it is for; null where there is none.
         async Task<(TResult? Partial, VersionStamp Text)> SyntacticAsync(TParams p, CancellationToken ct)
@@ -609,6 +616,16 @@ internal sealed class LanguageServer : IAsyncDisposable
     /// client's <c>codalusSyntacticTokens</c> capability; null (other clients), never.
     /// </summary>
     private TimeSpan? _coldWait;
+
+    /// <summary>
+    /// Tests only: how long a C# file's first request holds its full answer back, so that the syntax's answer comes
+    /// first. The two race (3d8232ae), and a full answer that landed first failed the tests of the syntax's answer
+    /// (macOS CI, run 45702937714).
+    /// </summary>
+    private static readonly TimeSpan? s_holdColdFull =
+        int.TryParse(Environment.GetEnvironmentVariable("CODALUS_LSHOST_HOLD_COLD_FULL_MS"), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var hold)
+            ? TimeSpan.FromMilliseconds(hold)
+            : null;
 
     /// <summary>How many requests took the full answer a cold request had kept computing (tests).</summary>
     internal int ReusedColdAnswers => Volatile.Read(ref _reusedColdAnswers);
