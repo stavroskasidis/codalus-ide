@@ -75,7 +75,7 @@ public sealed class MetadataReuseTests : IDisposable
     }
 
     [Fact]
-    public void A_packages_assemblies_are_known_by_its_marker_and_a_broken_one_is_no_reference()
+    public void A_packages_assemblies_are_known_by_its_marker_and_a_broken_one_is_reported_as_when_read()
     {
         var package = Path.Combine(_root, "packages", "contoso.lib", "1.0.0");
         Directory.CreateDirectory(Path.Combine(package, "lib", "net10.0"));
@@ -91,8 +91,18 @@ public sealed class MetadataReuseTests : IDisposable
         var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create("Check", references: [reference!]);
         Assert.NotNull(compilation.GetAssemblyOrModuleSymbol(reference!));
 
+        // A broken one is what it is when read, mapped or not: a reference the compiler reports (CS0009) on every OS.
         var broken = Path.Combine(package, "lib", "net10.0", "Broken.dll");
         File.WriteAllText(broken, "not an assembly");
-        Assert.Null(new ProjectLoader().Metadata(broken, MetadataReferenceProperties.Assembly));
+        var bad = new ProjectLoader().Metadata(broken, MetadataReferenceProperties.Assembly);
+        Assert.NotNull(bad);
+        var read = MetadataReference.CreateFromFile(broken);
+        Assert.Equal(
+            Codes(Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create("Read", references: [read])),
+            Codes(Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create("Check", references: [bad!])));
+        Assert.Contains("CS0009", Codes(Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create("Check", references: [bad!])));
+
+        static string[] Codes(Microsoft.CodeAnalysis.CSharp.CSharpCompilation compilation) =>
+            [.. compilation.GetDiagnostics().Select(d => d.Id).Distinct().Order(StringComparer.Ordinal)];
     }
 }
