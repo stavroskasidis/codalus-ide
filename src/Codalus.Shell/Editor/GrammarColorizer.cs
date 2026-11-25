@@ -58,7 +58,10 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
 
     public EditorTheme Theme { get; set; } = EditorTheme.Dark;
 
-    /// <summary>Tokenizes <paramref name="document"/> with <paramref name="tokenizer"/> (a line that takes too long is colored as far as it got).</summary>
+    /// <summary>
+    /// Tokenizes <paramref name="document"/> with <paramref name="tokenizer"/>. A line that takes too long is colored as far
+    /// as it got, and the next starts as it did (not wherever the tokenizer stopped), as the editor's TintColorizer does.
+    /// </summary>
     public void Tokenize(TextDocument document, Tokenizer tokenizer)
     {
         var lines = new (int Start, int Length, int Type)[document.LineCount][];
@@ -69,7 +72,8 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
             var line = document.GetLineByNumber(number);
             var text = document.GetText(line.Offset, line.Length);
             var tokens = new List<(int, int, int)>();
-            foreach (var token in tokenizer.TokenizeLine(text, state, out state))
+            var lineStart = state;
+            foreach (var token in tokenizer.TokenizeLine(text, lineStart, out state))
             {
                 var start = Math.Min(token.Start, text.Length);
                 var end = Math.Min(token.End, text.Length);
@@ -77,6 +81,11 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
                 {
                     tokens.Add((start, end - start, type));
                 }
+            }
+
+            if (tokenizer.StoppedEarly)
+            {
+                state = lineStart;
             }
 
             lines[number - 1] = [.. tokens];
