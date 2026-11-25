@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest] # open_tracked's confirmation: A, the fix (C = c5a78ea3), and the fix without syntactic colors (C1)
+        os: [macos-latest] # open_tracked on macOS: A = develop's head, C = the PR's head, CR = C with the reveal change (416df18f) reverted
     runs-on: ${{ matrix.os }}
     timeout-minutes: 330
     env:
@@ -48,10 +48,10 @@ jobs:
         run: |
           set -euo pipefail
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-          # C = the PR with the open_tracked fix (c5a78ea3), C1 = C without syntactic colors.
+          # A = develop's head (1e941594), C = the PR's head (5598b378, develop merged), CR = C with 416df18f reverted.
           # macOS's bash is 3.2: no associative arrays.
-          ref() { case "$1" in A) echo "$BASELINE" ;; C) echo c5a78ea3 ;; C1) echo 7f6356de ;; esac; }
-          for v in A C C1; do
+          ref() { case "$1" in A) echo 1e941594 ;; C) echo 5598b378 ;; CR) echo 27f6be4d ;; esac; }
+          for v in A C CR; do
             git worktree add "../tree-$v" "$(ref "$v")"
             (cd "../tree-$v" && dotnet publish src/Codalus.Shell -c Release -r "$rid" -o "$GITHUB_WORKSPACE/ab/$v")
           done
@@ -76,9 +76,9 @@ jobs:
           # macOS has no coreutils timeout (run 45516575948 ran no scenario there): the job's own limit stands in.
           limit() { if command -v timeout > /dev/null; then timeout "$@"; elif command -v gtimeout > /dev/null; then gtimeout "$@"; else shift; "$@"; fi; }
           round=0
-          # Each variant once per round, the order rotated each round, 10 rounds.
-          order=(A C C1)
-          for r in 0 1 2 3 4 5 6 7 8 9; do
+          # Each variant once per round, the order rotated each round, 12 rounds.
+          order=(A C CR)
+          for r in 0 1 2 3 4 5 6 7 8 9 10 11; do
             for k in 0 1 2; do
               variant=${order[$(( (k + r) % 3 ))]}
               round=$((round + 1))
@@ -113,13 +113,13 @@ jobs:
                       samples.setdefault(("rpcbench", r["payload"] + "_alloc_kb"), []).append(r["allocated_bytes_per_round_trip"] / 1024)
               return samples
           a = load("A")
-          variants = {v: load(v) for v in ["C", "C1"]}
-          print(f"## M66 open_tracked confirmation on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
-          print("A = develop's head, C = the PR with the open_tracked fix (c5a78ea3), C1 = C without syntactic colors. Medians over 10 rotated rounds, change from A.\n")
+          variants = {v: load(v) for v in ["C", "CR"]}
+          print(f"## M66 open_tracked on macOS: the reveal change, on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
+          print("A = develop's head (1e941594), C = the PR's head (5598b378), CR = C with the Solution Explorer reveal change (416df18f) reverted. Medians over 12 rotated rounds, change from A.\n")
           def mad(xs):
               m = statistics.median(xs)
               return statistics.median([abs(x - m) for x in xs])
-          names = ["C", "C1"]
+          names = ["C", "CR"]
           print("| Metric | A | " + " | ".join(names) + " |")
           print("|---|---|" + "---|" * len(names))
           for key in sorted(a, key=lambda k: str(k[1])):
