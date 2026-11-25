@@ -4,8 +4,9 @@ namespace Codalus.Shell.Editor;
 
 /// <summary>
 /// The languages the shell knows without plugins (ADR 0016): the files of .NET repositories and the common languages
-/// next to them. Grammars and language configurations come from TextMateSharp's bundled VS Code grammars (MIT), looked up
-/// by language id when a file first opens (<see cref="TextMateSupport"/>), so startup doesn't load them.
+/// next to them. Grammars come from Tint's bundled VS Code grammars and language configurations from VS Code's (MIT,
+/// embedded in the shell), looked up by language id when a file first opens (<see cref="TextMateSupport"/>), so startup
+/// doesn't load them.
 /// </summary>
 public static class BuiltInLanguages
 {

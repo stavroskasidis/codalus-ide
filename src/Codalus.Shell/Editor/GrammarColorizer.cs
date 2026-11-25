@@ -1,7 +1,7 @@
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Codalus.LanguageServices.Protocol;
-using TextMateSharp.Grammars;
+using Tint;
 
 namespace Codalus.Shell.Editor;
 
@@ -58,23 +58,22 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
 
     public EditorTheme Theme { get; set; } = EditorTheme.Dark;
 
-    /// <summary>Tokenizes <paramref name="document"/> with <paramref name="grammar"/> (a line that takes too long is colored as far as it got).</summary>
-    public void Tokenize(TextDocument document, IGrammar grammar)
+    /// <summary>Tokenizes <paramref name="document"/> with <paramref name="tokenizer"/> (a line that takes too long is colored as far as it got).</summary>
+    public void Tokenize(TextDocument document, Tokenizer tokenizer)
     {
         var lines = new (int Start, int Length, int Type)[document.LineCount][];
-        IStateStack? state = null;
+        var state = StateStack.Initial;
+        tokenizer.TimeBudget = TimeSpan.FromMilliseconds(200);
         for (var number = 1; number <= document.LineCount; number++)
         {
             var line = document.GetLineByNumber(number);
             var text = document.GetText(line.Offset, line.Length);
-            var result = grammar.TokenizeLine(text, state, TimeSpan.FromMilliseconds(200));
-            state = result.RuleStack;
             var tokens = new List<(int, int, int)>();
-            foreach (var token in result.Tokens)
+            foreach (var token in tokenizer.TokenizeLine(text, state, out state))
             {
-                var start = Math.Min(token.StartIndex, text.Length);
-                var end = Math.Min(token.EndIndex, text.Length);
-                if (end > start && TypeOf(token.Scopes) is { } type)
+                var start = Math.Min(token.Start, text.Length);
+                var end = Math.Min(token.End, text.Length);
+                if (end > start && TypeOf(token.Scopes.GetScopeNames()) is { } type)
                 {
                     tokens.Add((start, end - start, type));
                 }
