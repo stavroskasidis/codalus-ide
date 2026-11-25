@@ -179,9 +179,10 @@ public sealed class CodeViewer : UserControl
         }
 
         _grammarColors.Theme = _services.Theme;
-        // The same text shown again (a peek or a result view's refresh): its tokens stand. Keyed by the grammar's scope:
-        // each TokenizerFor is a new tokenizer.
-        var tokenized = (Editor.Document, Editor.Document.Version, _services.TextMate.GrammarScopeFor(languageId), _grammarColors);
+        // The same text shown again (a peek or a result view's refresh): its tokens stand. Keyed by the grammar's scope and
+        // the languages' generation (each TokenizerFor is a new tokenizer, and a plugin's grammar can replace a bundled one
+        // under the same scope).
+        var tokenized = (Editor.Document, Editor.Document.Version, _services.TextMate.GrammarScopeFor(languageId), _services.TextMate.Generation, _grammarColors);
         if (Equals(_tokenized, tokenized))
         {
             return;
@@ -200,7 +201,7 @@ public sealed class CodeViewer : UserControl
         }
     }
 
-    /// <summary>What the grammar colors were last made for: the document, its version, the grammar's scope and the colorizer.</summary>
+    /// <summary>What the grammar colors were last made for: the document, its version, the grammar's scope, the languages' generation and the colorizer.</summary>
     private object? _tokenized;
 
     /// <summary>How many times the text was tokenized (tests).</summary>

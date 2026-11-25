@@ -24,5 +24,11 @@ public sealed class CodeViewerTokenizeTests
 
         viewer.Show("class D { }", "csharp", null);
         Assert.Equal(2, viewer.Tokenizations);
+
+        // The languages changed (a plugin's grammar, which could replace the bundled one under its scope): the same text
+        // is tokenized again.
+        f.Shell.Workbench.LanguageDefinitions.Register(new Workbench.Languages.LanguageDefinition("contoso", "Contoso") { Extensions = [".ctso"] });
+        viewer.Show("class D { }", "csharp", null);
+        Assert.Equal(3, viewer.Tokenizations);
     }
 }
