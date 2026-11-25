@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest] # this round: Linux, B with 3d8232ae (the full answer racing the syntax's)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 330
     env:
