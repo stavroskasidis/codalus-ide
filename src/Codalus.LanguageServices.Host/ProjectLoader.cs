@@ -218,18 +218,21 @@ internal sealed class ProjectLoader
     /// <summary>A package assembly mapped, its metadata read now so that a broken file fails here, as a read one does.</summary>
     private static PortableExecutableReference Mapped(string path)
     {
+        var documentation = DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture);
         var metadata = AssemblyMetadata.CreateFromFile(path);
         try
         {
             _ = metadata.GetModules()[0].GetMetadataReader();
         }
-        catch
+        catch (Exception ex) when (ex is BadImageFormatException or IOException)
         {
+            // Not an assembly: unmapped, and read as anywhere else, so the compiler reports it (CS0009) on every OS
+            // (Windows CI, PR #537's run 45527942398: the mapped path had dropped it instead).
             metadata.Dispose();
-            throw;
+            return MetadataReference.CreateFromFile(path, documentation: documentation);
         }
 
-        return metadata.GetReference(documentation: DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture), filePath: path);
+        return metadata.GetReference(documentation: documentation, filePath: path);
     }
 
     /// <summary>
