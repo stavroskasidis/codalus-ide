@@ -207,10 +207,28 @@ internal static class CodeLensFeature
         return [.. lenses];
     }
 
-    /// <summary>A class or record class that isn't sealed or static: other types can derive from it.</summary>
-    private static bool IsInheritable(SyntaxNode node) =>
-        node is ClassDeclarationSyntax or RecordDeclarationSyntax { ClassOrStructKeyword.RawKind: not (int)SyntaxKind.StructKeyword }
-        && !((MemberDeclarationSyntax)node).Modifiers.Any(m => m.IsKind(SyntaxKind.SealedKeyword) || m.IsKind(SyntaxKind.StaticKeyword));
+    /// <summary>
+    /// A class or record class that isn't sealed or static: other types can derive from it. Not one whose constructors
+    /// are all private, with no nested types and no other parts: nothing can, so its lens would only cost a search of
+    /// the solution for derived classes.
+    /// </summary>
+    private static bool IsInheritable(SyntaxNode node)
+    {
+        if (node is not (ClassDeclarationSyntax or RecordDeclarationSyntax { ClassOrStructKeyword.RawKind: not (int)SyntaxKind.StructKeyword })
+            || node is not TypeDeclarationSyntax type
+            || type.Modifiers.Any(m => m.IsKind(SyntaxKind.SealedKeyword) || m.IsKind(SyntaxKind.StaticKeyword)))
+        {
+            return false;
+        }
+
+        var constructors = type.Members.OfType<ConstructorDeclarationSyntax>().Where(c => !c.Modifiers.Any(SyntaxKind.StaticKeyword)).ToList();
+        var closed = type.ParameterList is null // a record's primary constructor is public
+            && constructors.Count > 0
+            && constructors.All(c => !c.Modifiers.Any(m => m.Kind() is SyntaxKind.PublicKeyword or SyntaxKind.ProtectedKeyword or SyntaxKind.InternalKeyword))
+            && !type.Modifiers.Any(SyntaxKind.PartialKeyword)
+            && !type.Members.OfType<BaseTypeDeclarationSyntax>().Any();
+        return !closed;
+    }
 
     private static CodeLens Lens(Protocol.Range range, LensData data) =>
         new(range) { Data = JsonSerializer.SerializeToElement(new[] { data.Uri, data.Line.ToString(System.Globalization.CultureInfo.InvariantCulture), data.Character.ToString(System.Globalization.CultureInfo.InvariantCulture), data.Kind }, ProtocolJsonContext.Default.StringArray) };

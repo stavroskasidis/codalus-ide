@@ -9,6 +9,7 @@ using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Controls;
 using Location = Codalus.LanguageServices.Protocol.Location;
@@ -46,10 +47,11 @@ public enum LensSubject
 }
 
 /// <summary>
-/// A click on a CodeLens title: its command (the language service's), what it counts, and where its popup goes (the
-/// bottom of the title in <paramref name="Target"/>'s coordinates). The caret is on the lens's symbol already.
+/// A click on a CodeLens title: its command (the language service's), what it counts, the lens's symbol
+/// (<paramref name="Position"/>, in the pane that was clicked, which may be the split one), where its popup goes (the
+/// bottom of the title in <paramref name="Target"/>'s coordinates), and what takes the focus back when it closes.
 /// </summary>
-public sealed record CodeLensClick(string CommandId, LensSubject Subject, Visual Target, Point Anchor);
+public sealed record CodeLensClick(string CommandId, LensSubject Subject, Position Position, Visual Target, Point Anchor, InputElement ReturnFocus);
 
 /// <summary>The wording of the C# service's CodeLens titles in each style.</summary>
 public static partial class LensTitles
@@ -157,13 +159,14 @@ public sealed class LensResultsPresenter
                 Close();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Enter)
+            else if (e.Key == Key.Enter && e.Source is Visual source && (source == _list || _list.IsVisualAncestorOf(source)))
             {
+                // A row's: the header's button (which can take the focus) takes its own Enter.
                 Choose(_list.SelectedIndex);
                 e.Handled = true;
             }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-        AutomationProperties.SetName(frame, "CodeLens results");
+        AutomationProperties.SetName(frame, Localizer.Get("codeLens.popup.name", "CodeLens results"));
     }
 
     /// <summary>The popup; the editor view adds it to its tree.</summary>

@@ -18,7 +18,10 @@ public sealed partial class ShellHost
 
     void IEditorServices.RunCodeLens(CodeLensClick click) => _ = RunCodeLensAsync(click);
 
-    /// <summary>Runs a CodeLens click; the caret is on the lens's symbol.</summary>
+    /// <summary>
+    /// Runs a CodeLens click at the lens's symbol (<see cref="CodeLensClick.Position"/>, in the pane that was clicked:
+    /// the split pane's caret isn't the primary controller's).
+    /// </summary>
     internal async Task RunCodeLensAsync(CodeLensClick click)
     {
         if (click.Subject == LensSubject.Other)
@@ -27,13 +30,13 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (ActiveLanguageEditor() is not var (editor, controller, client))
+        if (ActiveLanguageEditor() is not var (editor, _, client))
         {
             return;
         }
 
-        var position = editor.Model.PositionAt(controller.Editor.CaretOffset);
-        try
+        var position = click.Position;
+        await GuardLensAsync(async () =>
         {
             if (EditorOptions.For(editor.Model.LanguageId).CodeLensPopups)
             {
@@ -47,6 +50,18 @@ public sealed partial class ShellHost
             {
                 await ShowLensImplementationsAsync(editor, client, position, alwaysWindow: false).ConfigureAwait(true);
             }
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Runs a CodeLens step and logs what the language host's failures (a restart, a remote error, a cancellation)
+    /// leave: also the popup's row and header button, which run after the click's own call has returned.
+    /// </summary>
+    private async Task GuardLensAsync(Func<Task> run)
+    {
+        try
+        {
+            await run().ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException)
         {
@@ -55,15 +70,32 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
+    /// The implementations and overrides of the symbol at <paramref name="position"/>, without the symbol's own
+    /// declarations: Go to Implementation lists a non-abstract class or a virtual member among its own, and the lens
+    /// counts only the others.
+    /// </summary>
+    private static async Task<Location[]> LensImplementationLocationsAsync(CodeEditorDocument editor, LanguageHostClient client, Position position)
+    {
+        var locations = await client.ImplementationAsync(editor.Model.Uri, position, CancellationToken.None).ConfigureAwait(true);
+        if (locations.Length == 0)
+        {
+            return locations;
+        }
+
+        var own = await client.DefinitionAsync(editor.Model.Uri, position, CancellationToken.None).ConfigureAwait(true);
+        return [.. locations.Where(l => !own.Any(d => d.Uri == l.Uri && d.Range.Start == l.Range.Start))];
+    }
+
+    /// <summary>
     /// The default style's implementations: one opens; more go to the References window (<c>'Shape' implementations</c>),
     /// as <paramref name="alwaysWindow"/> (the popup's window button) sends even one.
     /// </summary>
     private async Task ShowLensImplementationsAsync(CodeEditorDocument editor, LanguageHostClient client, Position position, bool alwaysWindow)
     {
-        var locations = await client.ImplementationAsync(editor.Model.Uri, position, CancellationToken.None).ConfigureAwait(true);
+        var locations = await LensImplementationLocationsAsync(editor, client, position).ConfigureAwait(true);
         if (locations.Length == 0)
         {
-            ShowMessage("No implementations found.");
+            ShowMessage(Codalus.Workbench.Localization.Localizer.Get("msg.codeLens.noImplementations", "No implementations found."));
             return;
         }
 
@@ -95,26 +127,28 @@ public sealed partial class ShellHost
             if (items.Count == 0)
             {
                 // A member's implementations and overrides, or a server without a type hierarchy.
-                items = await LensRowsAsync(await client.ImplementationAsync(editor.Model.Uri, position, CancellationToken.None).ConfigureAwait(true), SymbolKind.Method).ConfigureAwait(true);
+                items = await LensRowsAsync(await LensImplementationLocationsAsync(editor, client, position).ConfigureAwait(true), SymbolKind.Method).ConfigureAwait(true);
             }
 
             title = click.Subject == LensSubject.DerivedTypes
                 ? Codalus.Workbench.Localization.Localizer.Format("codeLens.popup.derivedTypes", "Derived types of '{0}'", name)
                 : Codalus.Workbench.Localization.Localizer.Format("codeLens.popup.implementations", "Implementations of '{0}'", name);
-            openWindow = () => _ = ShowLensImplementationsAsync(editor, client, position, alwaysWindow: true);
+            openWindow = () => _ = GuardLensAsync(() => ShowLensImplementationsAsync(editor, client, position, alwaysWindow: true));
         }
 
         if (items.Count == 0)
         {
-            ShowMessage(click.Subject == LensSubject.Usages ? "No references found." : "No implementations found.");
+            ShowMessage(click.Subject == LensSubject.Usages
+                ? Codalus.Workbench.Localization.Localizer.Get("msg.codeLens.noReferences", "No references found.")
+                : Codalus.Workbench.Localization.Localizer.Get("msg.codeLens.noImplementations", "No implementations found."));
             return;
         }
 
-        editor.View?.ShowLensResults(click.Target, click.Anchor, title, items, location =>
+        editor.View?.ShowLensResults(click.Target, click.Anchor, title, items, location => GuardLensAsync(() =>
         {
             RememberLocation();
             return OpenLocationAsync(location);
-        }, openWindow);
+        }), openWindow, click.ReturnFocus);
     }
 
     /// <summary>The uses of the symbol (not its declarations), and how to show all of them in the References window.</summary>
@@ -135,12 +169,14 @@ public sealed partial class ShellHost
         }
 
         var locations = await client.ReferencesAsync(editor.Model.Uri, position, includeDeclaration: false, CancellationToken.None).ConfigureAwait(true);
-        return (name, await LensRowsAsync(locations, icon: null).ConfigureAwait(true), () => _ = ShowReferenceLocationsAsync(name, locations));
+        return (name, await LensRowsAsync(locations, icon: null).ConfigureAwait(true), () => _ = GuardLensAsync(() => ShowReferenceLocationsAsync(name, locations)));
     }
 
     /// <summary>
     /// The types derived from the type at <paramref name="position"/> (or implementing it), every level, as the type
-    /// hierarchy lists them: the name, its namespace and its project. Empty when the position isn't a type's name.
+    /// hierarchy lists them: the name, its namespace and its project, up to <see cref="MaxLensTypes"/>. Empty when the
+    /// position isn't a type's name. The interfaces derived from an interface are walked through to reach their
+    /// implementers but aren't rows: the lens counts the types that implement it, no interfaces.
     /// </summary>
     private async Task<IReadOnlyList<LensResultItem>> LensDerivedTypesAsync(CodeEditorDocument editor, LanguageHostClient client, Position position)
     {
@@ -157,26 +193,48 @@ public sealed partial class ShellHost
         }
 
         var projectOf = ErrorListViewModel.ProjectNames([.. Solutions.Projects.Values]);
+        var subtypes = await LensSubtypesAsync(root, item => client.SubtypesAsync(item, CancellationToken.None), MaxLensTypes).ConfigureAwait(true);
+        return [.. subtypes.Select(subtype =>
+        {
+            var path = DocumentUris.ToPath(subtype.Uri);
+            return new LensResultItem(
+                SymbolNodeViewModel.IconFor(subtype.Kind),
+                subtype.Name,
+                subtype.Detail is { Length: > 0 } ns ? $"(in {ns})" : null,
+                path is null ? null : projectOf(path) is { Length: > 0 } project ? project : null,
+                new Location(subtype.Uri, subtype.SelectionRange));
+        })];
+    }
+
+    /// <summary>
+    /// The types under <paramref name="root"/> in the type hierarchy, level by level, each once, up to
+    /// <paramref name="max"/>: derived interfaces are walked through (their implementers are under them) but left out,
+    /// as the lens counts no interfaces.
+    /// </summary>
+    internal static async Task<List<TypeHierarchyItem>> LensSubtypesAsync(TypeHierarchyItem root, Func<TypeHierarchyItem, Task<TypeHierarchyItem[]>> subtypesOf, int max)
+    {
         var seen = new HashSet<(string, int, int)> { Key(root) };
         var queue = new Queue<TypeHierarchyItem>([root]);
-        var items = new List<LensResultItem>();
-        while (queue.TryDequeue(out var item) && items.Count < MaxLensTypes)
+        var items = new List<TypeHierarchyItem>();
+        while (items.Count < max && queue.TryDequeue(out var item))
         {
-            foreach (var subtype in await client.SubtypesAsync(item, CancellationToken.None).ConfigureAwait(true))
+            foreach (var subtype in await subtypesOf(item).ConfigureAwait(true))
             {
+                if (items.Count >= max)
+                {
+                    break; // an interface with thousands of direct implementers
+                }
+
                 if (!seen.Add(Key(subtype)))
                 {
                     continue; // a type that implements two interfaces of the hierarchy
                 }
 
-                var path = DocumentUris.ToPath(subtype.Uri);
-                items.Add(new LensResultItem(
-                    SymbolNodeViewModel.IconFor(subtype.Kind),
-                    subtype.Name,
-                    subtype.Detail is { Length: > 0 } ns ? $"(in {ns})" : null,
-                    path is null ? null : projectOf(path) is { Length: > 0 } project ? project : null,
-                    new Location(subtype.Uri, subtype.SelectionRange)));
                 queue.Enqueue(subtype);
+                if (subtype.Kind != SymbolKind.Interface)
+                {
+                    items.Add(subtype);
+                }
             }
         }
 

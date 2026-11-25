@@ -36,6 +36,84 @@ public class CodeLensStyleTests
     public void Subjects_come_from_the_declaration(string? kind, string declaration, LensSubject expected) =>
         Assert.Equal(expected, LensTitles.Subject(kind, declaration));
 
+    private static Codalus.LanguageServices.Protocol.TypeHierarchyItem Type(string name, int kind, int line)
+    {
+        var range = new Codalus.LanguageServices.Protocol.Range(new(line, 0), new(line, name.Length));
+        return new(name, kind, "file:///src/Shapes.cs", range, range);
+    }
+
+    [Fact]
+    public async Task An_interfaces_popup_walks_through_derived_interfaces_without_listing_them()
+    {
+        // interface IShape; interface ISolid : IShape; class Circle : IShape; class Cube : ISolid, IShape.
+        const int Interface = Codalus.LanguageServices.Protocol.SymbolKind.Interface, Class = Codalus.LanguageServices.Protocol.SymbolKind.Class;
+        var shape = Type("IShape", Interface, 0);
+        var solid = Type("ISolid", Interface, 1);
+        var circle = Type("Circle", Class, 2);
+        var cube = Type("Cube", Class, 3);
+        var hierarchy = new Dictionary<string, Codalus.LanguageServices.Protocol.TypeHierarchyItem[]>
+        {
+            ["IShape"] = [solid, circle, cube],
+            ["ISolid"] = [cube],
+        };
+
+        var items = await ShellHost.LensSubtypesAsync(shape, t => Task.FromResult(hierarchy.GetValueOrDefault(t.Name, [])), max: 500);
+
+        Assert.Equal(["Circle", "Cube"], items.Select(i => i.Name)); // what the lens counts: 2 implementations
+    }
+
+    [Fact]
+    public async Task A_popups_derived_types_stop_at_the_limit_within_a_level()
+    {
+        var root = Type("IShape", Codalus.LanguageServices.Protocol.SymbolKind.Interface, 0);
+        var implementers = Enumerable.Range(1, 2000).Select(i => Type("Shape" + i, Codalus.LanguageServices.Protocol.SymbolKind.Class, i)).ToArray();
+
+        var items = await ShellHost.LensSubtypesAsync(root, t => Task.FromResult(t == root ? implementers : []), max: 500);
+
+        Assert.Equal(500, items.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task The_window_style_goes_straight_to_a_virtual_members_one_override()
+    {
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensStyleKey, CodeLensStyles.Window, SettingScope.User, TestContext.Current.CancellationToken);
+        f.Window.Width = 1200;
+        f.Window.Height = 1600;
+        var shapes = await OpenShapesAsync(f);
+        var describeLine = LineOf(shapes, "public virtual string Describe");
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(describeLine) is { } row && row.Contains("1 implementation", StringComparison.Ordinal), seconds: 60,
+            describe: () => $"row '{shapes.Insights.LensRowAbove(describeLine)}'");
+
+        // Go to Implementation lists the virtual member itself too: the lens leaves it out, so its one override opens.
+        await ClickTitleAsync(f, shapes, describeLine, "1 implementation");
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is { } active && CaretLine(active).Contains("override string Describe", StringComparison.Ordinal),
+            describe: () => f.Shell.ActiveEditor?.Controller is { } active ? CaretLine(active) : "no editor");
+        Assert.False(f.Shell.References.HasResults);
+    }
+
+    [AvaloniaFact]
+    public async Task A_virtual_members_popup_lists_its_overrides_not_itself()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 1600;
+        var shapes = await OpenShapesAsync(f);
+        var describeLine = LineOf(shapes, "public virtual string Describe");
+        var overrideLine = LineOf(shapes, "public override string Describe");
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(describeLine) is { } row && row.Contains("1 implementation", StringComparison.Ordinal), seconds: 60,
+            describe: () => $"row '{shapes.Insights.LensRowAbove(describeLine)}'");
+
+        var view = f.Shell.ActiveEditor!.View!;
+        await ClickTitleAsync(f, shapes, describeLine, "1 implementation");
+        await ShellFixture.PumpUntil(() => view.LensResults is { IsOpen: true });
+        var popup = view.LensResults!;
+        Assert.Equal("Implementations of 'Describe'", popup.Title);
+        Assert.Equal([overrideLine - 1], popup.Items.Select(i => i.Location.Range.Start.Line));
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => !popup.IsOpen);
+    }
+
     private static async Task<CodeEditorController> OpenShapesAsync(ShellFixture f)
     {
         var folder = await f.OpenLanguageFeaturesAsync();

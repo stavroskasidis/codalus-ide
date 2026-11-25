@@ -7,8 +7,8 @@ namespace Codalus.LanguageServices.Host.Tests;
 
 /// <summary>
 /// CodeLens's count of derived types on every class something can derive from (its inheritors), not only abstract
-/// ones: shown when the class has some, hidden ("-") when it has none, and not offered on sealed or static classes or on
-/// structs.
+/// ones: shown when the class has some, hidden ("-") when it has none, and not offered on sealed or static classes, on
+/// classes whose constructors are all private, or on structs.
 /// </summary>
 public sealed class InheritorsLensTests
 {
@@ -28,6 +28,8 @@ public sealed class InheritorsLensTests
         public struct Size { }
         public interface IVehicle { }
         public class Car : IVehicle { }
+        public class Singleton { private Singleton() { } }
+        public class Template { protected Template() { } }
         """;
 
     private static async Task<(Solution Solution, Document Document, SourceText Text)> OpenAsync()
@@ -73,6 +75,7 @@ public sealed class InheritorsLensTests
     [InlineData("Leaf")]
     [InlineData("Cat")]
     [InlineData("Reply")]
+    [InlineData("Template")] // a protected constructor: a class elsewhere can derive from it
     public async Task A_class_nothing_derives_from_hides_its_count(string type) =>
         Assert.Equal("-", await ImplementationsTitleAsync(type));
 
@@ -81,6 +84,7 @@ public sealed class InheritorsLensTests
     [InlineData("Helpers")]
     [InlineData("Point")]
     [InlineData("Size")]
+    [InlineData("Singleton")] // only private constructors and no nested types: nothing can derive from it
     public async Task Sealed_and_static_classes_and_structs_have_no_count(string type) =>
         Assert.Null(await ImplementationsTitleAsync(type));
 }

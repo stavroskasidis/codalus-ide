@@ -1091,8 +1091,10 @@ public sealed class EditorInsights : IDisposable
         _services.RunCodeLens(new CodeLensClick(
             command.CommandId,
             LensTitles.Subject(kind, _editor.Document.GetText(line.Offset, lens.StartOffset - line.Offset)),
+            position,
             view,
-            anchor ?? Caret(view, _editor.TextArea.Caret)));
+            anchor ?? Caret(view, _editor.TextArea.Caret),
+            _editor.TextArea));
     }
 
     /// <summary>Below the caret's line, at the caret: where a lens's popup goes when it wasn't clicked on its row.</summary>
