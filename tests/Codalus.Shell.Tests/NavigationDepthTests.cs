@@ -84,6 +84,8 @@ public class NavigationDepthTests
         var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
         var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is { } eol && eol.Contains("implementations", StringComparison.Ordinal), seconds: 60);
+        // Lenses resolve four at a time (M66), so the references count can land after the implementations' (Linux CI, run 45517276684).
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(interfaceLine)?.Contains("references", StringComparison.Ordinal) == true, seconds: 60, describe: () => $"row '{shapes.Insights.LensRowAbove(interfaceLine)}'");
         Assert.Contains("2 references", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal);
         var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is { Length: > 0 }, seconds: 60); // its counts, to click: the row is there before them
