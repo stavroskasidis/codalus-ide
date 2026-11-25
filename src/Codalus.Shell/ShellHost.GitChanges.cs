@@ -295,9 +295,12 @@ public sealed partial class ShellHost
     public Task OpenMergeEditorCommandAsync(IReadOnlyList<JsonElement> args) =>
         ChangeArguments(args).Path is { } path ? OpenMergeEditorAsync(path) : Task.CompletedTask;
 
-    /// <summary>Compare with Unmodified: a node's file (its staged or unstaged changes, by its section), else the active file's.</summary>
+    /// <summary>
+    /// Compare with Unmodified: a node's file (its staged or unstaged changes, by its section), else the active file's. The
+    /// editor's Git ▸ passes the document URI and the caret, not a section: the active file.
+    /// </summary>
     public Task ShowDiffCommandAsync(IReadOnlyList<JsonElement> args) =>
-        ChangeArguments(args) is (string path, var section, _)
+        ChangeArguments(args) is (string path, string section, _)
             ? GitActionAsync(() => OpenDiffAsync(path, section == "staged"))
             : ShowActiveFileDiffAsync();
 

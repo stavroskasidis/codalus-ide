@@ -450,10 +450,14 @@ public sealed class DocumentOutlineViewModel : ObservableObject, IShownAware
         Current = node;
     }
 
-    /// <summary>Moves the caret to a symbol (Enter or a click), one of the current document's rows.</summary>
+    /// <summary>
+    /// Moves the caret to a symbol (Enter or a click), one of the current document's rows. A row it no longer shows (another
+    /// document's, clicked as they were replaced) goes nowhere: its symbol's place is the other document's (Linux CI, run
+    /// 45632903916).
+    /// </summary>
     public void Navigate(SymbolNodeViewModel node)
     {
-        if (_editor is { } editor && ReferenceEquals(editor, _shownEditor))
+        if (_editor is { } editor && ReferenceEquals(editor, _shownEditor) && Rows.Contains(node))
         {
             editor.Navigate(node.Symbol.SelectionRange.Start);
         }

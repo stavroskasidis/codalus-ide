@@ -513,6 +513,8 @@ public static class CommandIcons
         ["git.compareWith"] = new("compare"),
         ["git.fileHistory"] = new("history"),
         ["git.lineHistory"] = new("history"),
+        ["git.undoFileChanges"] = new("undo"),
+        ["git.toggleBlame"] = new("comment"),
         ["git.pullRequests"] = new("pull-request", Git),
         ["git.createPullRequest"] = new("pull-request", Git),
         ["git.workItems"] = new("task-list"),
