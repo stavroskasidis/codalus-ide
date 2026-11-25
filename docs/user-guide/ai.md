@@ -227,14 +227,14 @@ AI Chat can also run a coding agent that is a program of its own (to use the age
 | Agent | What runs | Version | Sign-in | How the test checks it |
 |---|---|---|---|---|
 | Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.110.0` | 0.110.0 | Claude subscription or Anthropic Console account (Claude Code's own login, in the Terminal), an API key (`ANTHROPIC_API_KEY`), or signed in already | Claude reports who is signed in |
-| Codex | `npx -y @agentclientprotocol/codex-acp@2.10.0` | 2.10.0 | ChatGPT (your browser), an API key (kept by Codex), or signed in already | the session is refused while signed out |
-| Gemini CLI | `npx -y @google/gemini-cli@0.70.0 --acp` | 0.70.0 | Google account (your browser), a Gemini API key (`GEMINI_API_KEY`), or signed in already | the session is refused while signed out |
-| GitHub Copilot | `npx -y @github/copilot@1.0.114 --acp` | 1.0.114 | a GitHub token (`GH_TOKEN`), or signed in already | not confirmed |
+| Codex | `npx -y @agentclientprotocol/codex-acp@2.12.0` | 2.12.0 | ChatGPT (your browser), an API key (kept by Codex), or signed in already | the session is refused while signed out |
+| Gemini CLI | `npx -y @google/gemini-cli@0.71.1 --acp` | 0.71.1 | Google account (your browser), a Gemini API key (`GEMINI_API_KEY`), or signed in already | the session is refused while signed out |
+| GitHub Copilot | `npx -y @github/copilot@1.0.115 --acp` | 1.0.115 | a GitHub token (`GH_TOKEN`), or signed in already | not confirmed |
 | pi | `npx -y pi-acp@0.0.35` (and pi's own CLI, 0.81 or later) | 0.0.35 | pi's setup in the Terminal, or signed in already | not confirmed |
 | OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.6 | `opencode auth login` in the Terminal, or signed in already | not confirmed |
 | goose | `goose acp` (install goose first) | tested with 1.60.2 | `goose configure` in the Terminal, or signed in already | not confirmed |
 
-The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-11-24 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-11-25 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
 
 Where Codalus can set an agent up without opening a page:
 
