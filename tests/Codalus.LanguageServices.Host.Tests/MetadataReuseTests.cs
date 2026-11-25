@@ -73,4 +73,26 @@ public sealed class MetadataReuseTests : IDisposable
         LanguageStateCache.ForgetReferences();
         Assert.NotNull(LanguageStateCache.Reference(dll, xml));
     }
+
+    [Fact]
+    public void A_packages_assemblies_are_known_by_its_marker_and_a_broken_one_is_no_reference()
+    {
+        var package = Path.Combine(_root, "packages", "contoso.lib", "1.0.0");
+        Directory.CreateDirectory(Path.Combine(package, "lib", "net10.0"));
+        File.WriteAllText(Path.Combine(package, ".nupkg.metadata"), "{}");
+        var dll = Path.Combine(package, "lib", "net10.0", "Contoso.Lib.dll");
+        File.Copy(typeof(MetadataReuseTests).Assembly.Location, dll);
+        Assert.True(ProjectLoader.IsPackageAssembly(dll));
+        Assert.False(ProjectLoader.IsPackageAssembly(Path.Combine(_root, "App", "bin", "Debug", "App.dll")));
+
+        // Mapped (or read, on Windows), it binds as a read one does.
+        var reference = new ProjectLoader().Metadata(dll, MetadataReferenceProperties.Assembly);
+        Assert.NotNull(reference);
+        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create("Check", references: [reference!]);
+        Assert.NotNull(compilation.GetAssemblyOrModuleSymbol(reference!));
+
+        var broken = Path.Combine(package, "lib", "net10.0", "Broken.dll");
+        File.WriteAllText(broken, "not an assembly");
+        Assert.Null(new ProjectLoader().Metadata(broken, MetadataReferenceProperties.Assembly));
+    }
 }

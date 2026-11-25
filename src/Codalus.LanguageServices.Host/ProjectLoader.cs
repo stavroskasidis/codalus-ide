@@ -184,7 +184,53 @@ internal sealed class ProjectLoader
 
     private static PortableExecutableReference Reference(string path, DateTime stamp) =>
         s_shared.TryGetValue(path, out var shared) && shared.Stamp == stamp ? shared.Reference
+            : MapsPackages && IsPackageAssembly(path) ? Mapped(path)
             : MetadataReference.CreateFromFile(path, documentation: DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture));
+
+    /// <summary>
+    /// Whether a restored package's assemblies are mapped rather than read into memory: they never change in place (a
+    /// new version is another folder), so the C# host maps them, as the compiler does, instead of keeping a copy of every
+    /// package's bytes in its own memory. Not on Windows, where a mapped file can't be deleted (<c>dotnet nuget locals
+    /// all --clear</c> would fail while the IDE runs). <c>CODALUS_MAP_PACKAGES=0</c> turns it off.
+    /// </summary>
+    internal static bool MapsPackages { get; } = !OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CODALUS_MAP_PACKAGES") != "0";
+
+    /// <summary>An assembly in a restored package's folder: one of its parents has the <c>.nupkg.metadata</c> NuGet writes.</summary>
+    internal static bool IsPackageAssembly(string path)
+    {
+        var directory = Path.GetDirectoryName(path);
+        for (var i = 0; i < 6 && directory is not null; i++, directory = Path.GetDirectoryName(directory))
+        {
+            if (File.Exists(Path.Combine(directory, ".nupkg.metadata")))
+            {
+                return true;
+            }
+
+            if (Path.GetFileName(directory) is "bin" or "obj")
+            {
+                return false; // a project's output, rewritten by builds
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A package assembly mapped, its metadata read now so that a broken file fails here, as a read one does.</summary>
+    private static PortableExecutableReference Mapped(string path)
+    {
+        var metadata = AssemblyMetadata.CreateFromFile(path);
+        try
+        {
+            _ = metadata.GetModules()[0].GetMetadataReader();
+        }
+        catch
+        {
+            metadata.Dispose();
+            throw;
+        }
+
+        return metadata.GetReference(documentation: DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture), filePath: path);
+    }
 
     /// <summary>
     /// References made once for the host (Miscellaneous Files' reference pack, <see cref="Share"/>), taken by the
