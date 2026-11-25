@@ -1445,46 +1445,6 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private Dictionary<string, (ExplorerNode Node, ExplorerNode? Parent)>? _byId;
     private Dictionary<string, ExplorerNode>? _byPath;
 
-    /// <summary>
-    /// Whether <paramref name="after"/> holds <paramref name="before"/>'s subtrees: the same nodes, or a solution
-    /// folder (or the solution) made again around them, in the same order. <paramref name="relinked"/> gets each node
-    /// whose parent is new.
-    /// </summary>
-    private static bool SameSubtrees(ExplorerNode before, ExplorerNode after, List<(ExplorerNode Node, ExplorerNode Parent)> relinked)
-    {
-        if (before.Id != after.Id || before.Kind != after.Kind || before.Kind is not (ExplorerNodeKind.Solution or ExplorerNodeKind.SolutionFolder)
-            || before.Children.Count != after.Children.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < after.Children.Count; i++)
-        {
-            var (old, now) = (before.Children[i], after.Children[i]);
-            relinked.Add((now, after));
-            if (ReferenceEquals(old, now))
-            {
-                continue;
-            }
-
-            // A solution item is made again with its folder; it has no children.
-            if (old.Kind == ExplorerNodeKind.SolutionItem && now == old)
-            {
-                continue;
-            }
-
-            if (!SameSubtrees(old, now, relinked))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>How many builds kept the index of the last one (tests).</summary>
-    internal int IndexReused { get; private set; }
-
     private void EnsureIndex()
     {
         if (_byId is not null || _root is null)
@@ -1541,18 +1501,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         if (!_byId.TryGetValue(id, out var entry))
         {
-            // Under a project's dependencies ("deps:<project>|…", not indexed): walk the Dependencies node it starts
-            // with, the only one that can hold it. Any other id not in the index isn't in the tree; walking every
-            // project's dependencies for each was the cost of a reveal that missed.
-            if (!id.StartsWith("deps:", StringComparison.Ordinal))
-            {
-                return null;
-            }
-
+            // Under a project's dependencies: walk that project's subtree, the only one that can hold it.
             foreach (var (_, (node, _)) in _byId)
             {
-                if (node.Kind == ExplorerNodeKind.Dependencies && id.Length > node.Id.Length && id[node.Id.Length] == '|'
-                    && id.StartsWith(node.Id, StringComparison.Ordinal) && Path(node, id) is { } below)
+                if (node.Kind == ExplorerNodeKind.Dependencies && Path(node, id) is { } below)
                 {
                     var path = PathTo(node.Id)!;
                     path.AddRange(below.Skip(1));
@@ -1724,35 +1676,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     private void SetRoot(ExplorerNode? root)
     {
-        var previous = _root;
-        var previousWasFolderView = _rootIsFolderView;
         _root = root;
         _rootIsFolderView = _root is not null && IsFolderView;
         Builds++;
-        List<(ExplorerNode Node, ExplorerNode Parent)> relinked = [];
-        if (_byId is not null && _byPath is not null && previous is not null && root is not null && !_rootIsFolderView && !previousWasFolderView
-            && SameSubtrees(previous, root, relinked))
-        {
-            // The same projects' subtrees under a new solution node and new solution folders (the tree's cache kept
-            // every project): the index stands, with the new nodes above them. Anything else is indexed again.
-            _byId[root.Id] = (root, null);
-            foreach (var (node, parent) in relinked)
-            {
-                _byId[node.Id] = (node, parent);
-                if (node is { Kind: ExplorerNodeKind.SolutionItem, Path: { } item })
-                {
-                    _byPath[item] = node;
-                }
-            }
-
-            IndexReused++;
-        }
-        else
-        {
-            _byId = null;
-            _byPath = null;
-        }
-
+        _byId = null;
+        _byPath = null;
         if (_root is null)
         {
             _withMembers.Clear();
@@ -1832,7 +1760,6 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         _filtering = false;
-        var sameSearch = _searchRowsFor == filter && _searchRows is not null;
         if (_searchRowsFor != filter)
         {
             _searchRowsFor = filter;
@@ -1843,15 +1770,6 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (reveal is not null)
         {
             ExpandSearchDownTo(reveal);
-        }
-
-        if (sameSearch)
-        {
-            // The same search found again (a project changed while it showed): the rows that stayed are patched in
-            // place, not all made again.
-            Apply(ShownSearchRows());
-            AfterRefresh(reveal);
-            return;
         }
 
         var selectedId = _selected?.Id;
