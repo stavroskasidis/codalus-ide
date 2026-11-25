@@ -10,6 +10,8 @@ namespace Codalus.Shell.Infrastructure;
 /// silent before that keeps no log: Windows smoke's runner in <c>profiler.memory</c> printed nothing for 45 minutes and
 /// left none (run 45434861768, docs/ci-flakes.md). These lines go to the console, which the smoke's live output uploads
 /// as it grows, so the next one says which step and posted job held the UI thread, and which processes held the memory.
+/// The first line of each hang comes with this process's managed stacks (<c>dotnet-stack</c>, which CI installs): the UI
+/// thread's names the call that holds it, which that run couldn't say.
 /// </summary>
 internal sealed partial class SmokeTest
 {
@@ -37,10 +39,17 @@ internal sealed partial class SmokeTest
             {
                 if (said == 0 || Stopwatch.GetElapsedTime(said) >= s_hangReport)
                 {
+                    var first = !hung;
                     said = Stopwatch.GetTimestamp();
                     hung = true;
                     Say(string.Create(CultureInfo.InvariantCulture,
                         $"  [smoke] the UI thread hasn't answered for {silent.TotalSeconds:0} s (step '{_runningStep ?? "none"}', running {Ui.RunningJob ?? "no posted job"}); {Memory()}"));
+                    if (first && StackTool() is { } tool)
+                    {
+                        // The runtime answers dotnet-stack on a thread of its own, so a blocked UI thread doesn't hold it.
+                        Say($"  --- This process's stacks (process {Environment.ProcessId}; the UI thread's is the one in Avalonia's dispatcher) ---");
+                        Say(Tail(RunTool(tool, TimeSpan.FromSeconds(60), "report", "-p", Environment.ProcessId.ToString(CultureInfo.InvariantCulture)), 30000));
+                    }
                 }
             }
             else if (hung)
@@ -51,6 +60,15 @@ internal sealed partial class SmokeTest
             }
         }
     }
+
+    /// <summary>
+    /// <c>dotnet-stack</c> as a global tool (CI installs it for the smoke test): <c>~/.dotnet/tools/dotnet-stack</c>,
+    /// <c>%USERPROFILE%\.dotnet\tools\dotnet-stack.exe</c> on Windows; null when it isn't there.
+    /// </summary>
+    internal static string? StackTool() =>
+        new[] { Environment.GetEnvironmentVariable("HOME"), Environment.GetEnvironmentVariable("USERPROFILE") }.OfType<string>()
+            .Select(home => Path.Combine(home, ".dotnet", "tools", OperatingSystem.IsWindows() ? "dotnet-stack.exe" : "dotnet-stack"))
+            .FirstOrDefault(File.Exists);
 
     /// <summary>This process's memory and the machine's three largest processes.</summary>
     internal static string Memory()

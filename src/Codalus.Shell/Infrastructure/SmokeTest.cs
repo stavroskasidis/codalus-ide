@@ -4837,23 +4837,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     }
 
     /// <summary>
-    /// On Linux and macOS: the busiest processes, and the C# host's managed stacks when <c>dotnet-stack</c> is installed
-    /// (CI installs it), so a host that stopped answering says where it is.
+    /// The busiest processes (Linux and macOS), and the C# host's managed stacks when <c>dotnet-stack</c> is installed
+    /// (CI installs it, Windows' smoke too), so a host that stopped answering says where it is.
     /// </summary>
     private void PrintHostDiagnostics()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         static string Run(string program, params string[] arguments) => RunTool(program, TimeSpan.FromSeconds(60), arguments);
 
-        Console.Out.WriteLine("  --- Processes (by CPU) ---");
-        Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
-        var tool = new[] { Environment.GetEnvironmentVariable("HOME") is { } home ? Path.Combine(home, ".dotnet", "tools", "dotnet-stack") : null }
-            .OfType<string>().FirstOrDefault(File.Exists);
-        if (tool is not null && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
+        if (!OperatingSystem.IsWindows())
+        {
+            Console.Out.WriteLine("  --- Processes (by CPU) ---");
+            Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
+        }
+
+        if (StackTool() is { } tool && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
         {
             Console.Out.WriteLine($"  --- The C# host's stacks (process {pid}) ---");
             Console.Out.WriteLine(Tail(Run(tool, "report", "-p", pid.ToString(System.Globalization.CultureInfo.InvariantCulture)), 20000));
