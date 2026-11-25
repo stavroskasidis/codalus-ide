@@ -35,6 +35,24 @@ public sealed class LanguageTests
     }
 
     [AvaloniaFact]
+    public async Task A_grammar_that_cant_be_compiled_leaves_the_file_without_one_and_says_why()
+    {
+        await using var f = ShellFixture.Create();
+        var grammar = Path.Combine(f.UserData, "broken.tmLanguage.json");
+        await File.WriteAllTextAsync(grammar, "{ not a grammar", TestContext.Current.CancellationToken);
+        var languages = f.Shell.Workbench.LanguageDefinitions;
+        languages.Register(new Workbench.Languages.LanguageDefinition("brokenlang", "Broken") { Extensions = [".brk"] });
+        languages.RegisterGrammar(new Workbench.Languages.GrammarDefinition("source.brokenlang", "brokenlang", grammar));
+
+        // The language has a scope, but no tokenizer comes of it: the editor keeps no colorizer that never tokenizes.
+        var editor = await OpenAsync(f, "file.brk", "hello\nworld\n");
+        Assert.Equal("brokenlang", editor.Model.LanguageId);
+        Assert.Null(editor.GrammarScope);
+        Assert.Null(editor.Grammar);
+        Assert.Contains("the grammar source.brokenlang could not be compiled", f.Shell.LanguageLog.GetText(), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
     public async Task An_edit_tokenizes_again_the_lines_whose_state_it_changed()
     {
         await using var f = ShellFixture.Create();

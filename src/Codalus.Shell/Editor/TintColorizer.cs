@@ -57,6 +57,14 @@ public sealed class TintColorizer : DocumentColorizingTransformer, IDisposable
         _scope = scope;
         _log = log;
         SetThemeCore(theme);
+
+        // A grammar that can't be compiled (logged by TextMateSupport) colors nothing: the editor goes without one rather
+        // than keep a colorizer that never tokenizes and a scope that says it has a grammar.
+        if (_tokenizer is null)
+        {
+            throw new InvalidOperationException($"the grammar {scope} could not be compiled");
+        }
+
         textView.DocumentChanged += OnDocumentChanged;
         Attach(textView.Document);
     }
