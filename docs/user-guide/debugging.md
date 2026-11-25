@@ -49,7 +49,9 @@ Right-click a project that starts (a program, or a library with an [analyzer or 
 
 A program that joins is part of the session as [several startup projects](#several-startup-projects) are: its threads are named after it once a second program runs, it stops at its own breakpoints, and the Processes window lists it. Right-click a program in the **Processes** window to **Terminate Process** or **Detach Process** (for one attached to, or with a console of its own) while the others go on. **Restart** brings back every program, and Stop ends them all.
 
-Some sessions and projects don't take part yet, and say so instead: a session attached to a process, a web app debugged with its page, a Blazor WebAssembly app, an Aspire AppHost, a container profile, a mobile or packaged app, and projects in a remote window. Stop the session to debug one of them, or start it without debugging.
+Web apps take part too. A **Blazor WebAssembly** app's page joins as one more program, with its dev server running beside it; closing the page stops the dev server. A **web app debugged with its page** (a Blazor Web App, or a server whose launch profile opens its page under the debugger) joins as one program, its server and its page together, as F5 debugs it: its threads are named after it (`Web: Browser: …`). A web app that joins a session runs without [Hot Reload while debugging](#hot-reload-while-debugging), which stays the session's first program's: its edits take effect after a restart.
+
+Some sessions and projects don't take part yet, and say so instead: a session attached to a process, a session whose web app runs under `dotnet watch` (netcoredbg's Hot Reload while debugging), an Aspire AppHost, a container profile, a mobile or packaged app, and projects in a remote window. Stop the session to debug one of them, or start it without debugging.
 
 ### Debugging on other machines
 
@@ -366,7 +368,7 @@ The Codalus debugger's own limits:
 - symbols found on a server give a module its lines and names; its source files still come from your disk (embedded sources and Source Link aren't read by the debugger yet)
 - F# expressions are read as C#'s subset
 - Edit and Continue doesn't cover modules built with Windows PDBs
-- Start New Instance adds only programs that run on this machine or in WSL to a running session, and only to a session of such programs ([Starting another project while you debug](#starting-another-project-while-you-debug))
+- Start New Instance adds programs that run on this machine or in WSL, and web apps with their pages, to a running session of such programs; a web app that joins has no Hot Reload while debugging ([Starting another project while you debug](#starting-another-project-while-you-debug))
 - the async call stack is for state machines only, and ends at `Task.WhenAll`, `Task.WhenAny` and `ContinueWith`; runtime async has none, and its limits for Step Out of a resumed method ([Async code](#async-code-and-runtime-async-net-11))
 
 These are netcoredbg's, when you choose it as the fallback; [the Codalus debugger](#the-codalus-debugger) does the first eight:

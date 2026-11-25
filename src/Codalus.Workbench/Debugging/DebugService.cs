@@ -429,7 +429,7 @@ public sealed class DebugService : IAsyncDisposable
     public bool IsActive => State != DebugState.Idle;
 
     /// <summary>Whether the session attached to a running process (Stop detaches instead of terminating).</summary>
-    public bool IsAttached => _attached;
+    public bool IsAttached => _adapter is CompoundDebugAdapter { Independent: true } programs ? programs.AllAttached : _attached;
 
     /// <summary>
     /// Whether the session's end was asked for (Stop, Detach All), and not the program's or the debugger's: read in the
@@ -551,7 +551,7 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
-        LaunchAsync([new DebugLaunch(ProgramName(plan), plan)], cancellationToken);
+        LaunchAsync([new DebugLaunch(ProgramName(plan), plan)], cancellationToken, joinable: true);
 
     private LaunchArguments Arguments(LaunchPlan plan) =>
         new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering);
@@ -1015,16 +1015,23 @@ public sealed class DebugService : IAsyncDisposable
     /// Starts <paramref name="plan"/> (a web server) under netcoredbg as the first adapter of a compound session
     /// (ADR 0027). Its page joins with <see cref="AddBrowserAsync"/> once the server listens.
     /// </summary>
-    public Task LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken)
+    /// <returns>
+    /// The group's index in <see cref="Processes"/> (#547): a web app's server and its page are one program of a session
+    /// of independent programs, which it began (0) or joined; its page joins the group by it (<see cref="AddBrowserAsync"/>).
+    /// </returns>
+    /// <param name="stopAtEntry">Step Into New Instance (#547): the server stops at its entry point.</param>
+    public Task<int> LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken, bool stopAtEntry = false)
     {
         var codalus = UseCodalusAdapter(plan);
-        return StartAsync(
-            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+        var name = ProgramName(plan);
+        return StartOrJoinAsync(
+            name,
+            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server", slots: CompoundDebugAdapter.GroupSlots),
             adapter => codalus
-                ? ((DebugAdapter)adapter.Primary).LaunchAsync(CoreClrArguments(plan), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
-                : ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan), cancellationToken),
+                ? ((DebugAdapter)adapter.Primary).LaunchAsync(CoreClrArguments(plan) with { StopAtEntry = stopAtEntry }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                : ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan) with { StopAtEntry = stopAtEntry }, cancellationToken),
             attached: false,
-            [new DebugProcess(ProgramName(plan), null, DebugProcess.Launched, null)],
+            new DebugProcess(name, null, DebugProcess.Launched, null),
             cancellationToken);
     }
 
@@ -1037,13 +1044,14 @@ public sealed class DebugService : IAsyncDisposable
     public async Task AttachOwnedCompoundAsync(int processId, string name, LaunchPlan plan, CancellationToken cancellationToken)
     {
         var codalus = UseCodalusAdapter(plan);
-        await StartAsync(
-            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+        await StartOrJoinAsync(
+            name,
+            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server", slots: CompoundDebugAdapter.GroupSlots),
             adapter => codalus
                 ? ((DebugAdapter)adapter.Primary).AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                 : ((DebugAdapter)adapter.Primary).AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
             attached: true,
-            [new DebugProcess(name, processId, DebugProcess.Launched, null)],
+            new DebugProcess(name, processId, DebugProcess.Launched, null),
             cancellationToken,
             owned: true).ConfigureAwait(false);
         OnProcess(processId);
@@ -1056,18 +1064,18 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public async Task ReleaseOwnedServerAsync()
     {
-        if (_adapter is not CompoundDebugAdapter compound)
+        if (_adapter is not { } session || Group(null) is not { } compound)
         {
             await _ended.Task.ConfigureAwait(false);
             return;
         }
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        await PrepareDetachAsync(compound).ConfigureAwait(false);
+        await PrepareDetachAsync(session).ConfigureAwait(false);
         var prepared = watch.Elapsed;
         await compound.DetachPrimaryAsync(CancellationToken.None).ConfigureAwait(false);
         var detached = watch.Elapsed;
-        await EndAsync(compound).ConfigureAwait(false);
+        await EndAsync(session).ConfigureAwait(false);
         if (watch.Elapsed > TimeSpan.FromSeconds(2))
         {
             // Where a release that waited went (dotnet watch's restart followed late, or never: CI run 40920415026).
@@ -1082,7 +1090,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public async Task ExcludeFromServerAsync(IReadOnlyList<string> paths, string reason)
     {
-        if (_adapter is not CompoundDebugAdapter compound)
+        if (Group(null) is not { } compound)
         {
             return;
         }
@@ -1100,6 +1108,17 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Whether the session is a compound one that a browser can join.</summary>
     public bool IsCompound => _adapter is CompoundDebugAdapter;
+
+    /// <summary>
+    /// A web app's server and its page (ADR 0027): the program at <paramref name="index"/> of a session of programs, or
+    /// its first when null (F5's), or the whole session as before 1.1; null when there is none.
+    /// </summary>
+    private CompoundDebugAdapter? Group(int? index) => _adapter switch
+    {
+        CompoundDebugAdapter { Independent: true } programs => programs.AdapterOf(index ?? 0) as CompoundDebugAdapter is { Independent: false } web ? web : null,
+        CompoundDebugAdapter { Independent: false } web when index is null or 0 => web,
+        _ => null,
+    };
 
     /// <summary>
     /// Whether a program can join the running session (<see cref="AddLaunch"/>): a session of independent programs
@@ -1121,9 +1140,10 @@ public sealed class DebugService : IAsyncDisposable
     /// the page with <paramref name="arguments"/>. The session's breakpoints bind in both. Closing the browser ends
     /// the session, as in a browser-only one.
     /// </summary>
-    public async Task AddBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken)
+    /// <param name="group">The web app's group (<see cref="LaunchCompoundAsync"/>'s index); null for the session's first.</param>
+    public async Task AddBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken, int? group = null)
     {
-        if (_adapter is not CompoundDebugAdapter compound)
+        if (Group(group) is not { } compound)
         {
             throw new InvalidOperationException("No debug session that a browser can join is running.");
         }
@@ -1207,8 +1227,70 @@ public sealed class DebugService : IAsyncDisposable
     /// Debugs a page in a browser through vscode-js-debug (ADR 0026): <paramref name="start"/> starts the adapter,
     /// which launches the browser with <paramref name="arguments"/>. Stopping the session closes the browser.
     /// </summary>
-    public Task LaunchBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken) =>
-        StartAsync(start, adapter => adapter.LaunchAsync(arguments, cancellationToken), attached: false, [new DebugProcess("Browser", null, DebugProcess.Launched, null)], cancellationToken);
+    /// <returns>The page's index in <see cref="Processes"/>: it joined the running session (#547), or began one (0).</returns>
+    public Task<int> LaunchBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken) =>
+        StartOrJoinAsync("Browser", start, adapter => adapter.LaunchAsync(arguments, cancellationToken), attached: false, new DebugProcess("Browser", null, DebugProcess.Launched, null), cancellationToken);
+
+    /// <summary>
+    /// Starts one program of any kind (#547, ADR 0109): in the running session of independent programs as one more
+    /// (<see cref="CanAddLaunch"/>), or in a session of its own that others can join, which looks like a one-program
+    /// session until one does. <paramref name="process"/> is its row of <see cref="Processes"/>. Throws when it can't
+    /// start; joining, the session goes on without it.
+    /// </summary>
+    /// <returns>Its index in <see cref="Processes"/>.</returns>
+    private async Task<int> StartOrJoinAsync<TAdapter>(
+        string name,
+        Func<CancellationToken, Task<TAdapter>> create,
+        Func<TAdapter, Task> start,
+        bool attached,
+        DebugProcess process,
+        CancellationToken cancellationToken,
+        Func<Task>? configured = null,
+        bool owned = false)
+        where TAdapter : class, IDebugAdapter
+    {
+        if (CanAddLaunch && _adapter is CompoundDebugAdapter { Independent: true } session)
+        {
+            int index;
+            lock (_gate)
+            {
+                index = _processes.Count;
+                _processes.Add(process);
+            }
+
+            ProcessesChanged?.Invoke(this, EventArgs.Empty);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+            try
+            {
+                await session.AddAsync(name, async ct => await create(ct).ConfigureAwait(false), adapter => start((TAdapter)adapter), static (_, _, _) => Task.FromResult(false), index, linked.Token, attached && !owned).ConfigureAwait(false);
+                if (configured is not null)
+                {
+                    await configured().ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
+            {
+                UpdateProcess(index, p => p with { Ended = true });
+                throw new InvalidOperationException(ex.Message, ex);
+            }
+
+            return index;
+        }
+
+        await StartAsync(
+            async ct => new CompoundDebugAdapter(await create(ct).ConfigureAwait(false), name, independent: true, attached: attached && !owned)
+            {
+                BreakAllOnStop = BreakAllProcesses?.Invoke() ?? true,
+                NamesSoleProgram = false,
+            },
+            session => start((TAdapter)session.Primary),
+            attached,
+            [process],
+            cancellationToken,
+            configured,
+            owned).ConfigureAwait(false);
+        return 0;
+    }
 
     /// <summary>The debuggee's process id: completes when the adapter reports it; cancelled when the session ends first.</summary>
     public Task<int> WaitForProcessIdAsync(CancellationToken cancellationToken) => _process.Task.WaitAsync(cancellationToken);
@@ -1566,8 +1648,19 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     private static DebugAdapter? LocalAdapter(IDebugAdapter adapter)
     {
-        var inner = adapter is CompoundDebugAdapter compound ? compound.Primary : adapter;
+        var inner = Innermost(adapter);
         return (inner is PathMappingDebugAdapter mapped ? mapped.Inner : inner) is DebugAdapter { Transport: null } local ? local : null;
+    }
+
+    /// <summary>The first program's own adapter: past a session of programs and a web app's group (#547), each's first.</summary>
+    private static IDebugAdapter Innermost(IDebugAdapter adapter)
+    {
+        while (adapter is CompoundDebugAdapter compound)
+        {
+            adapter = compound.Primary;
+        }
+
+        return adapter;
     }
 
     /// <summary>Ends the session: terminates a launched program, detaches from an attached one.</summary>
@@ -1581,14 +1674,16 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
-        if (_attached)
+        // A session of programs (#547) ends each as it began: a launched one is ended, an attached one detached from.
+        var programs = adapter is CompoundDebugAdapter { Independent: true };
+        if (_attached || (programs && _processes.Any(p => p.Kind == DebugProcess.Attached && !p.Ended)))
         {
             await PrepareDetachAsync(adapter).ConfigureAwait(false);
         }
 
         // Only a program on this machine: behind a path mapping (WSL, a container) its process id is another system's.
-        var launched = !_attached && (adapter is CompoundDebugAdapter compound ? compound.Primary : adapter) is DebugAdapter { Transport: null } ? ProcessId : null;
-        await adapter.DisconnectAsync(terminateDebuggee: !_attached, CancellationToken.None).ConfigureAwait(false);
+        var launched = !_attached && Innermost(adapter) is DebugAdapter { Transport: null } ? ProcessId : null;
+        await adapter.DisconnectAsync(terminateDebuggee: programs || !_attached, CancellationToken.None).ConfigureAwait(false);
         KillTerminalPrograms();
         if (launched is { } program)
         {
