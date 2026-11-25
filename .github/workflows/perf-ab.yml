@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] # this round: Linux, B with 3d8232ae (the full answer racing the syntax's)
+        os: [ubuntu-latest, macos-latest] # the open_tracked bisect: everyday only
     runs-on: ${{ matrix.os }}
     timeout-minutes: 330
     env:
@@ -43,17 +43,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends clang zlib1g-dev libfontconfig1
       - name: Generate fixtures
         run: dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -c Release -- all samples
-      - name: Publish A (baseline) and B (this branch)
+      - name: Publish A (baseline), B (the PR's head) and the bisect variants
         shell: bash
         run: |
           set -euo pipefail
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-          git worktree add ../baseline "$BASELINE"
-          cp -r benchmarks/Codalus.Benchmarks.Rpc ../baseline/benchmarks/
-          (cd ../baseline && dotnet publish src/Codalus.Shell -c Release -r "$rid" -o "$GITHUB_WORKSPACE/ab/A")
-          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o ab/B
-          dotnet build ../baseline/benchmarks/Codalus.Benchmarks.Rpc -c Release
-          dotnet build benchmarks/Codalus.Benchmarks.Rpc -c Release
+          # V1 no syntactic colors, V2 CodeLens one at a time, V3 inlay hints waiting for the margin, V4 416df18f reverted.
+          declare -A refs=([A]="$BASELINE" [B]=7c1e1c7f [V1]=2abc6bd8 [V2]=5577801e [V3]=6430c655 [V4]=d683e39f)
+          for v in A B V1 V2 V3 V4; do
+            git worktree add "../tree-$v" "${refs[$v]}"
+            (cd "../tree-$v" && dotnet publish src/Codalus.Shell -c Release -r "$rid" -o "$GITHUB_WORKSPACE/ab/$v")
+          done
           dotnet build benchmarks/Codalus.Benchmarks.Harness -c Release
       # A lost runner keeps neither log nor artifacts (the Windows job of run 45516575948, 56 minutes into the rounds):
       # the rounds' console and process samples go off the runner about once a minute (.github/actions/live-output).
@@ -75,22 +75,17 @@ jobs:
           # macOS has no coreutils timeout (run 45516575948 ran no scenario there): the job's own limit stands in.
           limit() { if command -v timeout > /dev/null; then timeout "$@"; elif command -v gtimeout > /dev/null; then gtimeout "$@"; else shift; "$@"; fi; }
           round=0
-          for variant in A B B A A B B A; do
-            round=$((round + 1))
-            export CODALUS_BENCH_SHELL_DIR="$GITHUB_WORKSPACE/ab/$variant"
-            out="ab-results/$variant/round$round"
-            bench() { limit 1800 dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- run --results "$out" --targets shell "$@" || echo "::warning::round $round ($variant): $* failed"; }
-            echo "::group::round $round: $variant"
-            echo "[ab] round $round ($variant)"
-            bench --scenarios cold-start --runs 5
-            bench --scenarios self-driven,editor-100k,markup-100k --runs 2
-            bench --scenarios open-solution-50 --runs 2
-            bench --scenarios everyday --runs 1
-            if [ "$round" -le 2 ]; then bench --scenarios binary-size --runs 1; fi
-            if [ "$variant" = A ]; then project=../baseline/benchmarks/Codalus.Benchmarks.Rpc; else project=benchmarks/Codalus.Benchmarks.Rpc; fi
-            mkdir -p "$out"
-            dotnet run --project "$project" -c Release --no-build -- 5 > "$out/rpcbench.jsonl" || echo "::warning::round $round ($variant): rpcbench failed"
-            echo "::endgroup::"
+          # Each variant once per round, the order rotated each round, 6 rounds.
+          order=(A B V1 V2 V3 V4)
+          for r in 0 1 2 3 4 5; do
+            for k in 0 1 2 3 4 5; do
+              variant=${order[$(( (k + r) % 6 ))]}
+              round=$((round + 1))
+              export CODALUS_BENCH_SHELL_DIR="$GITHUB_WORKSPACE/ab/$variant"
+              out="ab-results/$variant/round$round"
+              echo "[ab] round $round ($variant)"
+              limit 1800 dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- run --results "$out" --targets shell --scenarios everyday --runs 1 || echo "::warning::round $round ($variant): everyday failed"
+            done
           done
       - name: Compare
         if: always()
@@ -116,21 +111,28 @@ jobs:
                       samples.setdefault(("rpcbench", r["payload"] + "_us"), []).append(r["median_microseconds"])
                       samples.setdefault(("rpcbench", r["payload"] + "_alloc_kb"), []).append(r["allocated_bytes_per_round_trip"] / 1024)
               return samples
-          a, b = load("A"), load("B")
-          print(f"## M66 A/B on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
-          print("A = develop's head, B = this branch. Medians over every round (ABBA ABBA); MAD = the median absolute deviation.\n")
-          print("| Scenario | Metric | n A | n B | A median | B median | change | A MAD | B MAD |")
-          print("|---|---|---|---|---|---|---|---|---|")
+          a = load("A")
+          variants = {v: load(v) for v in ["B", "V1", "V2", "V3", "V4"]}
+          print(f"## M66 open_tracked bisect on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
+          print("A = develop's head, B = the PR's head; V1 no syntactic colors, V2 CodeLens one at a time, V3 inlay hints waiting for the margin, V4 416df18f reverted. Medians over 6 rotated rounds, change from A.\n")
           def mad(xs):
               m = statistics.median(xs)
               return statistics.median([abs(x - m) for x in xs])
-          for key in sorted(set(a) | set(b), key=lambda k: (str(k[0]), str(k[1]))):
-              xa, xb = a.get(key, []), b.get(key, [])
-              if not xa or not xb:
-                  continue
-              ma, mb = statistics.median(xa), statistics.median(xb)
-              change = f"{(mb - ma) / ma * 100:+.1f}%" if ma else "n/a"
-              print(f"| {key[0]} | {key[1]} | {len(xa)} | {len(xb)} | {ma:.1f} | {mb:.1f} | {change} | {mad(xa):.1f} | {mad(xb):.1f} |")
+          names = ["B", "V1", "V2", "V3", "V4"]
+          print("| Metric | A | " + " | ".join(names) + " |")
+          print("|---|---|" + "---|" * len(names))
+          for key in sorted(a, key=lambda k: str(k[1])):
+              xa = a[key]
+              ma = statistics.median(xa)
+              cells = []
+              for v in names:
+                  xb = variants[v].get(key, [])
+                  if not xb:
+                      cells.append("–")
+                      continue
+                  mb = statistics.median(xb)
+                  cells.append(f"{mb:.0f} ({(mb - ma) / ma * 100:+.0f}%)" if ma else f"{mb:.0f}")
+              print(f"| {key[1]} | {ma:.0f} ±{mad(xa):.0f} | " + " | ".join(cells) + " |")
           PY
           cat ab-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
