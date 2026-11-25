@@ -17,6 +17,12 @@ public static class CodeColors
 
     private static readonly Dictionary<string, string?> s_languages = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(string Language, string Text), (int Start, int Length, int Type)[]> s_tokens = [];
+
+    /// <summary>
+    /// Each language's tokenizer (null: no grammar), kept: a tokenizer builds its regular expressions as it reaches its
+    /// grammar's rules, so a new one per line made Find Results' Markdown lines about ten times slower and allocated GiBs.
+    /// </summary>
+    private static readonly Dictionary<string, Tokenizer?> s_tokenizers = new(StringComparer.Ordinal);
     private static Func<string, string?>? s_languageOf;
     private static Func<string, Tokenizer?>? s_tokenizerOf;
     private static Func<string?, EditorTheme>? s_themeFor;
@@ -25,7 +31,7 @@ public static class CodeColors
     public static event EventHandler? Changed;
 
     /// <param name="languageOf">A file's language id.</param>
-    /// <param name="tokenizerOf">A new tokenizer for a language's TextMate grammar, or null.</param>
+    /// <param name="tokenizerOf">A new tokenizer for a language's TextMate grammar, or null (asked once per language).</param>
     /// <param name="themeFor">A built-in theme's editor colors by its id (null: the active theme's).</param>
     public static void Configure(Func<string, string?> languageOf, Func<string, Tokenizer?> tokenizerOf, Func<string?, EditorTheme> themeFor)
     {
@@ -34,6 +40,7 @@ public static class CodeColors
         s_themeFor = themeFor;
         s_languages.Clear();
         s_tokens.Clear();
+        s_tokenizers.Clear();
         NotifyChanged();
     }
 
@@ -50,6 +57,7 @@ public static class CodeColors
             s_themeFor = null;
             s_languages.Clear();
             s_tokens.Clear();
+            s_tokenizers.Clear();
         }
     }
 
@@ -122,7 +130,13 @@ public static class CodeColors
         var tokens = new List<(int, int, int)>();
         try
         {
-            if (tokenizerOf(languageId) is { } tokenizer)
+            if (!s_tokenizers.TryGetValue(languageId, out var tokenizer))
+            {
+                tokenizer = tokenizerOf(languageId);
+                s_tokenizers[languageId] = tokenizer;
+            }
+
+            if (tokenizer is not null)
             {
                 tokenizer.TimeBudget = TimeSpan.FromMilliseconds(50);
                 foreach (var token in tokenizer.TokenizeLine(text, StateStack.Initial, out _))

@@ -35,6 +35,24 @@ public sealed class LanguageTests
     }
 
     [AvaloniaFact]
+    public async Task A_grammar_that_cant_be_compiled_leaves_the_file_without_one_and_says_why()
+    {
+        await using var f = ShellFixture.Create();
+        var grammar = Path.Combine(f.UserData, "broken.tmLanguage.json");
+        await File.WriteAllTextAsync(grammar, "{ not a grammar", TestContext.Current.CancellationToken);
+        var languages = f.Shell.Workbench.LanguageDefinitions;
+        languages.Register(new Workbench.Languages.LanguageDefinition("brokenlang", "Broken") { Extensions = [".brk"] });
+        languages.RegisterGrammar(new Workbench.Languages.GrammarDefinition("source.brokenlang", "brokenlang", grammar));
+
+        // The language has a scope, but no tokenizer comes of it: the editor keeps no colorizer that never tokenizes.
+        var editor = await OpenAsync(f, "file.brk", "hello\nworld\n");
+        Assert.Equal("brokenlang", editor.Model.LanguageId);
+        Assert.Null(editor.GrammarScope);
+        Assert.Null(editor.Grammar);
+        Assert.Contains("the grammar source.brokenlang could not be compiled", f.Shell.LanguageLog.GetText(), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
     public async Task An_edit_tokenizes_again_the_lines_whose_state_it_changed()
     {
         await using var f = ShellFixture.Create();
@@ -76,6 +94,13 @@ public sealed class LanguageTests
 
         var script = await OpenAsync(f, "build", "#!/usr/bin/env bash\necho hi\n");
         Assert.Equal("shellscript", script.Model.LanguageId);
+
+        // JSX files take the JSX grammars: an element is a tag, not TypeScript's type assertion and comparisons.
+        var component = await OpenAsync(f, "Card.tsx", "export function Card() {\n  return <div className=\"a\">{x}</div>;\n}\n");
+        Assert.Equal("typescriptreact", component.Model.LanguageId);
+        Assert.Equal("source.tsx", component.GrammarScope);
+        await ShellFixture.PumpUntil(() => component.GrammarScopesAt(2, 11)?.Contains("entity.name.tag.tsx") == true, seconds: 20, describe: component.DescribeGrammar);
+        Assert.Equal("source.js.jsx", f.Shell.TextMate.ScopeFor("javascriptreact"));
 
         // C# keeps Roslyn's semantic coloring, without a grammar.
         var cs = await OpenAsync(f, "Program.cs", "class C { }\n");
@@ -435,6 +460,18 @@ public sealed class LanguageTests
         await f.RunAsync("editor.action.commentLine");
         Assert.Contains("<!-- <Nullable>enable</Nullable> -->", xml.Model.Text.Text, StringComparison.Ordinal);
 
+        // Brackets VS Code's configurations list as ["{", "}"] close too (Go's, Rust's, Java's, Lua's), not only those
+        // written as objects: TextMateSharp's reading dropped them.
+        var go = await OpenAsync(f, "main.go", "package main\n\nfunc main() \n");
+        go.Editor.CaretOffset = go.Model.Text.GetLineByNumber(3).EndOffset;
+        go.Editor.TextArea.Focus();
+        f.Type("{");
+        Assert.EndsWith("func main() {}\n", go.Model.Text.Text, StringComparison.Ordinal);
+        foreach (var language in new[] { "rust", "java", "lua" })
+        {
+            Assert.Contains(f.Shell.TextMate.ConfigurationFor(language)!.AutoClosingPairs, p => p is { Open: "(", Close: ")" });
+        }
+
         var json = await OpenAsync(f, "data.json", "\n");
         json.Editor.CaretOffset = 0;
         json.Editor.TextArea.Focus();
@@ -516,6 +553,16 @@ public sealed class LanguageTests
         Assert.True(At("public void Reset").IsFolded);
 
         await f.ExecuteAsync("editor.action.unfoldAll");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+
+        // Toggle All Outlining: with nothing collapsed it collapses everything (the type too); with anything collapsed it
+        // expands everything.
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.True(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
+        Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
+        await f.ExecuteAsync("editor.action.foldAll");
+        await f.ExecuteAsync("editor.action.toggleAllFolds");
         Assert.All(editor.Folding.AllFoldings, folding => Assert.False(folding.IsFolded));
     }
 }

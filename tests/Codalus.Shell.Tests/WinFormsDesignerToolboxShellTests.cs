@@ -197,13 +197,25 @@ public sealed class WinFormsDesignerToolboxShellTests
         checkItem = await ItemAsync("System.Windows.Forms.CheckBox");
         checkCenter = CenterOf(checkItem);
         Assert.Same(checkItem, ItemAt(checkCenter));
+
+        // Each press as the Toolbox sees it: only a second press within the double-click time and size counts 2 and adds
+        // the item; one that counts 1 toggles the first click's arming off and adds nothing (Windows CI, run 45253079989:
+        // "2 creates, armed nothing", with nothing recorded to tell why).
+        var presses = new List<string>();
+        void OnPress(object? sender, PointerPressedEventArgs e) =>
+            presses.Add($"{e.ClickCount} click(s) at {e.Timestamp} ms, {e.GetPosition(f.Window)} on {(e.Source as Control)?.GetType().Name}");
+        checkItem.AddHandler(InputElement.PointerPressedEvent, OnPress, RoutingStrategies.Tunnel, handledEventsToo: true);
         f.Window.MouseDown(checkCenter, MouseButton.Left);
         f.Window.MouseUp(checkCenter, MouseButton.Left);
         var armedByTheFirstClick = f.Shell.Toolbox.Armed?.Type;
         f.Window.MouseDown(checkCenter, MouseButton.Left);
         f.Window.MouseUp(checkCenter, MouseButton.Left);
+        checkItem.RemoveHandler(InputElement.PointerPressedEvent, OnPress);
         await ShellFixture.PumpUntil(() => host.Creates.Count == 3 && designer.Selection is ["checkBox1"], seconds: 30,
-            () => $"the double-click's create ({host.Creates.Count} creates, armed {f.Shell.Toolbox.Armed?.Name ?? "nothing"}): {designer.Status}");
+            () => $"the double-click's create ({host.Creates.Count} creates, armed {f.Shell.Toolbox.Armed?.Name ?? "nothing"}, the first click armed "
+                + $"{armedByTheFirstClick ?? "nothing"}; presses: {string.Join("; ", presses)}; the double-click time and size: "
+                + $"{Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse)}, "
+                + $"{Application.Current?.PlatformSettings?.GetDoubleTapSize(PointerType.Mouse)}): {designer.Status}");
         await SettleAsync();
         Assert.Equal("System.Windows.Forms.CheckBox", armedByTheFirstClick);
         ShellFixture.RenderFrame(f.Window);

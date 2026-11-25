@@ -65,8 +65,8 @@ public sealed class SourceTokens(SourceToken[][] lines)
 /// </summary>
 public sealed class GrammarTokenizer(TextMateSupport textMate)
 {
-    /// <summary>Longer lines are left plain, as the editor leaves them.</summary>
-    private const int MaxLineLength = 5000;
+    /// <summary>Longer lines are left plain, as the editor leaves them (tests give one that runs out of its time).</summary>
+    internal int MaxLineLength { get; init; } = 5000;
 
     /// <summary>Whether a language is colored with the editor's token types (C# and Visual Basic) rather than a TextMate theme.</summary>
     public static bool UsesEditorColors(string? languageId) => languageId is "csharp" or "vb";
@@ -115,9 +115,10 @@ public sealed class GrammarTokenizer(TextMateSupport textMate)
                 continue;
             }
 
+            var lineStart = state;
             try
             {
-                foreach (var token in tokenizer.TokenizeLine(line, state, out state))
+                foreach (var token in tokenizer.TokenizeLine(line, lineStart, out state))
                 {
                     var start = Math.Min(token.Start, line.Length);
                     var end = Math.Min(token.End, line.Length);
@@ -137,6 +138,13 @@ public sealed class GrammarTokenizer(TextMateSupport textMate)
                     {
                         tokens.Add(new SourceToken(start, end - start, -1, argb));
                     }
+                }
+
+                // A line cut by its budget ends wherever the tokenizer stopped (inside a string, say): the next line starts
+                // as this one did, as the editor's TintColorizer does, rather than taking the rest of the text with it.
+                if (tokenizer.StoppedEarly)
+                {
+                    state = lineStart;
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)

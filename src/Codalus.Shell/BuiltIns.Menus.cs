@@ -186,6 +186,7 @@ internal static partial class BuiltIns
             Item(EditCaretsMenu, "editor.action.selectHighlights", "1-carets"),
 
             Item(EditOutliningMenu, "editor.action.toggleFold", "1-outlining"),
+            Item(EditOutliningMenu, "editor.action.toggleAllFolds", "1-outlining"),
             Item(EditOutliningMenu, "editor.action.foldAll", "1-outlining"),
             Item(EditOutliningMenu, "editor.action.unfoldAll", "1-outlining"),
 
@@ -542,6 +543,7 @@ internal static partial class BuiltIns
             Item(EditorGitMenu, "git.compareWith", "2-compare", when: "gitRepository"),
             Sub(Context, EditorOutliningMenu, "Outlining", "6-more"),
             Item(EditorOutliningMenu, "editor.action.toggleFold", "1-outlining"),
+            Item(EditorOutliningMenu, "editor.action.toggleAllFolds", "1-outlining"),
             Item(EditorOutliningMenu, "editor.action.foldAll", "1-outlining"),
             Item(EditorOutliningMenu, "editor.action.unfoldAll", "1-outlining"),
             Item(Context, "edit.cut", "7-clipboard", keys: EditKeys("edit.cut", platform)),

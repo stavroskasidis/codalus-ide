@@ -1068,7 +1068,7 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    /// <summary>Collapses (true) or expands (false) every folding; Ctrl+M Ctrl+L expands.</summary>
+    /// <summary>Collapses (true) or expands (false) every folding; Expand All Outlining (Ctrl+M Ctrl+X) expands.</summary>
     public void SetAllFolded(bool folded)
     {
         foreach (var folding in _folding.AllFoldings)
@@ -1076,6 +1076,12 @@ public sealed partial class CodeEditorController : IDisposable
             folding.IsFolded = folded;
         }
     }
+
+    /// <summary>
+    /// Toggle All Outlining (Ctrl+M Ctrl+L), as the classic IDE does: expands every folding when any is collapsed, and
+    /// collapses them all when none is.
+    /// </summary>
+    public void ToggleAllFolded() => SetAllFolded(!_folding.AllFoldings.Any(f => f.IsFolded));
 
     /// <summary>
     /// Collapse to Definitions (Ctrl+M Ctrl+O), as the classic IDE does: when the language server marks members

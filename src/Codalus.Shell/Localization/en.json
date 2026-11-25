@@ -529,6 +529,7 @@
   "command.editor.action.smartSelect.expand": "Expand Selection",
   "command.editor.action.smartSelect.shrink": "Shrink Selection",
   "command.editor.action.surroundWithSnippet": "Surround With",
+  "command.editor.action.toggleAllFolds": "Toggle All Outlining",
   "command.editor.action.toggleFold": "Toggle Outlining Expansion",
   "command.editor.action.triggerParameterHints": "Parameter Info",
   "command.editor.action.triggerSuggest": "Trigger Suggest",

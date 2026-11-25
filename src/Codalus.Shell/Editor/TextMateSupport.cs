@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Codalus.Workbench.Languages;
 using Tint;
 using Tint.Grammars;
@@ -43,9 +42,9 @@ public sealed class TextMateSupport
         ["scss"] = "source.css.scss",
         ["less"] = "source.css.less",
         ["javascript"] = "source.js",
-        ["javascriptreact"] = "source.js",
+        ["javascriptreact"] = "source.js.jsx",
         ["typescript"] = "source.ts",
-        ["typescriptreact"] = "source.ts",
+        ["typescriptreact"] = "source.tsx",
         ["sql"] = "source.sql",
         ["python"] = "source.python",
         ["fsharp"] = "source.fsharp",
@@ -311,33 +310,11 @@ public sealed class TextMateSupport
     }
 
     /// <summary>
-    /// A bundled language configuration (VS Code's, as TextMateSharp shipped them), read as the editor always read them:
-    /// no word pattern, and only the auto-closing pairs written as objects (<c>{ "open", "close", "notIn" }</c>), not the
-    /// <c>["{", "}"]</c> ones.
+    /// A bundled language configuration (VS Code's, as TextMateSharp shipped them), read as a plugin's is, without its word
+    /// pattern (as the editor always read them). Its auto-closing pairs are both kinds VS Code reads: <c>["{", "}"]</c> and
+    /// <c>{ "open", "close", "notIn" }</c> (TextMateSharp kept only the second, so Go, Rust, Java and Lua closed no brackets).
     /// </summary>
-    internal static LanguageConfiguration Bundled(string json)
-    {
-        var parsed = LanguageConfiguration.Parse(json);
-        using var document = JsonDocument.Parse(json, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-        var pairs = new List<AutoClosingPair>();
-        if (document.RootElement.TryGetProperty("autoClosingPairs", out var array) && array.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in array.EnumerateArray())
-            {
-                if (item.ValueKind == JsonValueKind.Object
-                    && item.TryGetProperty("open", out var open) && open.ValueKind == JsonValueKind.String
-                    && item.TryGetProperty("close", out var close) && close.ValueKind == JsonValueKind.String)
-                {
-                    var notIn = item.TryGetProperty("notIn", out var scopes) && scopes.ValueKind == JsonValueKind.Array
-                        ? scopes.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.String).Select(s => s.GetString()!).ToArray()
-                        : [];
-                    pairs.Add(new AutoClosingPair(open.GetString()!, close.GetString()!, notIn));
-                }
-            }
-        }
-
-        return parsed with { WordPattern = null, AutoClosingPairs = pairs };
-    }
+    internal static LanguageConfiguration Bundled(string json) => LanguageConfiguration.Parse(json) with { WordPattern = null };
 
     /// <summary>C#'s configuration (its grammar isn't used: Roslyn colors C#).</summary>
     private static LanguageConfiguration CSharp { get; } = new()

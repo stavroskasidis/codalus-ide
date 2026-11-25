@@ -44,7 +44,8 @@ Inside the Properties window's grid (and a collection editor's item grid, which 
 | Task Runner Explorer | Ctrl+Alt+Backspace | Ctrl+Shift+Alt+R | ⌃⌥⌫ | Ctrl+Alt+Backspace stops the X server where "zap" is enabled |
 | Toggle Outlining Expansion | Ctrl+M, Ctrl+M | Ctrl+M, Ctrl+M | ⌘⌥[ | ⌘M minimizes the window on macOS |
 | Collapse to Definitions | Ctrl+M, Ctrl+O | Ctrl+M, Ctrl+O | ⌘K ⌘0 | the same |
-| Expand All Outlining | Ctrl+M, Ctrl+L | Ctrl+M, Ctrl+L | ⌘K ⌘J | the same |
+| Toggle All Outlining | Ctrl+M, Ctrl+L | Ctrl+M, Ctrl+L | ⌘K ⌘O | the same |
+| Expand All Outlining | Ctrl+M, Ctrl+X | Ctrl+M, Ctrl+X | ⌘K ⌘J | the same |
 | Replace | Ctrl+H | Ctrl+H | ⌘⌥F | ⌘H hides the app on macOS |
 | Start Without Debugging | Ctrl+F5 | Ctrl+F5 | ⌃F5 | ⌘F5 turns VoiceOver on or off on macOS |
 | Break All | Ctrl+Alt+Break | Ctrl+Alt+Break | ⌘⌥P | Mac keyboards have no Break (Pause) key |
