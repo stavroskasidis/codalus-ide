@@ -99,8 +99,15 @@ public sealed class TextMateSupport
             _rawThemes.Clear();
             _themes.Clear();
             _configurations.Clear();
+            Changed?.Invoke(this, EventArgs.Empty);
         };
     }
+
+    /// <summary>
+    /// The languages changed (a plugin's grammars or file patterns), on the thread that changed them: raised after the
+    /// shared registry, themes and configurations are dropped, so a tokenizer asked for from here on is the new one's.
+    /// </summary>
+    public event EventHandler? Changed;
 
     /// <summary>How many times a bundled grammar was read and parsed (tests: once per scope).</summary>
     internal int GrammarReads => Volatile.Read(ref _grammarReads);
