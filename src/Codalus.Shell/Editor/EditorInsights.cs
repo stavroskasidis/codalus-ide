@@ -785,17 +785,19 @@ public sealed class EditorInsights : IDisposable
         var model = Model;
         var version = model.Version;
         var range = new LanguageServices.Protocol.Range(new Position(first - 1, 0), new Position(last, 0));
-        // Both asked at once, the hints shown as soon as they come: the margin's glyphs (a walk of every type in the
-        // range) used to hold them back until both had answered one after the other.
-        Task<InheritanceMarginItem[]>? marginRequest = client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast)
-            ? client.InheritanceMarginAsync(model.Uri, range, token)
-            : null;
+        Task<InheritanceMarginItem[]>? marginRequest = null; // bisect V3: asked after the hints, as before M66
         try
         {
             InlayHint[] hints = [];
             if (client?.Capabilities?.InlayHintProvider == true && (Options.InlayParameterNames || Options.InlayTypes))
             {
                 hints = await client.InlayHintsAsync(model.Uri, range, token).ConfigureAwait(true);
+            }
+
+            InheritanceMarginItem[]? sequential = null;
+            if (client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast))
+            {
+                sequential = await client.InheritanceMarginAsync(model.Uri, range, token).ConfigureAwait(true);
             }
 
             if (token.IsCancellationRequested || _disposed || model.Version != version)
@@ -828,21 +830,11 @@ public sealed class EditorInsights : IDisposable
                 }, TimeSpan.FromSeconds(_emptyHints));
             }
 
-            _editor.TextArea.TextView.Redraw();
-            Updated?.Invoke(this, EventArgs.Empty);
-            if (marginRequest is null)
+            if (sequential is not null)
             {
-                return;
+                Margin.Set(sequential, first, last);
             }
 
-            var margin = await marginRequest.ConfigureAwait(true);
-            marginRequest = null;
-            if (token.IsCancellationRequested || _disposed || model.Version != version)
-            {
-                return;
-            }
-
-            Margin.Set(margin, first, last);
             _editor.TextArea.TextView.Redraw();
             Updated?.Invoke(this, EventArgs.Empty);
         }
