@@ -718,7 +718,8 @@ public sealed class DebugService : IAsyncDisposable
             }
         }
 
-        await session.EndPartAsync(index, _session.Token, terminateDebuggee: !detach).ConfigureAwait(false);
+        // Not the session's token: ending its last program ends the session, which cancels it (Linux smoke, run 45670700961).
+        await session.EndPartAsync(index, CancellationToken.None, terminateDebuggee: !detach).ConfigureAwait(false);
         if (!detach && held && process.Id is { } ended)
         {
             KillProgram(ended);

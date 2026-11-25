@@ -761,9 +761,11 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         {
             await adapter.DisconnectAsync(terminateDebuggee, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException or OperationCanceledException)
         {
-            // Ended all the same below.
+            // Ended all the same below. A cancellation is the session's end: the last program's end ends the session,
+            // whose token the caller may have given (Terminate Process on the last program, #547; Linux smoke, run
+            // 45670700961).
         }
 
         // Its end through Closed (EndWith) and this one are the same: whichever comes first ends it.

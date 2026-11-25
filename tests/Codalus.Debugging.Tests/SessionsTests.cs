@@ -141,6 +141,20 @@ public sealed class SessionsTests(SessionsFixture fixture) : IClassFixture<Sessi
     }
 
     [Fact]
+    public async Task Terminate_Process_on_the_last_program_ends_the_session()
+    {
+        // #547 (Linux smoke, run 45670700961): the session's last program ended alone ends the session, without an error.
+        var partner = fixture.Source("Partner", "Program.cs");
+        _debug.Breakpoints.Set(new BreakpointSpec(partner, DebuggeeFixture.Line(partner, "partner")));
+        await _debug.LaunchAsync([new DebugLaunch("Partner", Plan("Partner"))], TestContext.Current.CancellationToken, joinable: true);
+        await NextStopAsync();
+
+        await _debug.EndProcessAsync(0, detach: false);
+        await _ended.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.Equal(DebugState.Idle, _debug.State);
+    }
+
+    [Fact]
     public async Task Step_Into_New_Instance_stops_at_the_program_entry_point()
     {
         // #547: netcoredbg's stopAtEntry, for a program that joins the session as for the session's first. The first
