@@ -73,6 +73,8 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
+    private string? _indexLinesOf; // the index text _indexLines were split from
+    private string[]? _indexLines;
     private bool _indexLoaded;
     private string? _indexKey; // what the status knew the index version read by (IndexKey)
     private bool _indexMayHaveChanged; // the repository's index changed since it was read
@@ -322,6 +324,25 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>Raised when semantic tokens were applied (first highlight, benchmarks).</summary>
     public event EventHandler? TokensApplied;
+
+    /// <summary>The colors of a C# file's syntax were shown before the service's full answer (benchmarks).</summary>
+    public event EventHandler? SyntacticTokensApplied;
+
+    /// <summary>The <c>resultId</c> of a token answer from the syntax alone (the C# service's, see docs/protocol.md).</summary>
+    internal const string SyntacticResult = "syntactic";
+
+    /// <summary>Whether the service's full tokens have been shown, and whether the syntax's were (tests, benchmarks).</summary>
+    private bool _semanticShown;
+
+    private bool SyntacticShown => _syntacticCount > 0;
+
+    private int _syntacticCount;
+
+    /// <summary>Whether a full answer of semantic tokens has been shown (benchmarks: not the syntax's first colors).</summary>
+    internal bool SemanticTokensShown => _semanticShown;
+
+    /// <summary>How many answers from the syntax alone were shown, each asked again for the full answer (tests).</summary>
+    internal int SyntacticAnswers => _syntacticCount;
 
     private LanguageHostClient? Client => _services.Client(Model);
 
@@ -810,7 +831,32 @@ public sealed partial class CodeEditorController : IDisposable
                 return; // stale: a newer edit is on its way
             }
 
+            if (tokens.ResultId == SyntacticResult)
+            {
+                // The syntax's colors while the service compiles the project (keywords, literals, comments): shown
+                // where no full answer is, never over one, and asked again at once for the full answer, which the
+                // service then waits for. The insights wait for it too.
+                if (!_semanticShown)
+                {
+                    _colorizer.Apply(start, end, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
+                    Editor.TextArea.TextView.Redraw();
+                    _syntacticCount++;
+                    SyntacticTokensApplied?.Invoke(this, EventArgs.Empty);
+                }
+
+                _tokensAgain = true;
+                return;
+            }
+
+            if (tokens.Data.Length == 0 && SyntacticShown && !_semanticShown)
+            {
+                // Still loading its projects: the syntax's colors stay until the service is ready (RefreshAll).
+                AfterTokens();
+                return;
+            }
+
             _colorizer.Apply(start, end, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
+            _semanticShown = true;
             Editor.TextArea.TextView.Redraw();
             TokensApplied?.Invoke(this, EventArgs.Empty);
             AfterTokens();
@@ -873,6 +919,16 @@ public sealed partial class CodeEditorController : IDisposable
                 if (version != Model.Version || _disposed)
                 {
                     return;
+                }
+
+                if (tokens.ResultId == SyntacticResult)
+                {
+                    // Asked again with the full answer (the service waits for it now).
+                    tokens = await client.SemanticTokensAsync(Model.Uri, range, CancellationToken.None).ConfigureAwait(true);
+                    if (version != Model.Version || _disposed)
+                    {
+                        return;
+                    }
                 }
 
                 _colorizer.ApplyLine(line, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
@@ -1503,7 +1559,7 @@ public sealed partial class CodeEditorController : IDisposable
         get
         {
             var line = Model.Text.GetLineByOffset(Editor.CaretOffset);
-            return _markers.Segments.Any(s => s.StartOffset <= line.EndOffset && s.EndOffset >= line.Offset) ? line.LineNumber : null;
+            return _markers.AnyOn(line.Offset, line.Length) ? line.LineNumber : null;
         }
     }
 
@@ -2415,10 +2471,20 @@ public sealed partial class CodeEditorController : IDisposable
                 return;
             }
 
-            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current.Text)), cancellationToken).ConfigureAwait(true);
+            // The index's lines, split once per read of it: each pause in typing split the whole index text again.
+            var known = ReferenceEquals(_indexLinesOf, baseline) ? _indexLines : null;
+            var (changes, baselineLines) = await Task.Run(() =>
+            {
+                var lines = known ?? LineDiff.Lines(baseline);
+                return (LineDiff.Changes(lines, LineDiff.Lines(current.Text)), lines);
+            }, cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 _gitMargin.Changes = changes;
+                if (ReferenceEquals(baseline, _indexText))
+                {
+                    (_indexLinesOf, _indexLines) = (baseline, baselineLines);
+                }
             }
         }
         catch (OperationCanceledException)

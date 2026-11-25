@@ -6,7 +6,7 @@ namespace Codalus.Shell.ViewModels;
 
 /// <summary>
 /// An entry of the toolbar's startup project list: a project (<see cref="Path"/> its path), or a pseudo-path the shell
-/// reads (a folder's launch configuration, a set of startup projects, ADR 0109).
+/// reads (a folder's launch configuration, a set of startup projects, ADR 0110).
 /// </summary>
 public sealed record StartupProjectChoice(string Name, string Path)
 {
@@ -95,7 +95,7 @@ public sealed class ToolbarViewModel : ObservableObject
 
     public ICommand StartWithoutDebuggingCommand => _command("run.startWithoutDebugging");
 
-    /// <summary>The Start drop-down's entry while a set of startup projects is chosen (ADR 0109).</summary>
+    /// <summary>The Start drop-down's entry while a set of startup projects is chosen (ADR 0110).</summary>
     public ICommand ConfigureStartupProjectsCommand => field ??= _command("run.configureStartupProjects");
 
     public ICommand BreakAllCommand => _command("debug.pause");
@@ -167,7 +167,7 @@ public sealed class ToolbarViewModel : ObservableObject
         }
     }
 
-    /// <summary>Whether Start starts a set of startup projects (ADR 0109): the drop-down then offers Configure Startup Projects.</summary>
+    /// <summary>Whether Start starts a set of startup projects (ADR 0110): the drop-down then offers Configure Startup Projects.</summary>
     public bool IsStartupSet { get; private set; }
 
     /// <summary>The Start button's text: the startup project and its launch profile, or "Start".</summary>

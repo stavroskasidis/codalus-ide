@@ -45,7 +45,10 @@ public sealed class EditorEditingAtScaleTests
         public void Key(string text = "")
         {
             var now = _clock.Elapsed;
-            if (_last > TimeSpan.Zero && now - _last >= FindWidget.SearchDelay)
+            // The dispatcher's clock is whole milliseconds (Avalonia's Win32DispatcherImpl.Now is a Stopwatch's
+            // ElapsedMilliseconds), so its 100 ms can pass up to 1 ms before a precise clock's: Windows CI, PR #537's run
+            // 45536496446, keys at 36 and 136 ms, a search at 136.
+            if (_last > TimeSpan.Zero && now - _last >= FindWidget.SearchDelay - TimeSpan.FromMilliseconds(1))
             {
                 _pauses++;
             }

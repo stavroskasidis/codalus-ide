@@ -8,7 +8,7 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell;
 
 /// <summary>
-/// Sets of startup projects in the toolbar (ADR 0109): the unnamed set (<c>&lt;Multiple Startup Projects&gt;</c>, the
+/// Sets of startup projects in the toolbar (ADR 0110): the unnamed set (<c>&lt;Multiple Startup Projects&gt;</c>, the
 /// Startup Projects page's own) and the named sets of the solution's launch files, chosen like a startup project.
 /// </summary>
 public sealed partial class ShellHost

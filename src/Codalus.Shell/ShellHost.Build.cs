@@ -397,6 +397,9 @@ public sealed partial class ShellHost
         /// <summary>What the toolbar says while it isn't building: "Starting App…".</summary>
         public string Status { get; } = status;
 
+        /// <summary>Step Into New Instance (#547): the program stops at its entry point.</summary>
+        public bool StopAtEntry { get; set; }
+
         public bool IsCanceled => _cancel.IsCancellationRequested;
 
         public void Cancel() => _cancel.Cancel();
@@ -459,7 +462,7 @@ public sealed partial class ShellHost
         Toolbar?.SetLaunching(Localizer.Get("msg.build.launchCancelling", "Cancelling…"));
     }
 
-    /// <summary>Select Startup Project: the solution's projects, then its sets of startup projects (ADR 0109).</summary>
+    /// <summary>Select Startup Project: the solution's projects, then its sets of startup projects (ADR 0110).</summary>
     public async Task SelectStartupProjectAsync()
     {
         if (Solutions.Solution is not { } solution)

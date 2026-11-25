@@ -216,7 +216,7 @@ public sealed partial class ShellHost
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
         try
         {
-            await Debugger.LaunchAsync(launches, CancellationToken.None).ConfigureAwait(true);
+            await Debugger.LaunchAsync(launches, CancellationToken.None, joinable: true).ConfigureAwait(true); // Start New Instance adds to it (#547)
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {

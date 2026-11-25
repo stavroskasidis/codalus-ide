@@ -276,14 +276,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("plugins.host", "M1", "Built-in plugins load and run in the plugin host", async () =>
         {
             var builtIn = shell.Plugins.Plugins.Where(p => p.IsBuiltIn).ToList();
-            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.dotnettest"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.Any(p => p.Id == "codalus.dotnettest") && builtIn.All(p => p.Id != "codalus.welcome"), $"the built-in plugins are discovered, the Start page no longer one of them (M66) (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
             Check(builtIn.All(p => p.Id != "codalus.templates"), "the retired Templates plugin isn't loaded (New Project is the IDE's, ADR 0082)");
             var broken = builtIn.Where(p => p.State is PluginState.Invalid or PluginState.Incompatible or PluginState.Failed).ToList();
             Check(broken.Count == 0, $"no built-in plugin is broken ({string.Join(", ", broken.Select(p => $"{p.Id}: {p.State}"))})");
 
-            // The Start page is a plugin tree view: its items come from the out-of-process plugin host. A plugin command
-            // shows it (the layout may have been reset since startup).
-            await WaitAsync(() => shell.Plugins.Plugins.Any(p => p is { Id: "codalus.welcome", State: PluginState.Active }), "the Welcome plugin activates at startup", 90).ConfigureAwait(true);
+            // The Start page is the shell's own tree view (M66), shown as a plugin's: no plugin activates at startup for it.
+            Check(builtIn.All(p => !p.ActivationEvents.Contains("onStartup")), "no built-in plugin starts the plugin host at every launch");
             await shell.RunAsync("welcome.show", []).ConfigureAwait(true);
             await WaitAsync(() => shell.Layout.IsVisible("welcome.view"), "welcome.show shows the Start page", 60).ConfigureAwait(true);
             var tree = (TreeToolViewModel)shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
@@ -371,7 +370,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("editor.highlighting", "M3", "Semantic highlighting and folding", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
-            await WaitAsync(() => greeter.Colorizer.HasTokens, "semantic tokens arrive", 90).ConfigureAwait(true);
+            await WaitAsync(() => greeter.SemanticTokensShown, "semantic tokens arrive", 90).ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.editor.language" && i.Text == "C#"), "the status bar shows C#");
         }, "language.ready").ConfigureAwait(true);
 
@@ -1111,6 +1110,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.newInstance", "1.1", "Debug ▸ Start New Instance on a project in Solution Explorer adds it to the running F5 session; Terminate Process ends it alone", DebugNewInstanceStepAsync, "debug.compound").ConfigureAwait(true);
         // On macOS too: the Codalus debugger's launcher starts the program in the terminal there (M54b).
         await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
@@ -1960,7 +1960,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     /// <summary>
     /// Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session; as a named
-    /// set saved in the solution's launch file and chosen in the toolbar (ADR 0109).
+    /// set saved in the solution's launch file and chosen in the toolbar (ADR 0110).
     /// </summary>
     private async Task DebugCompoundStepAsync()
     {
@@ -1982,7 +1982,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         page.Apply();
         Check(shell.Runs.StartupTargets.Count == 2, "two projects start");
 
-        // A named set (ADR 0109), shared: saved in Sessions.slnxLaunch, the classic IDE's launch file. The step runs
+        // A named set (ADR 0110), shared: saved in Sessions.slnxLaunch, the classic IDE's launch file. The step runs
         // twice (under the Codalus debugger again): the second time the page reads it from the file.
         if (page.Sets.FirstOrDefault(s => s.Name == "Both") is { } both)
         {
@@ -2035,6 +2035,47 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var log = shell.DebugLog.GetText();
         Check(log.Contains("partner says partner", StringComparison.Ordinal) && log.Contains("total=15", StringComparison.Ordinal), "both programs' output is in the Debug Console:\n" + Tail(log, 1500));
         shell.SetStartupProject(Path.Combine(Sessions, "Debuggee", "Debuggee.csproj"));
+    }
+
+    /// <summary>
+    /// #547 (ADR 0109): F5 on Debuggee, then Solution Explorer's Debug ▸ Start New Instance on Partner: it joins the
+    /// session while Debuggee is stopped, and the Processes window's Terminate Process ends it while Debuggee goes on.
+    /// </summary>
+    private async Task DebugNewInstanceStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        var debuggeeProject = Path.Combine(Sessions, "Debuggee", "Debuggee.csproj");
+        var partnerProject = Path.Combine(Sessions, "Partner", "Partner.csproj");
+        shell.SetStartupProject(debuggeeProject);
+        var debuggee = SessionSource("Debuggee", "Program.cs");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(debuggee, MarkerLine(debuggee, "print"));
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Source?.Path == debuggee, "Debuggee stops at its breakpoint", 420).ConfigureAwait(true);
+
+        // The submenu, on Partner's row.
+        shell.Explorer.Selected = shell.Explorer.Rows.FirstOrDefault(r => r.Node is { Kind: Workbench.Projects.ExplorerNodeKind.Project, ProjectPath: { } path } && Workbench.Projects.SolutionService.PathComparer.Equals(path, partnerProject))
+            ?? throw new SmokeFailure("Solution Explorer has no row for Partner.");
+        var items = shell.Workbench.Menus.GetItems(Views.SolutionExplorerView.DebugMenuLocation, shell.Workbench.Context);
+        Check(items.Select(i => i.Title).SequenceEqual(["Start New Instance", "Start Without Debugging", "Step Into New Instance"]), "Partner's Debug submenu has Start New Instance, Start Without Debugging and Step Into New Instance: " + string.Join(", ", items.Select(i => i.Title)));
+        Check(items.All(i => i.Enabled), "the submenu's commands are enabled while Debuggee is stopped");
+
+        // Partner joins while Debuggee is held at its breakpoint, which keeps the session going for the rest of the
+        // step: Debuggee ran to its end once continued, and Partner was then the last program (Linux smoke, run 45670700961).
+        await shell.Workbench.Commands.ExecuteAsync("debug.startNewInstance", [System.Text.Json.JsonSerializer.SerializeToElement(partnerProject, Docking.ShellJsonContext.Default.String)], CancellationToken.None).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.Processes is [{ Id: not null }, { Name: "Partner", Id: not null, Ended: false }], "Partner joins the session", 300).ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(ProcessesViewModel.ToolWindowId);
+        await WaitAsync(() => shell.ProcessesWindow.Rows.Count == 2, "the Processes window lists both programs").ConfigureAwait(true);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("smoke-test-debug-new-instance.png");
+
+        var row = shell.ProcessesWindow.Rows.First(r => r.Index == 1);
+        await shell.ProcessesWindow.EndAsync(row, detach: false).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.Processes[1].Ended, "Terminate Process ends Partner", 60).ConfigureAwait(true);
+        Check(shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Source?.Path == debuggee, "the session goes on with Debuggee, still stopped");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
     }
 
     /// <summary>A console app in the integrated terminal (M14c): input, a breakpoint, and Detach All leaving it running.</summary>

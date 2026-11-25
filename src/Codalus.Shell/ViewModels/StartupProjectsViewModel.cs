@@ -50,7 +50,7 @@ public sealed class StartupProjectRowViewModel(string path, string name, Startup
     }
 
     /// <summary>
-    /// The launch profile the set's entry names (ADR 0109): null starts the first runnable one, and is kept null when
+    /// The launch profile the set's entry names (ADR 0110): null starts the first runnable one, and is kept null when
     /// that's still the choice, so a launch file's entry without a <c>DebugTarget</c> stays without one.
     /// </summary>
     public string? EntryProfile => _wanted is null && _profile == Profiles.FirstOrDefault() ? null : _profile;
@@ -112,7 +112,7 @@ public sealed class LaunchSetChoiceViewModel(string name, LaunchSet? saved, bool
 }
 
 /// <summary>
-/// Configure Startup Projects (M14c, ADR 0109), like the solution property page of other IDEs: one startup project, or
+/// Configure Startup Projects (M14c, ADR 0110), like the solution property page of other IDEs: one startup project, or
 /// a set of several that Start launches together (debugged in one session) with each one's action, launch profile and
 /// order. The unnamed set is saved with the solution's session; named sets are the classic IDE's multi-project launch
 /// profiles, in the solution's launch files (shared ones in the file people commit, the others in its <c>.user</c> file).

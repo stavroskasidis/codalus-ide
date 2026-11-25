@@ -10,8 +10,10 @@ internal sealed class XamlContext
     {
         Path = path;
         Text = text;
-        TextString = text.ToString();
-        Document = XamlDocument.Parse(TextString);
+        // Every request on an unchanged file parsed it again (and made its whole text a string): the parse of a text
+        // is kept with it, as the files a resource lookup reads are. Parses are never changed once made.
+        Document = s_parses.GetOrAdd(text, t => XamlDocument.Parse(t.ToString()));
+        TextString = Document.Text;
         Project = project;
         Compilation = compilation;
         Types = compilation is null ? null : XamlTypeSystem.For(compilation);

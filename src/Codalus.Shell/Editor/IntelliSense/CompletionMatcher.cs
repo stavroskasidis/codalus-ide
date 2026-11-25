@@ -81,23 +81,25 @@ public static class CompletionMatcher
     /// </summary>
     private static int[]? CamelCase(string text, string query)
     {
-        var positions = new List<int>(query.Length);
-        for (var i = 0; i < text.Length && positions.Count < query.Length; i++)
+        // Asked of every item at each key: nothing allocated until it matches (most don't).
+        Span<int> positions = query.Length <= 128 ? stackalloc int[query.Length] : new int[query.Length];
+        var count = 0;
+        for (var i = 0; i < text.Length && count < query.Length; i++)
         {
             if (i > 0 && !char.IsUpper(text[i]))
             {
                 continue;
             }
 
-            if (char.ToUpperInvariant(text[i]) != char.ToUpperInvariant(query[positions.Count]))
+            if (char.ToUpperInvariant(text[i]) != char.ToUpperInvariant(query[count]))
             {
                 return null;
             }
 
-            positions.Add(i);
+            positions[count++] = i;
         }
 
-        return positions.Count == query.Length ? [.. positions] : null;
+        return count == query.Length ? positions.ToArray() : null;
     }
 
     private static int[] Range(int start, int count)

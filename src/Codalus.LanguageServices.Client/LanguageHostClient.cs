@@ -117,6 +117,13 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// </summary>
     public JsonElement? InitializationOptions { get; set; }
 
+    /// <summary>
+    /// How long the Codalus C# service may wait for a file's first semantic tokens before it answers from the file's
+    /// syntax (<c>resultId: "syntactic"</c>, docs/protocol.md), which this client then asks again after; null: never.
+    /// Sent as the experimental client capability <c>codalusSyntacticTokens</c> (milliseconds); other servers ignore it.
+    /// </summary>
+    public TimeSpan? SyntacticTokensWait { get; init; }
+
     /// <summary>Answers <c>workspace/configuration</c> for a section (null: no value).</summary>
     public Func<string?, JsonElement?>? ConfigurationProvider { get; set; }
 
@@ -266,10 +273,22 @@ public sealed class LanguageHostClient : IAsyncDisposable
         connection.OnNotification(Methods.LogMessage, json.LogMessageParams, p => Log?.Invoke(this, p.Message));
     }
 
+    private static string WithSyntacticTokens(string capabilities, TimeSpan wait)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(capabilities)!.AsObject();
+        if (node["experimental"] is not System.Text.Json.Nodes.JsonObject experimental)
+        {
+            node["experimental"] = experimental = [];
+        }
+
+        experimental["codalusSyntacticTokens"] = (int)wait.TotalMilliseconds;
+        return node.ToJsonString();
+    }
+
     private async Task InitializeAsync(JsonRpcConnection connection, bool isRestart, CancellationToken cancellationToken)
     {
         var json = ProtocolJsonContext.Default;
-        using var capabilities = JsonDocument.Parse(ClientCapabilities);
+        using var capabilities = JsonDocument.Parse(SyntacticTokensWait is { } wait ? WithSyntacticTokens(ClientCapabilities, wait) : ClientCapabilities);
         var parameters = JsonSerializer.SerializeToElement(
             new InitializeParams(Environment.ProcessId, new ClientInfo(_clientName, null), RootUri, capabilities.RootElement.Clone(), InitializationOptions ?? _settings),
             json.InitializeParams);

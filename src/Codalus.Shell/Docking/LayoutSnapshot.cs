@@ -157,10 +157,10 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
     /// <summary>Whether several startup projects start together (M14c); null or false: the single startup project.</summary>
     public bool? MultipleStartupProjects { get; init; }
 
-    /// <summary>The unnamed set's startup projects: their actions and launch profiles, in start order (M14c, ADR 0109).</summary>
+    /// <summary>The unnamed set's startup projects: their actions and launch profiles, in start order (M14c, ADR 0110).</summary>
     public IReadOnlyList<SessionStartupProject>? StartupProjects { get; init; }
 
-    /// <summary>The named set of the solution's launch files Start starts (ADR 0109); null: the unnamed set, or a single project.</summary>
+    /// <summary>The named set of the solution's launch files Start starts (ADR 0110); null: the unnamed set, or a single project.</summary>
     public string? LaunchSet { get; init; }
 
     /// <summary>The active solution configuration (ADR 0070); reopened with it while the solution still has it.</summary>
@@ -206,7 +206,7 @@ public sealed record SessionErrorList(bool ShowErrors = true, bool ShowWarnings 
 
 /// <summary>
 /// A project of multiple startup projects: <see cref="Action"/> is <c>Start</c> or <c>StartWithoutDebugging</c>, and
-/// <see cref="Profile"/> its launch profile (ADR 0109; a session from before has none, and takes the project's chosen one).
+/// <see cref="Profile"/> its launch profile (ADR 0110; a session from before has none, and takes the project's chosen one).
 /// </summary>
 public sealed record SessionStartupProject(string Path, string Action, string? Profile = null);
 

@@ -656,6 +656,8 @@ public sealed class DiffViewModel : ObservableObject
     public void Close()
     {
         _closed = true;
+        _semanticWindow = null;
+        Interlocked.Exchange(ref _colorsCts, null)?.Cancel(); // the coloring's requests still running
         if (Insights is { } insights)
         {
             Insights = null;
@@ -766,7 +768,13 @@ public sealed class DiffViewModel : ObservableObject
         }
 
         var version = ++_colorsVersion;
-        var token = CancellationToken.None;
+
+        // A coloring replaces the one still running (a reload), and the diff's close ends it (Dispose).
+        var previous = Interlocked.Exchange(ref _colorsCts, new CancellationTokenSource());
+        previous?.Cancel();
+        previous?.Dispose();
+        var token = _colorsCts!.Token;
+        _semanticWindow = null;
         var (oldText, newText) = (OldText, NewText);
         var themeId = services.Editor.Theme.Id;
         try
@@ -781,6 +789,15 @@ public sealed class DiffViewModel : ObservableObject
             (OldColors, NewColors, OpenSideIsOld) = (oldColors, newColors, OpenSide(services, oldText, newText));
             UpdateInsights();
             ColorsChanged?.Invoke(this, EventArgs.Empty);
+
+            // A large open document's side: its language service's tokens for the lines shown, as they're shown (its
+            // whole file's took seconds to classify, and megabytes of tokens no one scrolled to).
+            if (OpenSideIsOld is { } large && (large ? OldLines : NewLines).Count > WholeDocumentLines)
+            {
+                _semanticWindow = new SemanticWindow(version, large, large ? OldPath : Path, large ? oldText : newText, large ? oldColors : newColors, new bool[(large ? OldLines : NewLines).Count]);
+                await SemanticLinesShownAsync(1, Math.Min(WindowMargin * 2, (large ? OldLines : NewLines).Count)).ConfigureAwait(true);
+                return;
+            }
 
             // The open document's side: its language service's tokens, as the editor colors it.
             if (OpenSideIsOld is { } isOld && await services.SemanticTokensAsync(isOld ? OldPath : Path, isOld ? oldText : newText, token).ConfigureAwait(true) is { } data
@@ -805,6 +822,83 @@ public sealed class DiffViewModel : ObservableObject
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
         {
             // Colors are a nicety: a language service that fails leaves the grammar's.
+        }
+    }
+
+    /// <summary>Open sides up to this many lines take their whole file's semantic tokens at once.</summary>
+    internal const int WholeDocumentLines = 2_000;
+
+    /// <summary>The lines asked for around those shown, above and below.</summary>
+    internal const int WindowMargin = 150;
+
+    private CancellationTokenSource? _colorsCts;
+
+    /// <summary>A large open side's semantic tokens, asked for as lines show: the grammar's colors, and the lines covered.</summary>
+    private sealed record SemanticWindow(int Version, bool IsOld, string Path, string Text, SourceTokens? Grammar, bool[] Covered);
+
+    private SemanticWindow? _semanticWindow;
+
+    /// <summary>
+    /// The open side's 1-based lines <paramref name="first"/> to <paramref name="last"/> show: a large file's semantic
+    /// tokens for them, and a margin around them, unless they're asked for already. The other lines keep the grammar's colors.
+    /// </summary>
+    public async Task SemanticLinesShownAsync(int first, int last)
+    {
+        if (_semanticWindow is not { } window || Services is not { } services || _colorsCts is not { } cts)
+        {
+            return;
+        }
+
+        var count = window.Covered.Length;
+        var start = Math.Clamp(first - 1 - WindowMargin, 0, count);
+        var end = Math.Clamp(last + WindowMargin, 0, count);
+        if (Enumerable.Range(Math.Clamp(first - 1, 0, count), Math.Max(0, Math.Min(last, count) - Math.Clamp(first - 1, 0, count))).All(i => window.Covered[i]))
+        {
+            return;
+        }
+
+        for (var i = start; i < end; i++)
+        {
+            window.Covered[i] = true; // asked for: a scroll meanwhile doesn't ask again
+        }
+
+        try
+        {
+            if (await services.SemanticTokensInAsync(window.Path, window.Text, start, end, cts.Token).ConfigureAwait(true) is not { } data
+                || !ReferenceEquals(_semanticWindow, window) || window.Version != _colorsVersion)
+            {
+                return;
+            }
+
+            // The answer's lines over the colors shown: the lines asked for take the service's, the rest keep theirs.
+            var semantic = SourceTokens.FromSemantic(data, count);
+            var shown = window.IsOld ? OldColors : NewColors;
+            var lines = new SourceToken[count][];
+            for (var i = 0; i < count; i++)
+            {
+                lines[i] = i >= start && i < end ? semantic.Line(i).ToArray() : (shown ?? window.Grammar)?.Line(i).ToArray() ?? [];
+            }
+
+            if (window.IsOld)
+            {
+                OldColors = new SourceTokens(lines);
+            }
+            else
+            {
+                NewColors = new SourceTokens(lines);
+            }
+
+            ColorsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
+        {
+            for (var i = start; i < end; i++)
+            {
+                window.Covered[i] = false; // asked again when shown again
+            }
         }
     }
 

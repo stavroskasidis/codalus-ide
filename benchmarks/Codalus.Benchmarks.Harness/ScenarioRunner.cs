@@ -185,6 +185,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             if (target.Instrumented && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.HighlightReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } highlight)
             {
                 result.Add("file_highlight_ms", (highlight.WallMicros - session.LaunchWallMicros) / 1000.0);
+                AddSyntactic(result, session);
             }
 
             nint window = 0;
@@ -291,6 +292,18 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// When a C# file's first colors, from its syntax, showed (M66): before the full answer's, and absent when the full
+    /// answer came first or the shell predates them.
+    /// </summary>
+    private static void AddSyntactic(ScenarioResult result, Session session)
+    {
+        if (BenchEventLog.Read(session.EventsFile).FirstOrDefault(e => e.Name == BenchEventNames.SyntacticHighlightReady) is { } syntactic)
+        {
+            result.Add("file_syntactic_ms", (syntactic.WallMicros - session.LaunchWallMicros) / 1000.0);
+        }
     }
 
     private static void SaveWindowCapture(nint window, string path)
@@ -785,6 +798,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 if (bench == "typing" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.HighlightReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } highlight)
                 {
                     result.Add("file_highlight_ms", (highlight.WallMicros - session.LaunchWallMicros) / 1000.0);
+                    AddSyntactic(result, session);
                     await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
                     var memory = ProcessTree.Memory(session.Process.Id);
                     result.Add("memory_file_private_mb", memory.PrivateBytes / 1048576.0);

@@ -92,7 +92,7 @@ internal static class TargetCatalog
             return psi;
         },
         dir,
-        "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+        "Fresh user data per launch: the shell shows its own Start page; no plugin host starts at launch (M66).",
         HelperDirectories: ["pluginhost", "buildhost", "lshost", "replhost", "markuphost", "plugins"]);
 
     /// <summary>

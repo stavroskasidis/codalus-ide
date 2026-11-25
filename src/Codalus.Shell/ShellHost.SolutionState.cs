@@ -147,7 +147,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        // A session from before ADR 0109 has no profile per entry: each takes the project's chosen one, as it started with.
+        // A session from before ADR 0110 has no profile per entry: each takes the project's chosen one, as it started with.
         Runs.Load(
             session.StartupProject,
             session.LaunchProfiles,

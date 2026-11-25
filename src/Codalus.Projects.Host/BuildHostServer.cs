@@ -101,7 +101,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
             return await Guard(() => Session.BuildAsync(p, this, ct)).ConfigureAwait(false);
         });
         OnRequest(ProjectMethods.CancelBuild, json.EmptyParams, json.EmptyResult, (_, _) => Sync(() => _session?.CancelBuild()));
-        OnRequest(ProjectMethods.RunInfo, json.RunInfoParams, json.RunInfo, (p, _) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path, p.TargetFramework))));
+        OnRequest(ProjectMethods.RunInfo, json.RunInfoParams, json.RunInfo, (p, ct) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path, p.TargetFramework, ct), ct)));
         RegisterPackageHandlers();
         RegisterProjectManagementHandlers();
         RegisterItemHandlers();

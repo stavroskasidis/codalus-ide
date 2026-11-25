@@ -1,4 +1,4 @@
-# 0109. Sets of startup projects in the toolbar, and the classic IDE's launch files
+# 0110. Sets of startup projects in the toolbar, and the classic IDE's launch files
 
 - **Status:** accepted (2026-11-25; the maintainer's answers of 2026-11-25)
 - **Date:** 2026-11-25

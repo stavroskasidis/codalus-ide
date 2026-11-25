@@ -94,13 +94,38 @@ public sealed class TextMateSupport
             lock (_gate)
             {
                 _registry = null;
+                _generation++;
             }
 
             _rawThemes.Clear();
             _themes.Clear();
             _configurations.Clear();
+            Changed?.Invoke(this, EventArgs.Empty);
         };
     }
+
+    /// <summary>
+    /// The languages changed (a plugin's grammars or file patterns), on the thread that changed them: raised after the
+    /// shared registry, themes and configurations are dropped, so a tokenizer asked for from here on is the new one's.
+    /// </summary>
+    public event EventHandler? Changed;
+
+    /// <summary>
+    /// Moves on each change of the languages (a plugin's grammars or file patterns): what was tokenized before it may have
+    /// another grammar now, even under the same scope (a plugin's replaces a bundled one).
+    /// </summary>
+    public int Generation
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _generation;
+            }
+        }
+    }
+
+    private int _generation;
 
     /// <summary>How many times a bundled grammar was read and parsed (tests: once per scope).</summary>
     internal int GrammarReads => Volatile.Read(ref _grammarReads);

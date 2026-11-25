@@ -24,7 +24,7 @@ public class RenderingTests
         // A C# file outside any project: the language service still colors it (Miscellaneous Files).
         var folder = f.CopySample("LanguageFeatures");
         var editor = await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "Lib", "Shapes.cs"));
-        await ShellFixture.PumpUntil(() => editor!.Controller?.Colorizer.HasTokens == true, seconds: 120);
+        await ShellFixture.PumpUntil(() => editor!.Controller?.SemanticTokensShown == true, seconds: 120);
 
         foreach (var theme in new[] { "light", "dark", "highContrast" })
         {

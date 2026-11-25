@@ -47,6 +47,31 @@ public class NavigationDepthTests
     }
 
     [AvaloniaFact]
+    public async Task A_viewport_refresh_shows_its_inlay_hints_and_inheritance_glyphs_in_one_update()
+    {
+        // The hints and the margin's glyphs shown as each came took two redraws and two rounds of Updated for every file
+        // opened: everyday's open_tracked waited 163% longer for the UI thread on Linux (CI's bisect, run 45564475595).
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var areaLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("override double Area() => System.Math.PI", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.Margin.Items.ContainsKey(areaLine), seconds: 60, describe: () => $"margin {shapes.Insights.Margin.Items.Count}");
+
+        // As at a file's open: the margin's glyphs needed with the hints (a refresh with them in range asks only the hints).
+        var before = shapes.Insights.ViewportUpdates;
+        shapes.Insights.Margin.Invalidate();
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => shapes.Insights.ViewportUpdates > before, seconds: 30);
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        ShellFixture.Pump();
+
+        Assert.Equal(before + 1, shapes.Insights.ViewportUpdates);
+        Assert.True(shapes.Insights.Margin.Items.ContainsKey(areaLine));
+    }
+
+    [AvaloniaFact]
     public async Task Inline_information_shows_hints_lenses_and_inheritance_glyphs()
     {
         await using var f = ShellFixture.Create();
@@ -84,6 +109,8 @@ public class NavigationDepthTests
         var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
         var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is { } eol && eol.Contains("implementations", StringComparison.Ordinal), seconds: 60);
+        // Lenses resolve four at a time (M66), so the references count can land after the implementations' (Linux CI, run 45517276684).
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(interfaceLine)?.Contains("references", StringComparison.Ordinal) == true, seconds: 60, describe: () => $"row '{shapes.Insights.LensRowAbove(interfaceLine)}'");
         Assert.Contains("2 references", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal);
         var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is { Length: > 0 }, seconds: 60); // its counts, to click: the row is there before them

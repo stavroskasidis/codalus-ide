@@ -8,7 +8,7 @@ using Codalus.Workbench.Build;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// Sets of startup projects in the shell (ADR 0109), on samples/Debugging's Sessions.slnx: a launch file's set in the
+/// Sets of startup projects in the shell (ADR 0110), on samples/Debugging's Sessions.slnx: a launch file's set in the
 /// toolbar's startup list and the Start drop-down, edited and unshared on the Startup Projects page, a change on disk,
 /// and the choice kept with the solution. Nothing starts, so it needs no debugger.
 /// </summary>

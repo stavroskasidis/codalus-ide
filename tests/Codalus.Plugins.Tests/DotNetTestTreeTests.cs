@@ -48,6 +48,63 @@ public sealed class DotNetTestTreeTests
         Assert.Equal(3, tree.MappedRunnerTests);
     }
 
+    [Fact]
+    public void An_edit_rebuilds_its_projects_items_only_and_unchanged_items_raise_nothing()
+    {
+        var controller = new Controller();
+        var tree = new TestTree(controller);
+        var projects = Enumerable.Range(0, 3).Select(i => new ProjectTests(Path.GetFullPath($"/src/P{i}/P{i}.csproj"), $"P{i}")).ToList();
+        foreach (var project in projects)
+        {
+            project.RunnerTests[string.Empty] = [Test(project.Path, "Adds"), Test(project.Path, "Fails")];
+        }
+
+        tree.Update(projects);
+        var full = Ids(controller.Items);
+        var roots = controller.Items.ToList();
+        var changes = 0;
+        foreach (var item in roots.SelectMany(Descendants))
+        {
+            item.Changed += (_, _) => changes++;
+        }
+
+        // An edit in P1: the same tree, its items as they were, and the unchanged traits tell nothing.
+        projects[1].RunnerTests[string.Empty] = [Test(projects[1].Path, "Adds"), Test(projects[1].Path, "Fails"), Test(projects[1].Path, "Divides")];
+        tree.Update(projects, new HashSet<string>([projects[1].Path], StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(full.Concat([MethodId(projects[1], "Divides")]).Order(StringComparer.Ordinal), Ids(controller.Items).Order(StringComparer.Ordinal));
+        Assert.Equal(roots, controller.Items.ToList());
+        Assert.Equal(0, changes);
+
+        // The partial update gives the tree a full one gives.
+        var partial = Ids(controller.Items);
+        tree.Update(projects);
+        Assert.Equal(partial, Ids(controller.Items));
+        Assert.Equal(MethodId(projects[1], "Divides"), tree.ItemFor(projects[1].RunnerTests[string.Empty][2])?.Id);
+    }
+
+    [Fact]
+    public void Replacing_thousands_of_children_by_the_same_instances_reports_only_the_one_swapped()
+    {
+        var collection = TestItemCollection.CreateRoot();
+        var items = Enumerable.Range(0, 10_000).Select(i => new TestItem($"t{i}", $"T{i}")).ToList();
+        collection.Replace(items);
+        var events = new List<TestItemCollectionChangedEventArgs>();
+        collection.Changed += (_, e) => events.Add(e);
+
+        collection.Replace(items);
+        Assert.Empty(events); // nothing changed
+
+        var swapped = new TestItem("t5000", "T5000");
+        collection.Replace([.. items.Take(5000), swapped, .. items.Skip(5001)]);
+        var change = Assert.Single(events);
+        Assert.Same(swapped, Assert.Single(change.Added));
+        Assert.Same(items[5000], Assert.Single(change.Removed));
+    }
+
+    private static List<string> Ids(TestItemCollection items) => [.. items.SelectMany(Descendants).Select(i => i.Id)];
+
+    private static IEnumerable<TestItem> Descendants(TestItem item) => [item, .. item.Children.SelectMany(Descendants)];
+
     /// <summary>A controller whose <see cref="Find"/> walks the tree (the trees here are small).</summary>
     private sealed class Controller : ITestController
     {

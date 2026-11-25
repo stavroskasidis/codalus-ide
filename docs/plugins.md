@@ -88,7 +88,7 @@ By hand, a plugin project is:
 
 ### Translating the manifest
 
-A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `codalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `codalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest; the built-in Welcome plugin does. A plugin's own text (tree labels, messages) uses the same files through `context.Localize("key", "English")` (since 0.2.9). The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
+A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `codalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `codalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest. A plugin's own text (tree labels, messages) uses the same files through `context.Localize("key", "English")` (since 0.2.9). The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
 
 ### Contribution points
 
@@ -193,6 +193,7 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `build.buildSolution`, `build.rebuildSolution`, `build.cleanSolution`, `build.cancel`, `run.stop`, `run.selectStartupProject` | none |
 | `build.buildProject`, `build.rebuildProject`, `build.cleanProject`, `run.startWithoutDebugging`, `run.setStartupProject`, `run.selectLaunchProfile` | optional project path (default: the selected or active document's project; for run commands, the startup project) |
 | `debug.start`, `debug.continue`, `debug.stop`, `debug.restart`, `debug.stepOver`, `debug.stepInto`, `debug.stepOut`, `debug.pause`, `debug.toggleBreakpoint`, `debug.toggleBreakpointEnabled`, `debug.editBreakpoint`, `debug.deleteAllBreakpoints`, `debug.exceptionSettings` | none (`debug.start` takes an optional project path) |
+| `debug.startNewInstance`, `debug.stepIntoNewInstance`, `run.startProjectWithoutDebugging` | optional project path (default: the selected or active document's project). Start New Instance and Step Into New Instance add the project to the running debug session (the second stops at its entry point), or start one; Start Without Debugging runs that project, not the startup project. Since 1.1.0. |
 | `debug.attach` | optional process id |
 | `debug.addWatch` | optional expression (default: the selection or the expression at the caret) |
 | `git.commit`, `git.refresh`, `git.switchBranch`, `git.createBranch`, `git.merge`, `git.abortMerge`, `git.fetch`, `git.pull`, `git.push`, `git.showDiff`, `git.stageFile`, `git.toggleBlame` | none (file commands act on the active editor) |
@@ -203,7 +204,7 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
-The built-in Welcome plugin (`src/Plugins/Codalus.Plugins.Welcome`) is a complete example that reaches the shell only through these commands. The HelloWorld sample (`samples/plugins/HelloWorld`) shows every contribution point, quick picks and input boxes with Browse included (`hello.ask`).
+The HelloWorld sample (`samples/plugins/HelloWorld`) shows every contribution point, quick picks and input boxes with Browse included (`hello.ask`).
 
 A plugin can't take a command or a setting the IDE owns: declaring one is ignored, and the plugin log says so (since 0.6.0). Its menus and keys may still run the IDE's command.
 
@@ -512,7 +513,7 @@ Otherwise a plugin that builds against 0.3.0 behaves as it did on 0.2.9.
 
 ### 0.2.9 (M23c)
 
-Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, english)` and `context.Localize(key, english, args…)` (`PluginLocalization`) give a plugin's own text in the display language. The text comes from the same `codalus-plugin.nls.<locale>.json` files as the [manifest's](#translating-the-manifest), else `english`. The display language reaches the plugin host as `CODALUS_DISPLAY_LOCALE`. The built-in Welcome plugin translates its Start page this way.
+Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, english)` and `context.Localize(key, english, args…)` (`PluginLocalization`) give a plugin's own text in the display language. The text comes from the same `codalus-plugin.nls.<locale>.json` files as the [manifest's](#translating-the-manifest), else `english`. The display language reaches the plugin host as `CODALUS_DISPLAY_LOCALE`. (The Start page, the built-in Welcome plugin until 1.1, translated itself this way; it is the shell's own since, and no plugin host starts at launch for it.)
 
 ### M23b (no version change)
 

@@ -11,6 +11,36 @@ namespace Codalus.Shell.Tests;
 [Collection(CodeColorsConfigurationTests.Name)]
 public sealed class CodeColorsTests
 {
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task A_plugins_grammar_colors_lines_already_shown_without_one()
+    {
+        await using var f = ShellFixture.Create();
+        var languages = f.Shell.Workbench.LanguageDefinitions;
+        var changes = 0;
+        void OnChanged(object? sender, EventArgs e) => changes++;
+        CodeColors.Changed += OnChanged;
+        try
+        {
+            // A Find Results line of a file whose language comes later: plain, and its language, line and tokenizer cached.
+            Assert.Null(CodeColors.LanguageOf("Order.ctso"));
+            languages.Register(new Workbench.Languages.LanguageDefinition("contoso", "Contoso") { Extensions = [".ctso"] });
+            Assert.Equal("contoso", CodeColors.LanguageOf("Order.ctso"));
+            Assert.Empty(CodeColors.Tokens("contoso", "begin order"));
+
+            // The plugin's grammar: the language's line is colored, and lines shown are told to color again.
+            var grammar = Path.Combine(f.UserData, "contoso.tmLanguage.json");
+            await File.WriteAllTextAsync(grammar, """{ "scopeName": "source.contoso", "patterns": [{ "match": "\\bbegin\\b", "name": "keyword.control.contoso" }] }""", TestContext.Current.CancellationToken);
+            var before = changes;
+            languages.RegisterGrammar(new Workbench.Languages.GrammarDefinition("source.contoso", "contoso", grammar));
+            Assert.True(changes > before, "lines shown weren't told to color again");
+            Assert.Equal([(0, 5, Array.IndexOf(Codalus.LanguageServices.Protocol.TokenTypes.All, "controlKeyword"))], CodeColors.Tokens("contoso", "begin order"));
+        }
+        finally
+        {
+            CodeColors.Changed -= OnChanged;
+        }
+    }
+
     [Fact]
     public void Lines_of_a_language_share_its_tokenizer_until_the_configuration_changes()
     {

@@ -109,7 +109,7 @@ public sealed class CodeSearchTests
         Assert.Equal(search.SelectedIndex, f.Window.FindDescendantOfType<CodeSearchView>()!.FindDescendantOfType<Avalonia.Controls.ListBox>()!.SelectedIndex); // the list shows it selected
         Assert.Equal(shapes, search.PreviewTitle);
         Assert.StartsWith("Ln ", search.PreviewStatus, StringComparison.Ordinal);
-        await ShellFixture.PumpUntil(() => f.Shell.CodeSearchPreview?.Controller.Colorizer.HasTokens == true, seconds: 60, describe: () => State(f)); // the language service's colors, as in a tab
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearchPreview?.Controller.SemanticTokensShown == true, seconds: 60, describe: () => State(f)); // the language service's colors, as in a tab
         preview = f.Shell.CodeSearchPreview!;
 
         // Edited there and saved with Ctrl+S: the document changes on disk, with undo.

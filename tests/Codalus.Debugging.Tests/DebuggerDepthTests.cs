@@ -110,7 +110,7 @@ public sealed class DebuggerDepthTests(DebuggeeFixture debuggee) : IClassFixture
         _debug.ExceptionSettings.Set("System.FormatException", false);
         await _debug.ApplyExceptionSettingsAsync();
         await _debug.ContinueAsync();
-        DebuggeeFixture.AssertExitCode(70, await EndedAsync());
+        DebuggeeFixture.AssertExitCode(70, await EndedAsync(), Output);
         Assert.False(_stops.Reader.TryRead(out _));
         Assert.Contains("format", Output, StringComparison.Ordinal);
     }
@@ -239,7 +239,7 @@ public sealed class DebuggerDepthTests(DebuggeeFixture debuggee) : IClassFixture
 
         // depth-end depends on depth-start, which has no breakpoint (never hit): the program runs to its end.
         await _debug.ContinueAsync();
-        DebuggeeFixture.AssertExitCode(70, await EndedAsync());
+        DebuggeeFixture.AssertExitCode(70, await EndedAsync(), Output);
         Assert.False(_stops.Reader.TryRead(out _));
     }
 

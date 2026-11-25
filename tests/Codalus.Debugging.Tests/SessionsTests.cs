@@ -141,6 +141,77 @@ public sealed class SessionsTests(SessionsFixture fixture) : IClassFixture<Sessi
     }
 
     [Fact]
+    public async Task Terminate_Process_on_the_last_program_ends_the_session()
+    {
+        // #547 (Linux smoke, run 45670700961): the session's last program ended alone ends the session, without an error.
+        var partner = fixture.Source("Partner", "Program.cs");
+        _debug.Breakpoints.Set(new BreakpointSpec(partner, DebuggeeFixture.Line(partner, "partner")));
+        await _debug.LaunchAsync([new DebugLaunch("Partner", Plan("Partner"))], TestContext.Current.CancellationToken, joinable: true);
+        await NextStopAsync();
+
+        await _debug.EndProcessAsync(0, detach: false);
+        await _ended.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.Equal(DebugState.Idle, _debug.State);
+    }
+
+    [Fact]
+    public async Task Step_Into_New_Instance_stops_at_the_program_entry_point()
+    {
+        // #547: netcoredbg's stopAtEntry, for a program that joins the session as for the session's first. The first
+        // program is held at a breakpoint meanwhile, so the session doesn't end before the second joins.
+        var debuggee = fixture.Source("Debuggee", "Program.cs");
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee, DebuggeeFixture.Line(debuggee, "print")));
+        await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan("Debuggee"))], TestContext.Current.CancellationToken, joinable: true);
+        Assert.Equal("breakpoint", (await NextStopAsync()).Reason);
+
+        var (_, joined) = _debug.AddLaunch(new DebugLaunch("Partner", Plan("Partner", "hello", "there")) { StopAtEntry = true }, TestContext.Current.CancellationToken);
+        Assert.True(await joined.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken));
+        await _debug.ContinueAsync();
+
+        var stop = await NextStopAsync();
+        Assert.Equal("entry", stop.Reason);
+        Assert.Equal(fixture.Source("Partner", "Program.cs"), _debug.SelectedFrame?.Source?.Path);
+        await _debug.StopAsync();
+        Assert.Equal(DebugState.Idle, _debug.State);
+    }
+
+    [Fact]
+    public async Task A_project_started_from_Solution_Explorer_joins_a_one_project_session()
+    {
+        // #547: F5 of one project is a session another program can join (Debug → Start New Instance). Until one does,
+        // it looks like any one-program session: its threads and exit don't carry the program's name.
+        var debuggee = fixture.Source("Debuggee", "Program.cs");
+        var partner = fixture.Source("Partner", "Program.cs");
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee, DebuggeeFixture.Line(debuggee, "print")));
+        _debug.Breakpoints.Set(new BreakpointSpec(partner, DebuggeeFixture.Line(partner, "partner")));
+
+        await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan("Debuggee"))], TestContext.Current.CancellationToken, joinable: true);
+        Assert.True(_debug.CanAddLaunch);
+        await NextStopAsync();
+        Assert.EndsWith(Path.Combine("Debuggee", "Program.cs"), _debug.SelectedFrame?.Source?.Path, StringComparison.Ordinal);
+        Assert.DoesNotContain(_debug.Threads, t => t.Name.StartsWith("Debuggee: ", StringComparison.Ordinal));
+
+        // While it's stopped, a second project joins the session and stops at its own breakpoint once the first goes on.
+        var (index, joined) = _debug.AddLaunch(new DebugLaunch("Partner", Plan("Partner", "hello", "there")), TestContext.Current.CancellationToken);
+        Assert.Equal(1, index);
+        Assert.True(await joined.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken));
+        Assert.Equal(["Debuggee", "Partner"], _debug.Processes.Select(p => p.Name));
+        await _debug.ContinueAsync();
+
+        var stop = await NextStopAsync();
+        Assert.EndsWith(Path.Combine("Partner", "Program.cs"), _debug.SelectedFrame?.Source?.Path, StringComparison.Ordinal);
+        Assert.Equal("\"hello there\"", (await _debug.EvaluateAsync("greeting", "watch", TestContext.Current.CancellationToken)).Result);
+        Assert.Contains(_debug.Threads, t => t.Name.StartsWith("Partner: ", StringComparison.Ordinal));
+        await _debug.ContinueAsync();
+
+        await _ended.Task.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken);
+        Assert.All(_debug.Processes, p => Assert.True(p.Ended));
+        Assert.Contains("partner says hello there", Output, StringComparison.Ordinal);
+        Assert.Contains("total=15 Ada is 36", Output, StringComparison.Ordinal);
+        Assert.NotNull(stop);
+    }
+
+    [Fact]
     public async Task A_source_generator_stops_at_a_breakpoint_when_the_compiler_runs_on_its_target()
     {
         var (inputs, sdk) = await fixture.CompilerInputsAsync("GeneratorTarget");

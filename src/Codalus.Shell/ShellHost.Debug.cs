@@ -398,13 +398,14 @@ public sealed partial class ShellHost
                 return;
             }
 
+            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry }; // Step Into New Instance (#547)
             if (launch.IsCanceled)
             {
                 return;
             }
 
             _pendingBrowserUrl = plan.BrowserUrl;
-            await Debugger.LaunchAsync([debugLaunch], CancellationToken.None).ConfigureAwait(true);
+            await Debugger.LaunchAsync([debugLaunch], CancellationToken.None, joinable: true).ConfigureAwait(true); // Start New Instance adds to it (#547)
             OpenBrowserLater();
         }
         catch (RunNotStartedException)
@@ -468,6 +469,10 @@ public sealed partial class ShellHost
             return;
         }
 
+        // The session's programs come back (#547): what it began with (F5's startup projects, or the project Start New
+        // Instance began it with), then each project Start New Instance added, as they were added.
+        var first = _sessionProject;
+        var joined = _joinedInstances.Select(i => i.Project).ToList();
         await Debugger.StopAsync().ConfigureAwait(true);
         if (WatchedServerDebugSession is { } watched)
         {
@@ -475,7 +480,26 @@ public sealed partial class ShellHost
             await watched.Completion.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
         }
 
-        await StartDebuggingAsync().ConfigureAwait(true);
+        if (first is null)
+        {
+            await StartDebuggingAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            await StartNewInstanceAsync(first, stopAtEntry: false).ConfigureAwait(true);
+        }
+
+        await RejoinInstancesAsync(joined).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Stop Debugging (Shift+F5 while debugging): the session ends, and a project Start New Instance is still building
+    /// to add to it doesn't start (#547).
+    /// </summary>
+    public Task StopDebuggingAsync()
+    {
+        CancelLaunch();
+        return Debugger.StopAsync();
     }
 
     // ------------------------------------------------------------------ breakpoints
@@ -620,6 +644,7 @@ public sealed partial class ShellHost
             }
 
             _pendingBrowserUrls.Clear();
+            ForgetJoinedInstances();
             return;
         }
 

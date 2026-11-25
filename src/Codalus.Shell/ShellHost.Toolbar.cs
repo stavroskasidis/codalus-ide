@@ -123,7 +123,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        // The executable projects, then the sets of startup projects (ADR 0109); a set's name is the Start button's text.
+        // The executable projects, then the sets of startup projects (ADR 0110); a set's name is the Start button's text.
         var startup = Runs.StartupProject;
         var multiple = Runs.MultipleStartup;
         Toolbar.SetStartup(

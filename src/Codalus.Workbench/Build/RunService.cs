@@ -297,7 +297,7 @@ public sealed class RunService : IDisposable
         StartupChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // ------------------------------------------------------------------ multiple startup projects (M14c, ADR 0109)
+    // ------------------------------------------------------------------ multiple startup projects (M14c, ADR 0110)
 
     private bool _multiple;
     private List<StartupEntry> _entries = [];
@@ -331,7 +331,7 @@ public sealed class RunService : IDisposable
         }
     }
 
-    /// <summary>The named sets of the solution's launch files (ADR 0109), as last read.</summary>
+    /// <summary>The named sets of the solution's launch files (ADR 0110), as last read.</summary>
     public IReadOnlyList<LaunchSet> LaunchSets
     {
         get
@@ -522,6 +522,18 @@ public sealed class RunService : IDisposable
     }
 
     /// <summary>
+    /// A project's launch profiles alone, read from its <c>Properties/launchSettings.json</c> without asking the
+    /// project host to evaluate it (<see cref="GetProfilesAsync"/> does, for how it runs): the Start drop-down reads
+    /// them at each project change while a solution loads.
+    /// </summary>
+    public static Task<(IReadOnlyList<LaunchProfile> Profiles, string? Error)> ReadProfilesAsync(string projectPath, CancellationToken cancellationToken) =>
+        LaunchSettings.ReadAsync(LaunchSettingsPath(projectPath), cancellationToken);
+
+    /// <summary>Where a project's launch settings are, whether or not the file exists (the project host's rule).</summary>
+    public static string LaunchSettingsPath(string projectPath) =>
+        Path.Combine(Path.GetDirectoryName(Path.GetFullPath(projectPath))!, "Properties", "launchSettings.json");
+
+    /// <summary>
     /// The ASP.NET Core environment every run and debug session uses (M15a), over the launch profile's
     /// (<c>ASPNETCORE_ENVIRONMENT</c> and <c>DOTNET_ENVIRONMENT</c>); null keeps the profile's.
     /// </summary>
@@ -559,7 +571,7 @@ public sealed class RunService : IDisposable
         ProfileNamed(ChosenProfile(projectPath), profiles);
 
     /// <summary>
-    /// The profile a startup entry starts with (ADR 0109): its own (a set's <c>DebugTarget</c>), else the first runnable
+    /// The profile a startup entry starts with (ADR 0110): its own (a set's <c>DebugTarget</c>), else the first runnable
     /// one; a single startup project's entry has the project's chosen profile.
     /// </summary>
     public static LaunchProfile? ResolveProfile(StartupEntry entry, IReadOnlyList<LaunchProfile> profiles) =>
@@ -700,7 +712,7 @@ public sealed class RunService : IDisposable
             channel.AppendLine($"Ignoring the launch settings: {error}");
         }
 
-        // A set's project starts with its own launch profile (ADR 0109), any other run with the project's chosen one.
+        // A set's project starts with its own launch profile (ADR 0110), any other run with the project's chosen one.
         var profile = entry is not null ? ResolveProfile(entry, profiles) : ResolveProfile(projectPath, profiles);
         var plan = await LaunchPlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
         if (!openBrowser)
@@ -1094,7 +1106,7 @@ public enum StartupAction
 }
 
 /// <summary>
-/// A project's action in a set of startup projects, and the launch profile it starts with (ADR 0109; null: the first
+/// A project's action in a set of startup projects, and the launch profile it starts with (ADR 0110; null: the first
 /// runnable one).
 /// </summary>
 public sealed record StartupEntry(string Project, StartupAction Action, string? Profile = null);

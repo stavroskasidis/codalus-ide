@@ -101,6 +101,12 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     private bool _userStopped;
     private bool _attached;
     private bool _justMyCode = true;
+
+    /// <summary>A launch stops at its entry (#547): until the module with the entry point loads (<see cref="BindEntry"/>).</summary>
+    private bool _stopAtEntry;
+
+    /// <summary>The breakpoint at the entry point's first line, removed once hit (<see cref="BreakpointHit"/>).</summary>
+    private IClrBreakpoint? _entryBreakpoint;
     private bool _stepFiltering = true;
     private bool _sourcesOnClient;
     private bool _breakOnThrown;
@@ -746,6 +752,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         }
 
         _justMyCode = arguments.JustMyCode;
+        _stopAtEntry = !attach && arguments.StopAtEntry;
         _stepFiltering = arguments.EnableStepFiltering;
         _sourcesOnClient = arguments.SourcesOnClient;
         _clientViews = new HashSet<string>(arguments.ClientViews ?? [], StringComparer.Ordinal);
@@ -1057,6 +1064,8 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             {
                 BindFunction(state, module, info);
             }
+
+            BindEntry(module, info);
         }
 
         // A module without symbols next to it: looked up in the symbol paths and on the servers, after it loaded (the
@@ -1404,9 +1413,62 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         }
     }
 
-    /// <summary>A breakpoint hit: the user's that breaks, or a step over an <c>await</c> whose call resumed there (M61).</summary>
-    private bool BreakpointHit(ClrBreakpointHit hit) =>
-        (_byBreakpoint.TryGetValue(hit.Breakpoint, out var state) && UserBreakpointHit(hit, state)) || AsyncResumed(hit.Thread);
+    /// <summary>
+    /// A launch that stops at its entry (#547): the first module with a managed entry point is the program's (the
+    /// framework's assemblies have none), and its entry method's first line gets a breakpoint of the session's own,
+    /// which the client isn't told about. The program loads it before running any of its code, so the stop comes first.
+    /// </summary>
+    private void BindEntry(IClrModule module, ClrModuleInfo info)
+    {
+        if (!_stopAtEntry || info.EntryLocation() is not var (method, offset, line))
+        {
+            return;
+        }
+
+        _stopAtEntry = false;
+        var stopsThere = _breakpoints.Values.SelectMany(b => b).Concat(_functionBreakpoints).Any(state =>
+            state is { Condition: null, HitCondition: null, LogMessage: null, Filter: null, DependsOn: null }
+            && state.Bound.Any(b => ReferenceEquals(b.Module, module) && b.Method == method && b.Offset == offset));
+        if (stopsThere)
+        {
+            log.WriteLine("The entry point's first line has a breakpoint: the program stops there.");
+            return; // the user's breakpoint is the stop, once
+        }
+
+        try
+        {
+            _entryBreakpoint = Process.CreateBreakpoint(module, method, offset);
+            log.WriteLine($"Stopping at the entry point, {info.MethodDisplayName(method)} (line {line.ToString(CultureInfo.InvariantCulture)}).");
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine($"The entry point's breakpoint couldn't be set: {ex.Message}");
+        }
+    }
+
+    /// <summary>A breakpoint hit: the entry's (#547), the user's that breaks, or a step over an <c>await</c> whose call resumed there (M61).</summary>
+    private bool BreakpointHit(ClrBreakpointHit hit)
+    {
+        if (_entryBreakpoint is { } entry && ReferenceEquals(hit.Breakpoint, entry))
+        {
+            _entryBreakpoint = null;
+            try
+            {
+                entry.Activate(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // The process is ending.
+            }
+
+            Process.CancelStep();
+            _step = null;
+            Stop("entry", hit.Thread);
+            return true;
+        }
+
+        return (_byBreakpoint.TryGetValue(hit.Breakpoint, out var state) && UserBreakpointHit(hit, state)) || AsyncResumed(hit.Thread);
+    }
 
     private bool UserBreakpointHit(ClrBreakpointHit hit, BreakpointState state)
     {

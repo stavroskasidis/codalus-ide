@@ -20,7 +20,7 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
       <RadioButton GroupName="startup" Content="{l:T startupProjects.multipleStartupProjects}" IsChecked="{Binding IsMultiple}" AutomationProperties.Name="{l:T startupProjects.multipleStartupProjects}" />
-      <!-- Named sets (ADR 0109): the classic IDE's multi-project launch profiles, in the solution's launch files. -->
+      <!-- Named sets (ADR 0110): the classic IDE's multi-project launch profiles, in the solution's launch files. -->
       <WrapPanel Margin="24,0,0,0" IsEnabled="{Binding IsMultiple}" IsVisible="{Binding CanNameSets}">
         <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="{l:T startupProjects.launchProfileSet}" />
         <ComboBox MinWidth="220" Margin="0,0,8,4" ItemsSource="{Binding Sets}" SelectedItem="{Binding SelectedSet}" AutomationProperties.Name="{l:T startupProjects.launchProfileSet2}">

@@ -7,7 +7,7 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Workbench.Build;
 
 /// <summary>
-/// A named set of startup projects (ADR 0109): the classic IDE's multi-project launch profile, read from and written to
+/// A named set of startup projects (ADR 0110): the classic IDE's multi-project launch profile, read from and written to
 /// the solution's launch files (<see cref="SolutionLaunchFiles"/>). <see cref="Shared"/> sets are in the file people
 /// commit, the others in its <c>.user</c> file.
 /// </summary>
@@ -34,7 +34,7 @@ public sealed class LaunchSet(string name, IReadOnlyList<StartupEntry> entries, 
 public sealed record LaunchSetsRead(IReadOnlyList<LaunchSet> Sets, IReadOnlyList<string> Problems);
 
 /// <summary>
-/// The solution's launch files (ADR 0109), in the classic IDE's format: next to <c>Contoso.sln</c>,
+/// The solution's launch files (ADR 0110), in the classic IDE's format: next to <c>Contoso.sln</c>,
 /// <c>Contoso.slnLaunch</c> (shared, committed) and <c>Contoso.slnLaunch.user</c> (the user's own); next to
 /// <c>Contoso.slnx</c>, <c>Contoso.slnxLaunch</c> first, then <c>Contoso.slnLaunch</c> (a file kept from before a
 /// migration), each with its <c>.user</c> file. A file is a JSON array of

@@ -251,6 +251,7 @@ public sealed partial class ShellHost : IEditorServices
         // Lines of code outside the editor (Find Results, the WCF Test Client's response) take the editor's colors (M34h).
         Editor.CodeColors.Configure(Languages.LanguageIdOf, id => TextMate.TokenizerFor(id), id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
         ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
+        TextMate.Changed += (_, _) => Ui.Post(() => Editor.CodeColors.LanguagesChanged(Languages.LanguageIdOf)); // a plugin's grammars
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.DocumentClosed += (_, document) => OnDiffClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
@@ -1498,12 +1499,7 @@ public sealed partial class ShellHost : IEditorServices
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             Volatile.Write(ref _diagnosticsStatusScheduled, 0);
-            var (errors, warnings) = (0, 0);
-            foreach (var diagnostic in Languages.Diagnostics.All.SelectMany(f => f.Items))
-            {
-                errors += diagnostic.Severity == DiagnosticSeverity.Error ? 1 : 0;
-                warnings += diagnostic.Severity == DiagnosticSeverity.Warning ? 1 : 0;
-            }
+            var (errors, warnings) = Languages.Diagnostics.Counts;
 
             var command = BuiltIns.ViewCommandPrefix + ErrorListViewModel.ToolWindowId;
             Workbench.StatusBar.Set(new StatusBarItem("codalus.problems.errors", $"$(error) {errors}", StatusBarAlignment.Left, 100, StatusSource)

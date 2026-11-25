@@ -105,6 +105,32 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
 
     private readonly Lock _gate = new();
     private readonly List<MenuItemRule> _items = [];
+
+    // The rules by location, and the palette's by command, in the order added (as _items): each menu, toolbar and
+    // context menu built, and each command the palette lists, filtered all of them (thousands) each time.
+    private readonly Dictionary<string, List<MenuItemRule>> _byLocation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<MenuItemRule>> _palette = new(StringComparer.Ordinal);
+
+    private void Index(MenuItemRule rule)
+    {
+        if (!_byLocation.TryGetValue(rule.Location, out var atLocation))
+        {
+            _byLocation[rule.Location] = atLocation = [];
+        }
+
+        atLocation.Add(rule);
+        if (rule.Location == MenuLocations.CommandPalette)
+        {
+            if (!_palette.TryGetValue(rule.Command, out var forCommand))
+            {
+                _palette[rule.Command] = forCommand = [];
+            }
+
+            forCommand.Add(rule);
+        }
+    }
+
+    private List<MenuItemRule> At(string location) => _byLocation.TryGetValue(location, out var rules) ? [.. rules] : [];
     private readonly List<MenuBarMenu> _menuBar = [];
     private MenuCustomizations _customizations = MenuCustomizations.None;
 
@@ -171,9 +197,13 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
         lock (_gate)
         {
             // The shell's submenu titles in the display language (M23b).
-            _items.AddRange(items.Select(i => i is { Submenu: { } submenu, Title: { } title } && i.Source == ContributionSource.Shell
-                ? i with { Title = Localization.Localizer.Get($"menu.{submenu}", title) }
-                : i));
+            foreach (var item in items.Select(i => i is { Submenu: { } submenu, Title: { } title } && i.Source == ContributionSource.Shell
+                         ? i with { Title = Localization.Localizer.Get($"menu.{submenu}", title) }
+                         : i))
+            {
+                _items.Add(item);
+                Index(item);
+            }
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -184,6 +214,12 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
         lock (_gate)
         {
             _items.RemoveAll(i => i.Source == source);
+            _byLocation.Clear();
+            _palette.Clear();
+            foreach (var item in _items)
+            {
+                Index(item);
+            }
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -197,8 +233,7 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
     {
         lock (_gate)
         {
-            var rules = _items.Where(i => i.Location == MenuLocations.CommandPalette && i.Command == command).ToList();
-            return rules.Count == 0 || rules.Any(r => r.When.Evaluate(scope));
+            return !_palette.TryGetValue(command, out var rules) || rules.Any(r => r.When.Evaluate(scope));
         }
     }
 
@@ -218,7 +253,7 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
     {
         lock (_gate)
         {
-            return [.. _items.Where(i => i.Location == location)
+            return [.. At(location)
                 .OrderBy(r => GroupRank(r.Group)).ThenBy(r => r.Group, StringComparer.Ordinal).ThenBy(r => r.Order)
                 .Select(r => r.Submenu ?? r.Command)];
         }
@@ -230,7 +265,7 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
         MenuCustomizations customizations;
         lock (_gate)
         {
-            rules = _items.Where(i => i.Location == location).ToList();
+            rules = At(location);
             customizations = _customizations;
         }
 

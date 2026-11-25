@@ -73,7 +73,7 @@ public sealed partial class StandardToolbar : UserControl
         items.Add(MenuEntry.Create(model.StartLabel, "play", model.StartCommand));
         if (model.IsStartupSet)
         {
-            // A set of startup projects (ADR 0109): each project's profile is the set's, chosen on the Startup Projects page.
+            // A set of startup projects (ADR 0110): each project's profile is the set's, chosen on the Startup Projects page.
             items.Add(new Separator());
             items.Add(MenuEntry.Create(Localizer.Get("standardToolbar.configureStartupProjects", "Configure Startup Projects…"), "tools", model.ConfigureStartupProjectsCommand));
             return;

@@ -3,7 +3,7 @@
 - **Status:** accepted (2026-10-16, the maintainer's decision)
 - **Date:** 2026-10-16
 - **Deciders:** maintainer
-- **Amended by:** [ADR 0109](0109-sets-of-startup-projects-in-the-toolbar.md) (2026-11-25: named sets of startup projects live in the solution's launch files, the classic IDE's, beside `state/`)
+- **Amended by:** [ADR 0110](0110-sets-of-startup-projects-in-the-toolbar.md) (2026-11-25: named sets of startup projects live in the solution's launch files, the classic IDE's, beside `state/`)
 
 ## Context
 
@@ -49,4 +49,4 @@ Option 3. Per-solution, per-user state lives in `<solution folder>/.codalus/stat
 - A solution in a read-only checkout still keeps its state, in the user's folder.
 - Expanded node ids aren't pruned, so ids of deleted items stay in `session.json`. They do no harm, because nothing expands that doesn't exist.
 - Not kept (yet): per-document folding, Solution Explorer's selection and scroll position, Show All Files, the Breakpoints window's columns, and the layout of tool windows per solution. The window layout stays per user, for all solutions. `folder.json` (folder mode's loaded projects) stays in `.codalus/`: it defines the folder's solution view, like a solution file, and moving it would change the build host's contract for no gain.
-- Revisit if a shared, committed part of the session is ever wanted: it would go in `.codalus/` next to `settings.json`, not in `state/`. The classic IDE has one since 17.11, its multi-project launch profiles: [ADR 0109](0109-sets-of-startup-projects-in-the-toolbar.md) reads and writes them in its own launch files next to the solution, and `state/` keeps only which set is active.
+- Revisit if a shared, committed part of the session is ever wanted: it would go in `.codalus/` next to `settings.json`, not in `state/`. The classic IDE has one since 17.11, its multi-project launch profiles: [ADR 0110](0110-sets-of-startup-projects-in-the-toolbar.md) reads and writes them in its own launch files next to the solution, and `state/` keeps only which set is active.

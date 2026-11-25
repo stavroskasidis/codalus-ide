@@ -28,6 +28,9 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
 
     public const string EntityFrameworkMenuLocation = "solutionExplorer/context/entityFramework";
 
+    /// <summary>The context menu's Debug ▸ submenu for a project that starts (#547): Start New Instance and its kin.</summary>
+    public const string DebugMenuLocation = "solutionExplorer/context/debug";
+
     /// <summary>Drag payload: paths of the dragged files and folders, within this process.</summary>
     internal static readonly DataFormat<string[]> s_paths = DataFormat.CreateInProcessFormat<string[]>("codalus.explorer.paths");
 

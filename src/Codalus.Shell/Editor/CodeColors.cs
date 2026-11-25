@@ -64,6 +64,24 @@ public static class CodeColors
     /// <summary>The theme or the user's colors changed.</summary>
     public static void NotifyChanged() => Changed?.Invoke(null, EventArgs.Empty);
 
+    /// <summary>
+    /// The languages changed (a plugin's grammars or file patterns): forgets each file's language, the lines' tokens and
+    /// the tokenizers, and lines shown are colored again. Only for the configuration whose <paramref name="languageOf"/>
+    /// this is (a disposed shell's change, posted before it was disposed, changes nothing).
+    /// </summary>
+    public static void LanguagesChanged(Func<string, string?> languageOf)
+    {
+        if (!Equals(s_languageOf, languageOf))
+        {
+            return;
+        }
+
+        s_languages.Clear();
+        s_tokens.Clear();
+        s_tokenizers.Clear();
+        NotifyChanged();
+    }
+
     /// <summary>The language of a file (by its extension, cached), or null.</summary>
     public static string? LanguageOf(string? path)
     {

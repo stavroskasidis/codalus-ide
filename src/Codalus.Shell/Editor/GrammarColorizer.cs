@@ -103,24 +103,50 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
     /// </summary>
     public static int? TypeOf(IEnumerable<string> scopes)
     {
-        foreach (var scope in scopes.Reverse())
+        // A token's scopes are a list (TextMate's), walked from the innermost by index: no reversed copy, and no
+        // "prefix." string made for every scope and table entry, for each token of each line.
+        if (scopes is IReadOnlyList<string> list)
         {
-            if (scope.StartsWith("punctuation.definition.string.", StringComparison.Ordinal) || scope.StartsWith("punctuation.definition.char.", StringComparison.Ordinal)
-                || scope.StartsWith("punctuation.definition.comment.", StringComparison.Ordinal))
+            for (var i = list.Count - 1; i >= 0; i--)
             {
-                continue;
+                if (TypeOfScope(list[i]) is var (found, type) && found)
+                {
+                    return type;
+                }
             }
 
-            foreach (var (prefix, type) in s_scopes)
+            return null;
+        }
+
+        foreach (var scope in scopes.Reverse())
+        {
+            if (TypeOfScope(scope) is var (found, type) && found)
             {
-                if (scope.Equals(prefix, StringComparison.Ordinal) || scope.StartsWith(prefix + ".", StringComparison.Ordinal))
-                {
-                    return s_typeIndex[type];
-                }
+                return type;
             }
         }
 
         return null;
+    }
+
+    /// <summary>A scope's token type (found, with its index), or not found (a delimiter skipped, or no entry).</summary>
+    private static (bool Found, int? Type) TypeOfScope(string scope)
+    {
+        if (scope.StartsWith("punctuation.definition.string.", StringComparison.Ordinal) || scope.StartsWith("punctuation.definition.char.", StringComparison.Ordinal)
+            || scope.StartsWith("punctuation.definition.comment.", StringComparison.Ordinal))
+        {
+            return (false, null);
+        }
+
+        foreach (var (prefix, type) in s_scopes)
+        {
+            if (scope.StartsWith(prefix, StringComparison.Ordinal) && (scope.Length == prefix.Length || scope[prefix.Length] == '.'))
+            {
+                return (true, s_typeIndex[type]);
+            }
+        }
+
+        return (false, null);
     }
 
     /// <summary>The token type at a zero-based line and character, or -1 (tests).</summary>
@@ -136,7 +162,8 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
 
         foreach (var (start, length, type) in _lines[line.LineNumber - 1])
         {
-            if (Theme.Token(type) is not { } brush || start + length > line.Length)
+            // Nothing past a long line's cut is drawn (LongLineCutter).
+            if (start >= LongLineCutter.MaxDrawnToCaret || Theme.Token(type) is not { } brush || start + length > line.Length)
             {
                 continue;
             }

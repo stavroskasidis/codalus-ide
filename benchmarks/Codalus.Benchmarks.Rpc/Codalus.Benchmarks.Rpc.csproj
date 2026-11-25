@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>codalus-rpcbench</AssemblyName>
+    <Description>Round trips of JSON-RPC messages of a few sizes over an in-memory pipe, for same-runner comparisons of the wire's costs.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Codalus.Rpc\Codalus.Rpc.csproj" />
+  </ItemGroup>
+</Project>

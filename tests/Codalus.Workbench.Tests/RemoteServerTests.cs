@@ -403,6 +403,14 @@ public sealed class RemoteServerTests
 
         Assert.Equal("file:///home/a%20b/%C3%BC(1).cs", RemotePathMap.RemoteUri("/home/a b/ü(1).cs"));
         Assert.True(RemotePathMap.Identity.IsIdentity);
+
+        // A document's text (a string longer than any path) passes as it is, escapes and all, in an array too.
+        var text = "/home/pi/App/Program.cs \"quoted\" \\ é\n" + new string('x', RemotePathMap.RawStringLength);
+        var large = "{\"params\":{\"items\":[" + System.Text.Json.JsonSerializer.Serialize(text) + "," + System.Text.Json.JsonSerializer.Serialize(local) + "]}}";
+        using var parsed = System.Text.Json.JsonDocument.Parse(map.MessageToRemote(Encoding.UTF8.GetBytes(large)));
+        var items = parsed.RootElement.GetProperty("params").GetProperty("items");
+        Assert.Equal(text, items[0].GetString());
+        Assert.Equal("/home/pi/App/Program.cs", items[1].GetString());
     }
 
     /// <summary>

@@ -5,7 +5,7 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Workbench.Tests;
 
 /// <summary>
-/// Sets of startup projects (ADR 0109): the solution's launch files in the classic IDE's format (<c>.slnLaunch</c>,
+/// Sets of startup projects (ADR 0110): the solution's launch files in the classic IDE's format (<c>.slnLaunch</c>,
 /// <c>.slnxLaunch</c>, their <c>.user</c> files), and <see cref="RunService"/>'s active set and per-entry launch profiles.
 /// </summary>
 public sealed class LaunchSetsTests : IDisposable

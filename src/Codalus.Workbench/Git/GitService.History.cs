@@ -9,9 +9,10 @@ public sealed partial class GitService
     private const string LogFormat = "%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s";
 
     /// <summary>
-    /// A page of the history, newest first, in topological order (see <see cref="GitGraph"/>). TODO(issue): each page runs
-    /// git again with <c>--skip</c>, which walks (and topologically sorts) every commit before it: one <c>git log</c> streamed
-    /// as the list scrolls would cost each page only its own commits (M57 kept the history as it is).
+    /// A page of the history, newest first, in topological order (see <see cref="GitGraph"/>). Each page runs git again
+    /// with <c>--skip</c>. Measured on 50,000 commits (M66): a page costs the same at any skip, about 190 ms without a
+    /// commit-graph (<c>--topo-order</c> sorts the whole history either way) and 4-30 ms with one (<c>git gc</c> writes
+    /// it), off the UI thread; one streamed <c>git log</c> wasn't worth a long-running process for it.
     /// </summary>
     public async Task<IReadOnlyList<GitCommit>> LogAsync(GitLogQuery query, int skip, int count, CancellationToken cancellationToken = default)
     {
