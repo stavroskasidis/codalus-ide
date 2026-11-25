@@ -95,6 +95,13 @@ public sealed class LanguageTests
         var script = await OpenAsync(f, "build", "#!/usr/bin/env bash\necho hi\n");
         Assert.Equal("shellscript", script.Model.LanguageId);
 
+        // JSX files take the JSX grammars: an element is a tag, not TypeScript's type assertion and comparisons.
+        var component = await OpenAsync(f, "Card.tsx", "export function Card() {\n  return <div className=\"a\">{x}</div>;\n}\n");
+        Assert.Equal("typescriptreact", component.Model.LanguageId);
+        Assert.Equal("source.tsx", component.GrammarScope);
+        await ShellFixture.PumpUntil(() => component.GrammarScopesAt(2, 11)?.Contains("entity.name.tag.tsx") == true, seconds: 20, describe: component.DescribeGrammar);
+        Assert.Equal("source.js.jsx", f.Shell.TextMate.ScopeFor("javascriptreact"));
+
         // C# keeps Roslyn's semantic coloring, without a grammar.
         var cs = await OpenAsync(f, "Program.cs", "class C { }\n");
         Assert.Equal("csharp", cs.Model.LanguageId);
@@ -452,6 +459,18 @@ public sealed class LanguageTests
         xml.Editor.Select(xml.Model.Text.GetLineByNumber(3).Offset, 0);
         await f.RunAsync("editor.action.commentLine");
         Assert.Contains("<!-- <Nullable>enable</Nullable> -->", xml.Model.Text.Text, StringComparison.Ordinal);
+
+        // Brackets VS Code's configurations list as ["{", "}"] close too (Go's, Rust's, Java's, Lua's), not only those
+        // written as objects: TextMateSharp's reading dropped them.
+        var go = await OpenAsync(f, "main.go", "package main\n\nfunc main() \n");
+        go.Editor.CaretOffset = go.Model.Text.GetLineByNumber(3).EndOffset;
+        go.Editor.TextArea.Focus();
+        f.Type("{");
+        Assert.EndsWith("func main() {}\n", go.Model.Text.Text, StringComparison.Ordinal);
+        foreach (var language in new[] { "rust", "java", "lua" })
+        {
+            Assert.Contains(f.Shell.TextMate.ConfigurationFor(language)!.AutoClosingPairs, p => p is { Open: "(", Close: ")" });
+        }
 
         var json = await OpenAsync(f, "data.json", "\n");
         json.Editor.CaretOffset = 0;
