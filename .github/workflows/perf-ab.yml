@@ -1,0 +1,119 @@
+# One-off same-runner A/B for M66 (benchmarks/README.md: "Comparing versions"). On the scratch branch perf-ab/m66
+# only, never merged. A = develop's head (the PR's base), B = this branch's code. Both are published on the same runner
+# and measured in alternating rounds (ABBA, twice); the log ends with each metric's medians and their change.
+name: perf-ab
+
+on:
+  push:
+    branches: [perf-ab/m66]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 330
+    env:
+      BASELINE: 973dca1b620c0478636173f4e6fb866724eb515d
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          display: true
+      - name: Linux dependencies (Native AOT toolchain)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang zlib1g-dev libfontconfig1
+      - name: Generate fixtures
+        run: dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -c Release -- all samples
+      - name: Publish A (baseline) and B (this branch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
+          git worktree add ../baseline "$BASELINE"
+          cp -r benchmarks/Codalus.Benchmarks.Rpc ../baseline/benchmarks/
+          (cd ../baseline && dotnet publish src/Codalus.Shell -c Release -r "$rid" -o "$GITHUB_WORKSPACE/ab/A")
+          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o ab/B
+          dotnet build ../baseline/benchmarks/Codalus.Benchmarks.Rpc -c Release
+          dotnet build benchmarks/Codalus.Benchmarks.Rpc -c Release
+          dotnet build benchmarks/Codalus.Benchmarks.Harness -c Release
+      - name: Alternating rounds (ABBA ABBA)
+        timeout-minutes: 280
+        shell: bash
+        run: |
+          set -uo pipefail
+          round=0
+          for variant in A B B A A B B A; do
+            round=$((round + 1))
+            export CODALUS_BENCH_SHELL_DIR="$GITHUB_WORKSPACE/ab/$variant"
+            out="ab-results/$variant/round$round"
+            bench() { timeout 1800 dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- run --results "$out" --targets shell "$@" || echo "::warning::round $round ($variant): $* failed"; }
+            echo "::group::round $round: $variant"
+            bench --scenarios cold-start --runs 5
+            bench --scenarios self-driven,editor-100k,markup-100k --runs 2
+            bench --scenarios open-solution-50 --runs 2
+            bench --scenarios everyday --runs 1
+            if [ "$round" -le 2 ]; then bench --scenarios binary-size --runs 1; fi
+            if [ "$variant" = A ]; then project=../baseline/benchmarks/Codalus.Benchmarks.Rpc; else project=benchmarks/Codalus.Benchmarks.Rpc; fi
+            mkdir -p "$out"
+            dotnet run --project "$project" -c Release --no-build -- 5 > "$out/rpcbench.jsonl" || echo "::warning::round $round ($variant): rpcbench failed"
+            echo "::endgroup::"
+          done
+      - name: Compare
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY' | tee ab-summary.md
+          import glob, json, os, statistics
+          def load(variant):
+              samples = {}
+              for f in glob.glob(f"ab-results/{variant}/**/*.json", recursive=True):
+                  try:
+                      d = json.load(open(f))
+                  except Exception:
+                      continue
+                  for metric, values in (d.get("samples") or {}).items():
+                      samples.setdefault((d.get("scenario"), metric), []).extend(v for v in values if isinstance(v, (int, float)))
+              for f in glob.glob(f"ab-results/{variant}/**/rpcbench.jsonl", recursive=True):
+                  for line in open(f):
+                      try:
+                          r = json.loads(line)
+                      except Exception:
+                          continue
+                      samples.setdefault(("rpcbench", r["payload"] + "_us"), []).append(r["median_microseconds"])
+                      samples.setdefault(("rpcbench", r["payload"] + "_alloc_kb"), []).append(r["allocated_bytes_per_round_trip"] / 1024)
+              return samples
+          a, b = load("A"), load("B")
+          print(f"## M66 A/B on {os.environ.get('RUNNER_OS')} ({os.environ.get('RUNNER_ARCH')})\n")
+          print("A = develop's head, B = this branch. Medians over every round (ABBA ABBA); MAD = the median absolute deviation.\n")
+          print("| Scenario | Metric | n A | n B | A median | B median | change | A MAD | B MAD |")
+          print("|---|---|---|---|---|---|---|---|---|")
+          def mad(xs):
+              m = statistics.median(xs)
+              return statistics.median([abs(x - m) for x in xs])
+          for key in sorted(set(a) | set(b), key=lambda k: (str(k[0]), str(k[1]))):
+              xa, xb = a.get(key, []), b.get(key, [])
+              if not xa or not xb:
+                  continue
+              ma, mb = statistics.median(xa), statistics.median(xb)
+              change = f"{(mb - ma) / ma * 100:+.1f}%" if ma else "n/a"
+              print(f"| {key[0]} | {key[1]} | {len(xa)} | {len(xb)} | {ma:.1f} | {mb:.1f} | {change} | {mad(xa):.1f} | {mad(xb):.1f} |")
+          PY
+          cat ab-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ab-results-${{ runner.os }}
+          path: |
+            ab-results/
+            ab-summary.md
