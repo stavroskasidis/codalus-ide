@@ -1,0 +1,74 @@
+# TEMPORARY (a draft pull request's, closed after): repeats Windows smoke's profiler steps to make the hang of run
+# 45434861768 happen again under the diagnostic that names its call (SmokeTest.Hangs.cs prints the stacks of a smoke test
+# whose UI thread stops answering). docs/ci-flakes.md, Smoke test. Never merged.
+name: Stress profiler.memory (Windows)
+on:
+  pull_request:
+    branches: [claude/determined-babbage-ghz4jk]
+permissions:
+  contents: read
+jobs:
+  stress:
+    name: stress (windows-latest, ${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4]
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - id: setup
+        uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          nuget-cache: true
+          display: true
+          downloads: true
+      - name: Publish the app
+        shell: bash
+        run: |
+          rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
+          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
+      - run: dotnet tool install -g dotnet-stack || true
+      - uses: ./.github/actions/live-output
+        with:
+          name: live-stress-${{ matrix.runner }}-${{ github.run_attempt }}
+          path: artifacts/smoke-live
+      - name: profiler.cpu and profiler.memory, 25 times, each in a new app
+        shell: bash
+        timeout-minutes: 120
+        env:
+          CODALUS_SMOKE_ONLY: profiler.cpu,profiler.memory
+          CODALUS_SMOKE_MINUTES: "20"
+        run: |
+          live=artifacts/smoke-live/stress
+          mkdir -p "$live"
+          (
+            while sleep 30; do
+              sample="$(powershell -NoProfile -NonInteractive -Command '$f = [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024); $p = (Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 3 | ForEach-Object { "{0}M {1}" -f [int]($_.WorkingSet64 / 1MB), $_.ProcessName }) -join "  "; "available=${f}M largest: $p"' 2>&1 | tr -d '\r')"
+              echo "$(date +%H:%M:%S) $sample" >> "$live/memory.txt"
+            done
+          ) > /dev/null 2>&1 &
+          sampler=$!
+          status=0
+          for i in $(seq 1 25); do
+            echo "=== iteration $i ($(date +%H:%M:%S))" | tee -a "$live/console.txt"
+            if ! bash eng/smoke-test.sh artifacts/shell/codalus "artifacts/stress/$i" > >(tee -a "$live/console.txt") 2>&1; then
+              echo "=== iteration $i FAILED" | tee -a "$live/console.txt"
+              status=1
+              break
+            fi
+            rm -rf "artifacts/stress/$i" # a passing iteration's user data and traces: only a failure's are kept
+          done
+          kill "$sampler" 2> /dev/null || true
+          exit "$status"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: stress-${{ matrix.runner }}
+          path: |
+            artifacts/stress/
+            artifacts/smoke-live/
+          retention-days: 7
+          if-no-files-found: ignore
