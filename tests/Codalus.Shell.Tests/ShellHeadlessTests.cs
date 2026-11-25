@@ -33,7 +33,7 @@ public class ShellHeadlessTests
         Assert.Equal(PlatformInfo.Current != PlatformKind.MacOS, f.Window.MenuBar.IsVisible);
         Assert.True(f.Shell.Layout.IsVisible(BuiltIns.OutputWindow));
         Assert.Contains(f.Shell.StatusBar.Right, i => i.Item.Id == "codalus.notifications");
-        Assert.Contains(f.Shell.Plugins.Plugins, p => p.Id == "codalus.welcome" && p.State is PluginState.Ready or PluginState.Active); // it may already have activated (the Start page)
+        Assert.NotNull(f.Shell.Workbench.Commands.Find("welcome.show")); // the Start page is the shell's (M66): no plugin to wait for
 
         // Every button in the window chrome has an accessible name.
         var unnamed = f.Window.GetVisualDescendants().OfType<Button>()
@@ -308,7 +308,7 @@ public class ShellHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task The_welcome_plugin_shows_the_start_page_and_its_items_run_commands()
+    public async Task The_start_page_shows_at_startup_and_its_items_run_commands()
     {
         await using var f = ShellFixture.Create();
         f.Shell.OnInteractive();
@@ -368,21 +368,26 @@ public class ShellHeadlessTests
     public async Task A_plugin_tree_whose_refresh_times_out_keeps_its_items_and_says_why()
     {
         await using var f = ShellFixture.Create();
-        f.Shell.OnInteractive();
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
-        var tree = (TreeToolViewModel)f.Shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
+        var timeOut = false;
+        f.Shell.Plugins.RegisterBuiltInTree("test.tree", (handle, _) => timeOut
+            ? throw new OperationCanceledException()
+            : Task.FromResult<IReadOnlyList<Codalus.Plugins.Protocol.TreeItemDto>>(handle is null
+                ? [new("a", "First", null, null, null, "none", null), new("b", "Second", null, null, null, "none", null)]
+                : []));
+        var tree = new TreeToolViewModel("test.tree", f.Shell.Plugins, (_, _) => { }, () => []);
+        tree.EnsureLoaded();
         await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Message is null, seconds: 30);
         var labels = tree.Roots.Select(r => r.Label).ToList();
 
-        // The Start page's roots need the recent solutions from the UI thread, which stays busy past the shell's 5 s limit
-        // for a tree request (opening Settings kept it for 4 s on an idle machine). The page used to go empty, with
-        // "Nothing to show." in place of the reason.
+        // A refresh that times out (a plugin busy past the shell's limit for a tree request) keeps the tree, with the
+        // reason: the page used to go empty, with "Nothing to show." in place of the reason.
+        timeOut = true;
         tree.Refresh(null);
-        Thread.Sleep(TimeSpan.FromSeconds(7));
         await ShellFixture.PumpUntil(() => tree.Message == "The plugin did not respond in time.", seconds: 30);
         Assert.Equal(labels, tree.Roots.Select(r => r.Label));
 
         // The next refresh that succeeds clears the message.
+        timeOut = false;
         tree.Refresh(null);
         await ShellFixture.PumpUntil(() => tree.Message is null, seconds: 30);
         Assert.Equal(labels, tree.Roots.Select(r => r.Label));

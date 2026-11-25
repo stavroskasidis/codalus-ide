@@ -155,6 +155,13 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         Assert.NotNull(info.RunCommand);
         Assert.Equal(["Hello", "Fails", "IIS Express"], profiles.Select(p => p.Name));
 
+        // The Start drop-down reads the same file without the host's evaluation.
+        Assert.Equal(info.LaunchSettings, RunService.LaunchSettingsPath(HelloProject));
+        var (menuProfiles, menuError) = await RunService.ReadProfilesAsync(HelloProject, Timeout());
+        Assert.Null(menuError);
+        Assert.Equal(profiles.Select(p => p.Name), menuProfiles.Select(p => p.Name));
+        Assert.Empty((await RunService.ReadProfilesAsync(GreetingsProject, Timeout())).Profiles);
+
         var program = await runs.StartAsync(HelloProject, externalConsole: false, Timeout());
         Assert.Equal(0, await program.Exited.WaitAsync(Timeout()));
         await WaitUntilAsync(() => program.Channel!.GetText().Contains("has exited with code 0", StringComparison.Ordinal));

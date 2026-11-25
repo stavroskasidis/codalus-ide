@@ -372,6 +372,18 @@ public sealed class RunService : IDisposable
     }
 
     /// <summary>
+    /// A project's launch profiles alone, read from its <c>Properties/launchSettings.json</c> without asking the
+    /// project host to evaluate it (<see cref="GetProfilesAsync"/> does, for how it runs): the Start drop-down reads
+    /// them at each project change while a solution loads.
+    /// </summary>
+    public static Task<(IReadOnlyList<LaunchProfile> Profiles, string? Error)> ReadProfilesAsync(string projectPath, CancellationToken cancellationToken) =>
+        LaunchSettings.ReadAsync(LaunchSettingsPath(projectPath), cancellationToken);
+
+    /// <summary>Where a project's launch settings are, whether or not the file exists (the project host's rule).</summary>
+    public static string LaunchSettingsPath(string projectPath) =>
+        Path.Combine(Path.GetDirectoryName(Path.GetFullPath(projectPath))!, "Properties", "launchSettings.json");
+
+    /// <summary>
     /// The ASP.NET Core environment every run and debug session uses (M15a), over the launch profile's
     /// (<c>ASPNETCORE_ENVIRONMENT</c> and <c>DOTNET_ENVIRONMENT</c>); null keeps the profile's.
     /// </summary>

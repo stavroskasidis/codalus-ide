@@ -86,6 +86,10 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             _manager.BeginBuild(new BuildParameters(collection)
             {
                 Loggers = [errors],
+
+                // Errors and warnings only: the logger reads errors, and every project, target and task start a worker
+                // node sent across for it (thousands a batch) cost the nodes about a tenth of their time.
+                OnlyLogCriticalEvents = true,
                 MaxNodeCount = NodeCount(requests.Count),
                 EnableNodeReuse = false,
                 DisableInProcNode = false,

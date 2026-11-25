@@ -342,29 +342,53 @@ public sealed class ErrorListViewModel : ObservableObject
             Volatile.Write(ref _refreshScheduled, 0);
             if (!_builds.IsBuilding)
             {
-                _ = RefreshInBackgroundAsync();
+                // At once after a quiet spell; then at most every QuietRefreshInterval while changes keep coming (the
+                // background pass publishes a file at a time: each one rebuilt every row, 100,000 in a broken solution).
+                var since = System.Diagnostics.Stopwatch.GetElapsedTime(_lastRefreshEnded);
+                if (since >= QuietRefreshInterval)
+                {
+                    _ = RefreshInBackgroundAsync();
+                    return;
+                }
+
+                StartRefreshTimer(QuietRefreshInterval - since);
                 return;
             }
 
             // A build reports its diagnostics one at a time: the list was built again and reset for each, 20-30 times a
             // second for the whole build (M56). Its end shows at once (OnBuildFinished).
-            if (_buildRefresh is null)
-            {
-                _buildRefresh = new DispatcherTimer();
-                _buildRefresh.Tick += (_, _) =>
-                {
-                    _buildRefresh.Stop();
-                    _ = RefreshInBackgroundAsync();
-                };
-            }
-
-            if (!_buildRefresh.IsEnabled)
-            {
-                _buildRefresh.Interval = BuildRefreshInterval;
-                _buildRefresh.Start();
-            }
+            StartRefreshTimer(BuildRefreshInterval);
         }, DispatcherPriority.Background);
     }
+
+    /// <summary>A refresh after <paramref name="interval"/>, unless one is already due (the changes until then show with it).</summary>
+    private void StartRefreshTimer(TimeSpan interval)
+    {
+        if (_buildRefresh is null)
+        {
+            _buildRefresh = new DispatcherTimer();
+            _buildRefresh.Tick += (_, _) =>
+            {
+                _buildRefresh.Stop();
+                _ = RefreshInBackgroundAsync();
+            };
+        }
+
+        if (!_buildRefresh.IsEnabled)
+        {
+            _buildRefresh.Interval = interval > TimeSpan.Zero ? interval : TimeSpan.FromMilliseconds(1);
+            _buildRefresh.Start();
+        }
+    }
+
+    /// <summary>How many times the rows were built (tests).</summary>
+    internal int Computations { get; private set; }
+
+    /// <summary>How often, at most, the list shows a stream of changes outside builds (tests change it).</summary>
+    internal TimeSpan QuietRefreshInterval { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>When the last refresh from changes ended (a timestamp; 0 before the first).</summary>
+    private long _lastRefreshEnded;
 
     /// <summary>How often, at most, the list shows the diagnostics coming in while a build runs (tests change it).</summary>
     internal TimeSpan BuildRefreshInterval { get; set; } = TimeSpan.FromMilliseconds(250);
@@ -402,6 +426,7 @@ public sealed class ErrorListViewModel : ObservableObject
                 var generation = _generation;
                 var query = Query();
                 IReadOnlyList<ErrorListRow> extra = [.. _hotReload, .. _live.Values.SelectMany(r => r)];
+                Computations++;
                 var view = await Task.Run(() => Compute(query, _store, _builds, extra)).ConfigureAwait(true);
                 if (generation == _generation)
                 {
@@ -413,6 +438,7 @@ public sealed class ErrorListViewModel : ObservableObject
         finally
         {
             _computing = false;
+            _lastRefreshEnded = System.Diagnostics.Stopwatch.GetTimestamp();
         }
     }
 

@@ -46,6 +46,7 @@ public sealed class KeybindingService(IContextKeyReader context, PlatformKind pl
     private readonly Dictionary<string, IReadOnlyList<KeybindingRule>> _plugins = new(StringComparer.Ordinal);
     private IReadOnlyList<KeybindingRule> _user = [];
     private List<KeybindingRule> _effective = [];
+    private Dictionary<string, KeySequence> _byCommand = new(StringComparer.Ordinal);
     private List<KeyChord> _pending = [];
 
     public PlatformKind Platform => platform;
@@ -107,6 +108,15 @@ public sealed class KeybindingService(IContextKeyReader context, PlatformKind pl
             }
 
             _effective = rules.Where(r => r.Keys is not null).ToList();
+
+            // Each command's key, the last rule's: every menu item and tooltip asks, a reverse scan of the rules each time.
+            var byCommand = new Dictionary<string, KeySequence>(StringComparer.Ordinal);
+            foreach (var rule in _effective)
+            {
+                byCommand[rule.Command] = rule.Keys!;
+            }
+
+            _byCommand = byCommand;
             _pending = [];
         }
 
@@ -197,15 +207,7 @@ public sealed class KeybindingService(IContextKeyReader context, PlatformKind pl
     {
         lock (_gate)
         {
-            for (var i = _effective.Count - 1; i >= 0; i--)
-            {
-                if (_effective[i].Command == commandId)
-                {
-                    return _effective[i].Keys;
-                }
-            }
-
-            return null;
+            return _byCommand.GetValueOrDefault(commandId);
         }
     }
 

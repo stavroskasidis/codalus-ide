@@ -292,6 +292,16 @@ public class SolutionExplorerRevealTests
         Assert.Contains(explorer.Rows, r => r.Name == "F199.cs");
         Assert.DoesNotContain(explorer.Rows, r => r.Name == "F190.cs");
 
+        // The tree built again with the filter as it was (a project changed): the rows stay, patched in place, and
+        // the projects' subtrees are the cache's, so the index of the last build stands.
+        var rows = explorer.Rows.ToList();
+        var (builds, kept) = (explorer.Builds, explorer.IndexReused);
+        explorer.Refresh();
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering && explorer.Builds > builds);
+        Assert.Equal(1, resets);
+        Assert.Equal(rows, explorer.Rows.ToList());
+        Assert.True(explorer.IndexReused > kept);
+
         // Sync clears the filter and selects the file at once.
         await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "Core", "Greeter.cs"));
         await f.RunAsync("explorer.syncWithActiveDocument");

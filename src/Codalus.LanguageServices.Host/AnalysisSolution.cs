@@ -169,6 +169,8 @@ internal sealed class AnalysisSolution
                 _state = _state with { Images = new Dictionary<ProjectId, Image>(), Fork = _workspace.CurrentSolution, Synced = new HashSet<DocumentId>() };
             }
         }
+
+        LanguageStateCache.ForgetReferences();
     }
 
     private State? Build(int generation, bool reuse)

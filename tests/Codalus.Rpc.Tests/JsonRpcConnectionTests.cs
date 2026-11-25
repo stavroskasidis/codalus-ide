@@ -584,6 +584,41 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Text_goes_out_as_utf8_with_only_what_json_needs_escaped_one_write_a_frame()
+    {
+        var recording = new RecordingStream(_aToB.Writer.AsStream());
+        await using var a = new JsonRpcConnection(_bToA.Reader.AsStream(), recording);
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        a.Start();
+        _b.Start();
+
+        const string text = "<Page x:Name='a'> & + é 😀 \"quoted\" back\\slash\nline\r\u2028\u0085\u0001";
+        Assert.Equal(text, (await a.InvokeAsync("echo", new Ping(text), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout())).Text);
+        Assert.Equal("lone \ud800", (await a.InvokeAsync("echo", new Ping("lone \ud800"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout())).Text.Replace("\ufffd", "\ud800", StringComparison.Ordinal));
+
+        var written = recording.Text;
+        Assert.Contains("<Page x:Name='a'> & + é ", written, StringComparison.Ordinal);
+        Assert.Contains("\\uD83D\\uDE00", written, StringComparison.Ordinal); // outside the basic plane: still escaped
+        Assert.Contains("\\u2028\\u0085\\u0001", written, StringComparison.Ordinal); // so are line separators and controls
+        Assert.Contains("\\\"quoted\\\" back\\\\slash\\nline\\r", written, StringComparison.Ordinal);
+        Assert.Equal(2, recording.Writes);
+
+        // Each frame's header counts its body's bytes.
+        var bytes = System.Text.Encoding.UTF8.GetBytes(written);
+        var at = 0;
+        while (at < bytes.Length)
+        {
+            var header = System.Text.Encoding.ASCII.GetString(bytes, at, Array.IndexOf(bytes, (byte)'\r', at) - at);
+            Assert.StartsWith("Content-Length: ", header, StringComparison.Ordinal);
+            at += header.Length + 4;
+            var length = int.Parse(header["Content-Length: ".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            using var body = System.Text.Json.JsonDocument.Parse(bytes.AsMemory(at, length));
+            Assert.Equal("echo", body.RootElement.GetProperty("method").GetString());
+            at += length;
+        }
+    }
+
+    [Fact]
     public async Task A_request_cancelled_while_queued_sends_nothing_not_even_its_cancellation()
     {
         var recording = new RecordingStream(_aToB.Writer.AsStream());
@@ -874,11 +909,14 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
 
         public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
 
+        public int Writes { get; private set; }
+
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             lock (_written)
             {
                 _written.Write(buffer.Span);
+                Writes++;
             }
 
             return inner.WriteAsync(buffer, cancellationToken);

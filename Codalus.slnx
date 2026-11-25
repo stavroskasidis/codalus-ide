@@ -2,6 +2,7 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Codalus.Benchmarks.FixtureGen/Codalus.Benchmarks.FixtureGen.csproj" />
     <Project Path="benchmarks/Codalus.Benchmarks.Harness/Codalus.Benchmarks.Harness.csproj" />
+    <Project Path="benchmarks/Codalus.Benchmarks.Rpc/Codalus.Benchmarks.Rpc.csproj" />
   </Folder>
   <Folder Name="/eng/">
     <Project Path="eng/Codalus.Release/Codalus.Release.csproj" />
@@ -61,7 +62,6 @@
     <Project Path="src/Plugins/Codalus.Plugins.Hosting/Codalus.Plugins.Hosting.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.LanguageModels/Codalus.Plugins.LanguageModels.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.OpenAI/Codalus.Plugins.OpenAI.csproj" />
-    <Project Path="src/Plugins/Codalus.Plugins.Welcome/Codalus.Plugins.Welcome.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Codalus.AcpAgent.Fake/Codalus.AcpAgent.Fake.csproj" />

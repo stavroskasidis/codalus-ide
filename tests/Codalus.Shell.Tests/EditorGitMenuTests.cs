@@ -77,7 +77,11 @@ public sealed class EditorGitMenuTests
         await ShellFixture.PumpUntil(() => Equals(context.GetValue("gitActiveFileIgnored"), true));
         Assert.True(File.Exists(file));
         Assert.Equal("/notes.txt\n", File.ReadAllText(Path.Combine(folder, ".gitignore")));
-        Assert.Contains(f.Shell.Git.Status!.Files, s => s.Path == file && s.Index == 'D');
+        // The ignored key comes from git check-ignore, which can answer once the removal is in the index while the status
+        // read it came with was taken before it (macOS and Windows CI, PR #537's run 45658006342 and run 45655870329): the
+        // next read lists the staged removal.
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status!.Files.Any(s => s.Path == file && s.Index == 'D'), 30,
+            () => string.Join(", ", f.Shell.Git.Status!.Files.Select(s => $"{s.RelativePath} {s.Index}{s.WorkTree}")));
         Assert.DoesNotContain("Ignore and Untrack item", Items());
     }
 }

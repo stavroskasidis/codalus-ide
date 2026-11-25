@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Codalus.LanguageServices.Protocol;
+using Microsoft.CodeAnalysis;
 
 namespace Codalus.LanguageServices.Host.Xaml;
 
@@ -23,6 +24,41 @@ internal sealed class XamlDiagnostics(WorkspaceManager workspace, Func<PublishDi
         foreach (var path in workspace.OpenPaths.Where(XamlContext.IsXaml))
         {
             Schedule(path, s_otherEdit);
+        }
+    }
+
+    /// <summary>
+    /// A file other than XAML changed (a C# file typed in): the open XAML files whose project has it or references a
+    /// project that does, which are the ones whose types can change; all of them when that can't be told (a file
+    /// in no project, a project or build file, a XAML file whose project isn't known).
+    /// </summary>
+    public void OthersChanged(string changed)
+    {
+        var solution = workspace.CurrentSolution;
+        var full = Path.GetFullPath(changed);
+        var name = Path.GetFileName(full);
+        var owners = solution.GetDocumentIdsWithFilePath(full).Select(id => id.ProjectId).ToHashSet();
+        if (owners.Count == 0 || name.EndsWith("proj", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("Directory.Build.", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Directory.Packages.", StringComparison.OrdinalIgnoreCase))
+        {
+            OthersChanged();
+            return;
+        }
+
+        var graph = solution.GetProjectDependencyGraph();
+        var affected = new HashSet<ProjectId>(owners);
+        foreach (var owner in owners)
+        {
+            affected.UnionWith(graph.GetProjectsThatTransitivelyDependOnThisProject(owner));
+        }
+
+        foreach (var path in workspace.OpenPaths.Where(XamlContext.IsXaml))
+        {
+            var projects = solution.GetDocumentIdsWithFilePath(path);
+            if (projects.IsEmpty || projects.Any(id => affected.Contains(id.ProjectId)))
+            {
+                Schedule(path, s_otherEdit);
+            }
         }
     }
 

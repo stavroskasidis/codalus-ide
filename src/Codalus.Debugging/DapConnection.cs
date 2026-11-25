@@ -187,6 +187,7 @@ public sealed class DapConnection : IAsyncDisposable
     private async Task WriteAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken)
     {
         var body = new ArrayBufferWriter<byte>(256);
+        body.Advance(FramedMessageWriter.HeaderRoom); // the Content-Length header goes in front: one write per frame
         using (var writer = new Utf8JsonWriter(body))
         {
             writer.WriteStartObject();
@@ -206,8 +207,7 @@ public sealed class DapConnection : IAsyncDisposable
         try
         {
             // Never cancel a frame halfway (a header without its body corrupts the stream); only the lock wait is cancellable.
-            await _output.WriteAsync(FramedMessageWriter.Header(body.WrittenCount), CancellationToken.None).ConfigureAwait(false);
-            await _output.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
+            await _output.WriteAsync(FramedMessageWriter.Frame(body), CancellationToken.None).ConfigureAwait(false);
             await _output.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)

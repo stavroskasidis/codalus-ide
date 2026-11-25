@@ -4,7 +4,7 @@ using Debuggee;
 if (args.Length == 2 && args[0] == "--wait-for") // [first]
 {
     // Attach tests: wait until the test creates the file, then run as usual.
-    Console.WriteLine("waiting");
+    Console.WriteLine("waiting"); // [waiting]
     while (!File.Exists(args[1])) // [wait-check]
     {
         Thread.Sleep(50); // [wait]

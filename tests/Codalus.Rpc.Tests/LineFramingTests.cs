@@ -65,6 +65,10 @@ public sealed class LineFramingTests
         var pong = await a.InvokeAsync("echo", new Ping("two\nlines"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, ct);
         Assert.Equal("two\nlines", pong.Text);
 
+        // Text as UTF-8, with every line break a string can hold still one message's line.
+        const string breaks = "a\rb\nc\u2028d\u0085e <é>";
+        Assert.Equal(breaks, (await a.InvokeAsync("echo", new Ping(breaks), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, ct)).Text);
+
         using var stop = new CancellationTokenSource();
         var waiting = a.InvokeAsync("wait", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, stop.Token);
         await waitRead.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken); // sent: one still queued would send nothing (M57)

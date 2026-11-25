@@ -102,7 +102,8 @@ public sealed class CodeViewer : UserControl
         RemoveGrammar();
         _scope = null;
         RemoveGrammarColors();
-        if (Editor.Document.Text != text)
+        // The length first: the document's text is made a string for the comparison.
+        if (Editor.Document.TextLength != text.Length || Editor.Document.Text != text)
         {
             Editor.Document = new TextDocument(text);
         }
@@ -117,7 +118,7 @@ public sealed class CodeViewer : UserControl
     /// <summary>Shows <paramref name="text"/> with <paramref name="highlight"/> marked and scrolled into view.</summary>
     public void Show(string text, string? languageId, LanguageServices.Protocol.Range? highlight)
     {
-        if (Editor.Document.Text != text)
+        if (Editor.Document.TextLength != text.Length || Editor.Document.Text != text)
         {
             Editor.Document = new TextDocument(text);
             RemoveGrammar();
@@ -178,15 +179,33 @@ public sealed class CodeViewer : UserControl
         }
 
         _grammarColors.Theme = _services.Theme;
-        if (_services.TextMate.TokenizerFor(languageId) is { } tokenizer)
+        // The same text shown again (a peek or a result view's refresh): its tokens stand. Keyed by the grammar's scope and
+        // the languages' generation (each TokenizerFor is a new tokenizer, and a plugin's grammar can replace a bundled one
+        // under the same scope).
+        var tokenized = (Editor.Document, Editor.Document.Version, _services.TextMate.GrammarScopeFor(languageId), _services.TextMate.Generation, _grammarColors);
+        if (Equals(_tokenized, tokenized))
+        {
+            return;
+        }
+
+        if (tokenized.Item3 is not null && _services.TextMate.TokenizerFor(languageId) is { } tokenizer)
         {
             _grammarColors.Tokenize(Editor.Document, tokenizer);
+            _tokenized = tokenized;
+            Tokenizations++;
         }
         else
         {
             _grammarColors.Clear();
+            _tokenized = null;
         }
     }
+
+    /// <summary>What the grammar colors were last made for: the document, its version, the grammar's scope, the languages' generation and the colorizer.</summary>
+    private object? _tokenized;
+
+    /// <summary>How many times the text was tokenized (tests).</summary>
+    internal int Tokenizations { get; private set; }
 
     /// <summary>The cut of long lines after the colorizers (a grammar's is added last): nothing draws past it.</summary>
     private void KeepLongLinesLast()

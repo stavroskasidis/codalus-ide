@@ -146,10 +146,13 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
             return;
         }
 
+        // A long line (a minified file's) is drawn up to its cut at most: each token past it split the line's elements
+        // for nothing, thousands a line.
+        var drawn = line.Offset + Math.Min(line.Length, LongLineCutter.MaxDrawnToCaret);
         foreach (var token in tokens)
         {
             var start = line.Offset + token.Start;
-            var end = Math.Min(line.EndOffset, start + token.Length);
+            var end = Math.Min(drawn, start + token.Length);
             if (start >= end || Theme.Token(token.Type) is not { } brush)
             {
                 continue;
