@@ -108,7 +108,8 @@ internal sealed partial class SmokeTest
 
             // The summary, then Done: the start window, with the choices applied and nothing of AI changed.
             await model.NextAsync().ConfigureAwait(true);
-            Check(model.Page == SetupPage.Finish && model.NextTitle == "Done" && model.Summary.Count == 5, "the summary lists what was chosen");
+            // Theme, keys, editor font size, UI font, text smoothing, the UI scale on Linux (#556), tools and AI.
+            Check(model.Page == SetupPage.Finish && model.NextTitle == "Done" && model.Summary.Count == (model.OffersUiScale ? 8 : 7), $"the summary lists what was chosen ({string.Join(", ", model.Summary.Select(r => r.Label))})");
             Check(model.Shortcuts.Count > 0, "the summary shows the chosen scheme's keys");
             await RenderedAsync(window).ConfigureAwait(true);
             Screenshot("setup-summary.png", window);
