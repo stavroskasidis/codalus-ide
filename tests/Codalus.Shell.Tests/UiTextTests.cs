@@ -98,7 +98,11 @@ public sealed class UiTextTests
         Assert.NotSame(bold, regular);
         Assert.NotSame(semibold, bold);
 
-        foreach (var (name, face) in new[] { ("Regular", regular), ("SemiBold", semibold), ("Bold", bold) })
+        // And weights a family may have no instance for, which the platform matches to its nearest (Source Sans has no
+        // ExtraBold: 800 is drawn as its Bold).
+        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.Thin, FontStretch.Normal, out var thin));
+        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.ExtraBold, FontStretch.Normal, out var extraBold));
+        foreach (var (name, face) in new[] { ("Regular", regular), ("SemiBold", semibold), ("Bold", bold), ("Thin", thin), ("ExtraBold", extraBold) })
         {
             foreach (var c in "AIPorvidest")
             {

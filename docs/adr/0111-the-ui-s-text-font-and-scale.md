@@ -20,7 +20,7 @@ The maintainer's screenshots narrowed it: the blurry text was the bold and semib
 
 ### Variable fonts laid out at their weight
 
-- The shell's collection tells a variable font by its `fvar` table (`ShellSystemFonts.IsVariable`), and sets the HarfBuzz font's `wght` axis to the weight asked for (`VariableFonts.Apply`, `hb_font_set_variations` on the font behind Avalonia's internal `HarfBuzzTypeface`, reached through `UnsafeAccessor`). HarfBuzz clamps it to the axis.
+- The shell's collection tells a variable font by its `fvar` table (`ShellSystemFonts.IsVariable`), and sets the HarfBuzz font's `wght` axis to the weight of the instance the platform matched, which Skia's typeface reports (not always the one asked for: fontconfig gives a font's nearest named instance, and CoreText matched another for Kefa III's SemiBold) (`VariableFonts.Apply`, `hb_font_set_variations` on the font behind Avalonia's internal `HarfBuzzTypeface`, reached through `UnsafeAccessor`). HarfBuzz clamps it to the axis.
 - A variable font's instance is filed only under the style asked for: no nearest match and no synthetic from the file. fontconfig matched the instance for the weight.
 - A static family without a semibold face still gets its regular face emboldened, as before: the bold face is wider, and the setup window's text was cut off with it.
 - `TODO(issue)`: drop `VariableFonts` once Avalonia applies a face's variation itself.

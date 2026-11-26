@@ -346,7 +346,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }).ConfigureAwait(true);
 
         // #556 (ADR 0111): the UI's text in the shipped app, whose HarfBuzz and fontconfig calls are Native AOT's.
-        await StepAsync("shell.uiText", "1.1.0", "The UI's text: a variable font laid out at the weight asked for, the windows smoothing text the setting's way, and the UI's font size applied at once", async () =>
+        await StepAsync("shell.uiText", "1.1.0", "The UI's text: a variable font laid out at its instance's weight, the windows smoothing text the setting's way, and the UI's font size applied at once", async () =>
         {
             {
                 // The platform keeps (and disposes) the stream it reads a face from: one each.

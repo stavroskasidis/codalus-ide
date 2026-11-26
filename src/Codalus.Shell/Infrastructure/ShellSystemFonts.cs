@@ -128,7 +128,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return true;
         }
 
-        if (Create(platformTypeface, FontSimulations.None, variable ? key.Weight : null) is not { } created)
+        if (Create(platformTypeface, FontSimulations.None, variable ? DrawnWeight(platformTypeface) ?? key.Weight : null) is not { } created)
         {
             _lastFailure = $"no glyph typeface could be made of '{platformTypeface.FamilyName}', the platform's match for '{familyName}' ({style}, {weight}, {stretch}): {t_createError?.GetType().Name}: {t_createError?.Message}";
             return false;
@@ -237,7 +237,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return true;
         }
 
-        if (Create(platformTypeface, FontSimulations.None, variable ? key.Weight : null) is not { } created)
+        if (Create(platformTypeface, FontSimulations.None, variable ? DrawnWeight(platformTypeface) ?? key.Weight : null) is not { } created)
         {
             return false;
         }
@@ -331,6 +331,23 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         catch (InvalidCastException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// The weight of the instance the platform matched, which Skia draws: not always the one asked for. fontconfig gives
+    /// a font's nearest named instance (800 is Source Sans's Bold, 700), and CoreText Kefa III's for SemiBold was another
+    /// (macOS CI, run 45853727391: laid out at 43.33 px, drawn at 44.52). Null for another platform's typeface.
+    /// </summary>
+    internal static FontWeight? DrawnWeight(IPlatformTypeface typeface)
+    {
+        try
+        {
+            return SkiaTypeface(typeface).FontStyle.Weight is var weight and > 0 ? (FontWeight)weight : null;
+        }
+        catch (InvalidCastException)
+        {
+            return null;
         }
     }
 

@@ -10,7 +10,8 @@ namespace Codalus.Shell.Infrastructure;
 /// that instance's outlines, while Avalonia's HarfBuzz font, made from the file's tables with no variation set, lays the
 /// text out at the default instance's advances. Bold text came out bold glyphs at Regular's widths, crowded into each
 /// other: the smeared bold the issue showed (headings, settings' names, the active tab). Setting the HarfBuzz font's
-/// <c>wght</c> to the weight asked for makes the advances the drawn instance's (HarfBuzz clamps it to the axis). Avalonia's
+/// <c>wght</c> to the drawn instance's weight (<see cref="ShellSystemFonts.DrawnWeight"/>) makes the advances the drawn
+/// instance's (HarfBuzz clamps it to the axis). Avalonia's
 /// HarfBuzz typeface is internal; its font is reached through <see cref="UnsafeAccessorAttribute"/>, as
 /// <see cref="ShellSystemFonts"/> reaches the font manager. TODO(issue): drop once Avalonia applies a face's variation.
 /// </summary>
