@@ -154,7 +154,7 @@ public sealed partial class ShellHost
             try
             {
                 var (containerInfo, containerProfiles, _) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);
-                if (Runs.ResolveProfile(target.Project, containerProfiles) is { } containerProfile && IsContainerProfile(containerProfile))
+                if (RunService.ResolveProfile(target, containerProfiles) is { } containerProfile && IsContainerProfile(containerProfile))
                 {
                     // A container runs on its own (ADR 0042): debugged, it is a session of its own after this one.
                     await StartInContainerAsync(target.Project, containerInfo, containerProfile, debug: false).ConfigureAwait(true);
@@ -170,7 +170,7 @@ public sealed partial class ShellHost
                         DebugLog.AppendLine($"[{name}] Ignoring the launch settings: {error}");
                     }
 
-                    var plan = await Runs.LaunchPlanAsync(info, Runs.ResolveProfile(target.Project, profiles), CancellationToken.None).ConfigureAwait(true);
+                    var plan = await Runs.LaunchPlanAsync(info, RunService.ResolveProfile(target, profiles), CancellationToken.None).ConfigureAwait(true);
                     var launch = plan.Wsl is not null
                         ? await WslLaunchAsync(name, plan).ConfigureAwait(true)
                         : new DebugLaunch(name, plan) { Console = ConsoleFor(info) };
@@ -189,7 +189,7 @@ public sealed partial class ShellHost
                 }
                 else
                 {
-                    var program = await Runs.StartAsync(target.Project, RunsInConsoleWindow, CancellationToken.None).ConfigureAwait(true);
+                    var program = await Runs.StartAsync(target.Project, RunsInConsoleWindow, CancellationToken.None, entry: target).ConfigureAwait(true);
                     if (program.Channel is { } channel && launches.Count == 0 && !debug)
                     {
                         Workbench.Output.Show(channel);

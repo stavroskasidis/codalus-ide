@@ -29,18 +29,7 @@ public sealed partial class ShellHost
                     _ = Solutions.SetConfigurationAsync(picked, CancellationToken.None);
                 }
             },
-            path =>
-            {
-                // In folder mode the startup list holds the launch configurations (ADR 0033).
-                if (path?.StartsWith(LaunchChoicePrefix, StringComparison.Ordinal) == true)
-                {
-                    SelectLaunchConfiguration(path[LaunchChoicePrefix.Length..]);
-                }
-                else
-                {
-                    SetStartupProject(path);
-                }
-            },
+            SelectToolbarStartup,
             () => ActiveEditor?.Controller?.Editor.Undo(),
             () => ActiveEditor?.Controller?.Editor.Redo())
         {
@@ -134,11 +123,17 @@ public sealed partial class ShellHost
             return;
         }
 
+        // The executable projects, then the sets of startup projects (ADR 0110); a set's name is the Start button's text.
         var startup = Runs.StartupProject;
+        var multiple = Runs.MultipleStartup;
         Toolbar.SetStartup(
-            [.. solution.Projects.Where(p => Runs.IsExecutable(p.Path) || Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(p.Path, startup)).Select(p => new StartupProjectChoice(p.Name, p.Path))],
-            startup,
-            startup is null ? null : Runs.ChosenProfile(startup));
+            [
+                .. solution.Projects.Where(p => Runs.IsExecutable(p.Path) || (!multiple && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(p.Path, startup))).Select(p => new StartupProjectChoice(p.Name, p.Path)),
+                .. LaunchSetChoices(),
+            ],
+            ToolbarStartupChoice(),
+            multiple || startup is null ? null : Runs.ChosenProfile(startup),
+            startupSet: multiple);
         UpdateToolbarDevice();
         RefreshLaunchMenu();
     }

@@ -55,6 +55,7 @@ public sealed partial class ShellHost
         await Bookmarks.OpenSolutionAsync(SolutionState, key).ConfigureAwait(true);
         await RestoreEditorSessionAsync(session).ConfigureAwait(true);
         _stateKey = key;
+        await ReloadLaunchSetsAsync().ConfigureAwait(true);
     }
 
     /// <summary>The solution closes: its state is saved one last time, and bookmarks go back to the user's.</summary>
@@ -62,6 +63,7 @@ public sealed partial class ShellHost
     {
         SaveEditorSession();
         _stateKey = null;
+        Runs.ClearLaunchSets();
         LoadRepositories(null);
         Bookmarks.CloseSolution();
     }
@@ -116,8 +118,9 @@ public sealed partial class ShellHost
             DataTips = Debugger.PinnedTips.All is { Count: > 0 } tips ? [.. tips.Select(t => new SessionDataTip(t.Path, t.Line, t.Expression, t.Comment))] : null,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
             MobileDevices = Mobile.Selections.Count == 0 ? null : new Dictionary<string, string>(Mobile.Selections),
-            MultipleStartupProjects = Runs.MultipleStartup ? true : null,
-            StartupProjects = Runs.StartupEntries is { Count: > 0 } entries ? [.. entries.Select(e => new SessionStartupProject(e.Project, e.Action.ToString()))] : null,
+            MultipleStartupProjects = Runs.MultipleStartup || Runs.ChosenLaunchSet is not null ? true : null,
+            StartupProjects = Runs.StartupEntries is { Count: > 0 } entries ? [.. entries.Select(e => new SessionStartupProject(e.Project, e.Action.ToString(), e.Profile))] : null,
+            LaunchSet = Runs.ChosenLaunchSet,
             Configuration = Solutions.Solution?.Active?.Configuration,
             Platform = Solutions.Solution?.Active?.Platform,
             ActiveFrameworks = Solutions.ActiveFrameworks is { Count: > 0 } frameworks ? new Dictionary<string, string>(frameworks) : null,
@@ -144,11 +147,16 @@ public sealed partial class ShellHost
             return;
         }
 
+        // A session from before ADR 0110 has no profile per entry: each takes the project's chosen one, as it started with.
         Runs.Load(
             session.StartupProject,
             session.LaunchProfiles,
             session.MultipleStartupProjects == true,
-            [.. (session.StartupProjects ?? []).Select(p => new StartupEntry(p.Path, Enum.TryParse<StartupAction>(p.Action, out var action) ? action : StartupAction.None))]);
+            [.. (session.StartupProjects ?? []).Select(p => new StartupEntry(
+                p.Path,
+                Enum.TryParse<StartupAction>(p.Action, out var action) ? action : StartupAction.None,
+                p.Profile ?? session.LaunchProfiles?.GetValueOrDefault(p.Path)))]);
+        Runs.LoadActiveLaunchSet(session.MultipleStartupProjects == true ? session.LaunchSet : null);
         Mobile.LoadSelections(session.MobileDevices);
         Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
         Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes, session.ExceptionConditions);
