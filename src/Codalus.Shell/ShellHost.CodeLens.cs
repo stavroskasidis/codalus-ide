@@ -44,7 +44,12 @@ public sealed partial class ShellHost
             }
             else if (click.Subject == LensSubject.Usages)
             {
-                await FindReferencesAtAsync(editor, client, editor.Model.OffsetAt(position)).ConfigureAwait(true);
+                // The lens's command, at the lens's symbol in the pane that was clicked.
+                Run(click.CommandId,
+                [
+                    System.Text.Json.JsonSerializer.SerializeToElement(editor.Model.Uri, ProtocolJsonContext.Default.String),
+                    System.Text.Json.JsonSerializer.SerializeToElement(position, ProtocolJsonContext.Default.Position),
+                ]);
             }
             else
             {

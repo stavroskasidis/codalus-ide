@@ -44,6 +44,28 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
+    /// <c>editor.action.showReferences</c>: Find All References at the position its arguments name (a CodeLens's
+    /// <c>[uri, position]</c>, which may be the split pane's) when they're the active editor's, or else at the caret.
+    /// </summary>
+    internal async Task ShowReferencesAsync(IReadOnlyList<System.Text.Json.JsonElement> args)
+    {
+        if (ActiveLanguageEditor() is not var (editor, controller, client))
+        {
+            return;
+        }
+
+        var offset = controller.Editor.CaretOffset;
+        if (args is [{ ValueKind: System.Text.Json.JsonValueKind.String } uri, { ValueKind: System.Text.Json.JsonValueKind.Object } at, ..]
+            && uri.GetString() == editor.Model.Uri
+            && System.Text.Json.JsonSerializer.Deserialize(at, ProtocolJsonContext.Default.Position) is { } position)
+        {
+            offset = editor.Model.OffsetAt(position);
+        }
+
+        await FindReferencesAtAsync(editor, client, offset).ConfigureAwait(true);
+    }
+
+    /// <summary>
     /// Find All References at <paramref name="offset"/> of <paramref name="editor"/>: the caret's, or a CodeLens's
     /// symbol in the pane that was clicked (the split pane's caret isn't the primary controller's).
     /// </summary>
