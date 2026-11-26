@@ -37,6 +37,7 @@ Settings you may want first:
 | Setting | What it does |
 |---|---|
 | Text Editor → Font Family, Font Size, Word Wrap, Minimap, Rulers, Render Whitespace | The editor's look. |
+| Appearance → UI Font Family, UI Font Size, Text Rendering, UI Scale | The look of menus, tool windows, tabs and dialogs ([below](#the-uis-font-text-and-scale)). |
 | Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`, and in C# puts an empty block's opening brace where `.editorconfig` says when you press Enter between its braces. |
 | Text Editor → Completion: Commit on Space | On (the default): Space inserts the completion list's selected item, as `(`, `.` and `;` do. Off: Space just types a space ([IntelliSense](editing.md#intellisense)). |
 | Language Services → Analysis Scope | `openDocuments` (default), `currentProject` or `solution` (also runs analyzers on closed files). Also in the Error List's toolbar. |
@@ -77,6 +78,20 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 - `workbench.colorCustomizations`: `{ "editor.selectionBackground": "#26496980" }`, alpha last.
 - Put either under `"[Dark]"` (a theme's name: `"[Harbor Dark]"`, `"[High Contrast]"`) to apply to that theme only, or under a family's name (`"[Harbor]"`) to apply to its three modes.
 
+Its **Editor Font…** and **UI Font…** buttons open the editor's font settings and the UI's.
+
+### The UI's font, text and scale
+
+Options → Environment → Appearance, or Fonts and Colors → UI Font…:
+- **UI Font Family** (`workbench.fontFamily`): the font of menus, tool windows, tabs and dialogs, as a comma-separated list (`"Inter, Noto Sans"`); the first installed one is used. Empty, the default, is the system's UI font. The editor's font is Text Editor → Font Family.
+- **UI Font Size** (`workbench.fontSize`): the UI's text in pixels, 8 to 24; 12, the default, is 9 pt. Headings and small text grow and shrink with it, and so do the rows of lists and trees. Both change at once.
+- **Text Rendering** (`workbench.textRendering`): how text is smoothed, in the UI and the editor.
+  - **System**, the default, does what the system's other apps do: on Linux, fontconfig's settings (your desktop's font settings: grayscale or subpixel, and the hinting); on Windows, ClearType when it's on; on macOS, grayscale.
+  - **Grayscale** smooths edges with no colored fringes. **Subpixel** is sharper on most LCD screens, with colored fringes. **Aliased** doesn't smooth.
+- **UI Scale** (`workbench.uiScale`, Linux only): makes the whole window larger or smaller, over the display's own scale: `1.25` is a quarter larger. The window is drawn at that resolution, so text stays sharp. It takes effect when Codalus IDE starts again, and changing it offers **Restart**. Windows and macOS use the system's display scale. If you set Avalonia's `AVALONIA_GLOBAL_SCALE_FACTOR` or `AVALONIA_SCREEN_SCALE_FACTORS` yourself, yours wins.
+
+Text that looks blurry on a Linux desktop with fractional scaling: see [Troubleshooting](troubleshooting.md#common-problems).
+
 ## Moving your settings
 
 - **From VS Code** (Tools → Import Settings from VS Code): its user `settings.json` and `keybindings.json` (VS Code, Insiders or VSCodium; the first one found).
@@ -100,6 +115,8 @@ Tools → Options → Environment → **System Integration** has two choices, bo
 | Windows | **Open with Codalus IDE** on a folder's right-click and on a folder's empty space in File Explorer (with the app's icon; on Windows 11 under **Show more options**). | Codalus IDE is registered as an app for each type, under your user's classes. Windows doesn't let an app make itself the default, so the first time you open one Windows may ask which app to use: choose Codalus IDE (and **Always**). It's also in **Open with**. |
 | macOS | An **Open with Codalus IDE** Quick Action on a folder's right-click in the Finder (under **Quick Actions**, or **Services**). | Codalus IDE becomes each type's default app. Turning it off gives each type back to the app that opened it before (or another app that opens it). The installed app only: a copy that doesn't run from `Codalus IDE.app` shows why it can't. |
 | Linux | **Open with Codalus IDE** in Dolphin's and Nemo's right-click menus, under **Scripts** in GNOME Files, and in Thunar's custom actions (when Thunar has been run). | The types are registered for you (`~/.local/share/mime`), with a desktop entry that opens them, and Codalus IDE becomes their default application (`xdg-mime`, or `~/.config/mimeapps.list`). A default you choose later for one of them stays yours. |
+
+On Linux, either choice also puts the Codalus IDE logo in your icon theme (`~/.local/share/icons/hicolor`), so the menus, the file managers and a taskbar entry pinned from the window show it when you run the AppImage or the tarball, which install no icon of their own. It goes when both choices are off.
 
 What it starts is this copy of Codalus IDE (the installed app, the AppImage file, or a development build), with your `--user-data-dir` if you started it with one. The folder or solution opens in a running window that has nothing open; otherwise in a new window. When a check box is neither on nor off, the entries are partly there (one was removed by hand, or a file manager was installed since) or start another copy of Codalus IDE: clicking it removes them, and clicking again registers them all for this copy.
 

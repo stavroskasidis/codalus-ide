@@ -108,7 +108,7 @@
         </Grid>
         <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasSourceErrors}">
-          <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" FontSize="12" Text="{Binding SourceErrors}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" FontSize="{DynamicResource Shell.FontSize.Body}" Text="{Binding SourceErrors}" TextWrapping="Wrap" VerticalAlignment="Center" />
           <Button Grid.Column="1" Classes="link" Content="{l:T packageManager.signIn}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignIn}"
                   AutomationProperties.Name="{l:T packageManager.signIn}" />
         </Grid>
@@ -238,8 +238,8 @@
               <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Classes="muted" Margin="0,4,0,0" Text="{Binding InstalledText}" />
             </Grid>
             <CheckBox Content="{l:T packageManager.overrideTheCentralVersionInThis}" IsChecked="{Binding UseVersionOverride}" IsVisible="{Binding IsCentral}" />
-            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding CentralNote}" IsVisible="{Binding HasCentralNote}" />
-            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{l:T packageManager.thisPackageComesFromAGlobalpackagereference}" IsVisible="{Binding IsGlobal}" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Body}" TextWrapping="Wrap" Text="{Binding CentralNote}" IsVisible="{Binding HasCentralNote}" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Body}" TextWrapping="Wrap" Text="{l:T packageManager.thisPackageComesFromAGlobalpackagereference}" IsVisible="{Binding IsGlobal}" />
 
             <Border BorderThickness="3,0,0,0" BorderBrush="{DynamicResource Shell.Warning}" Padding="8,4" IsVisible="{Binding IsDeprecated}">
               <TextBlock TextWrapping="Wrap" Text="{Binding DeprecationText}" />
@@ -286,7 +286,7 @@
             </Grid>
 
             <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.dependencies}" />
-            <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding Dependencies}" />
+            <TextBlock FontSize="{DynamicResource Shell.FontSize.Body}" TextWrapping="Wrap" Text="{Binding Dependencies}" />
 
             <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.readme}" IsVisible="{Binding HasReadme}" />
             <ContentControl x:Name="ReadmeHost" IsVisible="{Binding HasReadme}" />

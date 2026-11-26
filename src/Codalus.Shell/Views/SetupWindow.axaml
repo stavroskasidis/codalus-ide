@@ -273,6 +273,65 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </Border>
+
+            <!-- The UI's text (#556): its font, size and smoothing, previewed on this window and the IDE, saved with the step; on Linux, its scale, at the next start. -->
+            <TextBlock Text="{l:T setupWindow.uiText}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" Margin="0,22,0,10" />
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" HorizontalAlignment="Left">
+              <TextBlock Text="{l:T setupWindow.uiFont}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,8" />
+              <ComboBox x:Name="UiFontBox" Grid.Column="1" Width="280" Margin="0,0,0,8" ItemsSource="{Binding UiFonts}" SelectedIndex="{Binding SelectedUiFontIndex}"
+                        AutomationProperties.Name="{l:T setupWindow.uiFont}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupChoice">
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBlock Grid.Row="1" Text="{l:T setupWindow.uiTextSize}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,8" />
+              <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                <Button x:Name="UiFontSmallerButton" Content="−" MinWidth="32" HorizontalContentAlignment="Center" Command="{Binding DecreaseUiFontSizeCommand}"
+                        ToolTip.Tip="{l:T setupWindow.smallerUiText}" AutomationProperties.Name="{l:T setupWindow.smallerUiText}" />
+                <TextBlock x:Name="UiFontSizeValue" Text="{Binding UiFontSizeText}" MinWidth="48" TextAlignment="Center" VerticalAlignment="Center"
+                           AutomationProperties.Name="{l:T setupWindow.uiTextSize}" AutomationProperties.LiveSetting="Polite" />
+                <Button x:Name="UiFontLargerButton" Content="+" MinWidth="32" HorizontalContentAlignment="Center" Command="{Binding IncreaseUiFontSizeCommand}"
+                        ToolTip.Tip="{l:T setupWindow.largerUiText}" AutomationProperties.Name="{l:T setupWindow.largerUiText}" />
+              </StackPanel>
+              <TextBlock Grid.Row="2" Text="{l:T setupWindow.textSmoothing}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,4" />
+              <Border Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,0,0,4" Background="{DynamicResource Shell.Background}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="8" Padding="3">
+                <ItemsControl x:Name="TextRenderingList" ItemsSource="{Binding TextRenderings}" AutomationProperties.Name="{l:T setupWindow.textSmoothing}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="2" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SetupChoice">
+                      <ToggleButton Classes="segment" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                    Content="{Binding Title}" AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+              <TextBlock Grid.Row="3" Grid.Column="1" Classes="muted small" MinHeight="18" Margin="0,0,0,8" TextWrapping="Wrap" Text="{Binding TextRenderingDescription}" />
+              <TextBlock Grid.Row="4" Text="{l:T setupWindow.uiScale}" FontWeight="SemiBold" VerticalAlignment="Top" Margin="0,6,16,0" IsVisible="{Binding OffersUiScale}" />
+              <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4" IsVisible="{Binding OffersUiScale}">
+                <Border HorizontalAlignment="Left" Background="{DynamicResource Shell.Background}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="8" Padding="3">
+                  <ItemsControl x:Name="UiScaleList" ItemsSource="{Binding UiScales}" AutomationProperties.Name="{l:T setupWindow.uiScale}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SetupChoice">
+                        <ToggleButton Classes="segment" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                      Content="{Binding Title}" AutomationProperties.Name="{Binding Title}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+                <TextBlock Classes="muted small" TextWrapping="Wrap" MaxWidth="460" Text="{l:T setupWindow.uiScaleNote}" />
+              </StackPanel>
+            </Grid>
           </StackPanel>
         </ScrollViewer>
 

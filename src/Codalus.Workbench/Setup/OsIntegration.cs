@@ -274,6 +274,12 @@ public abstract class OsIntegration
         return GetStatus(feature);
     }
 
+    /// <summary>
+    /// At startup: brings back what this version adds to a registered feature and an earlier one didn't write (Linux: the
+    /// icon), without registering anything new.
+    /// </summary>
+    public virtual Task RepairAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>Before the entries are written (macOS: LaunchServices learns the bundle's document types).</summary>
     protected virtual Task BeforeRegisterAsync(OsIntegrationFeature feature, CancellationToken cancellationToken) => Task.CompletedTask;
 

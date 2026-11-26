@@ -167,7 +167,8 @@ public sealed class QueryResultsView : UserControl, IPaneView
             }
 
             panel.Children.Add(new TextBlock { Text = row.Text, FontFamily = font.Family, TextTrimming = TextTrimming.CharacterEllipsis });
-            var detail = new TextBlock { Text = row.Detail, FontSize = 11 };
+            var detail = new TextBlock { Text = row.Detail };
+            detail.Bind(TextBlock.FontSizeProperty, detail.GetResourceObservable("Shell.FontSize.Small"));
             detail.Classes.Add("muted");
             panel.Children.Add(detail);
             AutomationProperties.SetName(panel, row.AccessibleName);

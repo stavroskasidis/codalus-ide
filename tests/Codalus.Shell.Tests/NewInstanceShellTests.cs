@@ -1,5 +1,10 @@
 using System.Text.Json;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Codalus.Debugging;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
@@ -71,6 +76,38 @@ public sealed class NewInstanceShellTests
         f.Shell.Explorer.Selected = f.Shell.Explorer.Rows[0];
         Assert.False(Startable());
         Assert.NotNull(folder);
+    }
+
+    [AvaloniaFact]
+    public async Task A_right_click_on_a_project_while_an_editor_has_the_focus_acts_on_that_project()
+    {
+        // The editor has the focus on a file of the startup project (F5 opened it, or it's where you were), and you
+        // right-click another project in Solution Explorer: its Debug ▸ Start New Instance started the startup project,
+        // as the menu's commands took the editor's project while the focus stayed there.
+        await using var f = ShellFixture.Create();
+        var folder = await OpenSessionsAsync(f);
+        f.Shell.SetStartupProject(Path.Combine(folder, "Debuggee", "Debuggee.csproj"));
+        var partnerProject = Path.Combine(folder, "Partner", "Partner.csproj");
+        await f.Shell.OpenFileAsync(Path.Combine(folder, "Debuggee", "Program.cs"));
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("focusedView"), "textFile"), describe: () => $"the editor to have the focus ({f.Shell.Workbench.Context.GetValue("focusedView")})");
+
+        var view = f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single(v => v.IsEffectivelyVisible);
+        var list = view.GetVisualDescendants().OfType<ListBox>().First();
+        var row = f.Shell.Explorer.Rows.First(r => r.Node is { Kind: ExplorerNodeKind.Project } n && n.ProjectPath == partnerProject);
+        list.ScrollIntoView(row);
+        ShellFixture.Pump();
+        var container = (Control)list.ContainerFromItem(row)!;
+        var center = container.TranslatePoint(new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), f.Window)!.Value;
+        using (TestAppBuilder.PopupsInWindowsOfTheirOwn())
+        {
+            f.Window.MouseDown(center, MouseButton.Right);
+            f.Window.MouseUp(center, MouseButton.Right);
+            ShellFixture.Pump();
+            Assert.Equal(partnerProject, f.Shell.Explorer.Selected?.Node.ProjectPath);
+            Assert.Equal(SolutionExplorerViewModel.ToolWindowId, f.Shell.Workbench.Context.GetValue("focusedView"));
+            Assert.Equal(partnerProject, f.Shell.CurrentProject());
+            f.Press(Key.Escape);
+        }
     }
 
     [AvaloniaFact]

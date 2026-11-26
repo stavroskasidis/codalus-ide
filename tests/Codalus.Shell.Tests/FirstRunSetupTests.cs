@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
+using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
 using Codalus.Tests;
@@ -155,6 +156,62 @@ public sealed class FirstRunSetupTests
     }
 
     // ------------------------------------------------------------------ the steps
+
+    [AvaloniaFact]
+    public async Task The_UI_s_text_previews_on_the_window_and_is_saved_with_the_appearance_step()
+    {
+        // #556 (ADR 0111): the UI's font, size and smoothing preview as the theme does, and Next saves them; on Linux, the scale too.
+        await using var f = ShellFixture.Create(firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        await model.NextAsync(); // Get Started
+        var window = f.Shell.SetupWindowView!;
+
+        Assert.Equal(string.Empty, model.UiFontFamily);
+        Assert.Equal("The system's UI font", model.SelectedUiFont!.Title);
+        Assert.Equal(12, model.UiFontSize);
+        Assert.Equal("12 px", model.UiFontSizeText);
+        Assert.Equal(["As the system", "Grayscale", "Subpixel"], model.TextRenderings.Select(t => t.Title));
+        Assert.True(model.TextRenderings.Single(t => t.Id == TextRendering.System).IsSelected);
+        Assert.Equal(OperatingSystem.IsLinux(), model.OffersUiScale);
+        Assert.Equal(["100%", "125%", "150%", "175%", "200%"], model.UiScales.Select(s => s.Title));
+        Assert.True(model.UiScales.Single(s => s.Title == "100%").IsSelected);
+
+        // Two sizes up, another family and grayscale: this window and the IDE show them, nothing is saved yet.
+        var family = FontManager.Current.DefaultFontFamily.Name;
+        model.IncreaseUiFontSizeCommand.Execute(null);
+        model.IncreaseUiFontSizeCommand.Execute(null);
+        model.SelectedUiFont = model.UiFonts.First(u => string.Equals(u.Id, family, StringComparison.OrdinalIgnoreCase));
+        model.TextRenderings.Single(t => t.Id == TextRendering.Grayscale).SelectCommand.Execute(null);
+        model.UiScales.Single(s => s.Title == "150%").SelectCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => window.FontSize == 14 && f.Window.FontSize == 14);
+        Assert.Equal(family, window.FontFamily.Name);
+        Assert.Equal(TextRenderingMode.Antialias, TextOptions.GetTextRenderingMode(window));
+        Assert.Equal("Smooth edges with no colored fringes.", model.TextRenderingDescription);
+        Assert.Null(settings.GetLayerValue(UiFont.SizeSetting, SettingScope.User));
+        Assert.Null(settings.GetLayerValue(TextRendering.Setting, SettingScope.User));
+
+        // Next saves them; the scale only where it's offered.
+        await model.NextAsync();
+        Assert.Equal(14, settings.GetInt32(UiFont.SizeSetting));
+        Assert.Equal(family, settings.GetString(UiFont.FamilySetting));
+        Assert.Equal(TextRendering.Grayscale, settings.GetString(TextRendering.Setting));
+        Assert.Equal(OperatingSystem.IsLinux() ? 1.5 : null, settings.GetLayerValue(UiScale.Setting, SettingScope.User)?.GetDouble());
+        Assert.Equal(14, f.Window.FontSize);
+
+        // Back on the step, a preview that Skip setup drops: what was saved shows again.
+        await model.BackAsync();
+        Assert.Equal(14, model.UiFontSize);
+        Assert.True(model.TextRenderings.Single(t => t.Id == TextRendering.Grayscale).IsSelected);
+        model.DecreaseUiFontSizeCommand.Execute(null);
+        model.TextRenderings.Single(t => t.Id == TextRendering.Subpixel).SelectCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Window.FontSize == 13 && TextOptions.GetTextRenderingMode(f.Window) == TextRenderingMode.SubpixelAntialias);
+        await model.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => f.Window.FontSize == 14 && TextOptions.GetTextRenderingMode(f.Window) == TextRenderingMode.Antialias);
+        Assert.Equal(14, settings.GetInt32(UiFont.SizeSetting));
+        Assert.Equal(TextRendering.Grayscale, settings.GetString(TextRendering.Setting));
+    }
 
     [AvaloniaFact]
     public async Task Each_step_writes_its_setting_and_Done_opens_the_start_window()
@@ -334,11 +391,15 @@ public sealed class FirstRunSetupTests
         Assert.False(model.CanSkip);
         Assert.True(model.CanGoBack);
         Assert.False(model.HasAiNext);
-        Assert.Equal(["Theme", "Keys", "Editor font size", "Tools", "AI"], model.Summary.Select(r => r.Label));
+        Assert.Equal(
+            ["Theme", "Keys", "Editor font size", "UI font", "Text smoothing", .. OperatingSystem.IsLinux() ? ["UI scale"] : Array.Empty<string>(), "Tools", "AI"],
+            model.Summary.Select(r => r.Label));
         Assert.Equal("Graphite, Dark", model.Summary[0].Value);
         Assert.Equal("VS Code", model.Summary[1].Value);
         Assert.Equal("15 px", model.Summary[2].Value); // the imported export's
-        Assert.Equal("Off", model.Summary[4].Value);
+        Assert.Equal("The system's UI font, 12 px", model.Summary[3].Value);
+        Assert.Equal("As the system", model.Summary[4].Value);
+        Assert.Equal("Off", model.Summary[^1].Value);
         Assert.Equal("Good to know (VS Code keys)", model.ShortcutsTitle);
         Assert.Contains(model.Shortcuts, k => k.Title == "Start debugging" && k.Keys == "F5");
         Assert.Contains(model.Shortcuts, k => k.Title == "Run any command");

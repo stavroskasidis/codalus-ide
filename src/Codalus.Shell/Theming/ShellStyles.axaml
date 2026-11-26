@@ -78,8 +78,9 @@
   <Style Selector="Window">
     <Setter Property="Background" Value="{DynamicResource Shell.Background}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
-    <!-- A classic IDE's density: 9 pt UI text (M29, the Shell.FontSize tokens since M34d). -->
+    <!-- A classic IDE's density: 9 pt UI text (M29, the Shell.FontSize tokens since M34d), in the UI font (#556, UiFont). -->
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Shell.FontFamily}" />
   </Style>
 
   <!--
@@ -1576,10 +1577,11 @@
     window of its own, PopupRoot; one drawn in the window's overlay layer, OverlayPopupHost) set Avalonia's 14 px
     (ControlContentThemeFontSize): menus, drop-down lists, flyouts, IntelliSense, Quick Info and the data tips drew at
     14 px in the windowed app (the smoke steps editor.intelliSense and debug.dataTip check it). A control that sets its
-    own size (the ToolTip style, TextBlock.small) still does.
+    own size (the ToolTip style, TextBlock.small) still does. Its font is the UI font, as the window's (#556).
   -->
   <Style Selector="PopupRoot, OverlayPopupHost">
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Shell.FontFamily}" />
   </Style>
 
   <!-- Floating surfaces: command palette and toasts. -->
