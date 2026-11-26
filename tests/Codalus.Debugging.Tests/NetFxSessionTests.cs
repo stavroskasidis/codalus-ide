@@ -247,6 +247,31 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task An_event_its_target_continues_is_handed_back_and_not_continued_by_the_session()
+    {
+        // CorDebugTarget continues a module, thread or log event from the runtime's callback thread once the session has
+        // handled it (a continue from the session's thread crashed mscordbi on macOS as the program ended, CI runs
+        // 43344309044 and 45578318597): the session says "go on" to it instead of continuing the process itself.
+        fixture.RequireExe();
+        var module = new FakeModule(fixture.Exe!);
+        var process = new FakeProcess();
+        await using var dap = new Harness(process);
+        await dap.RequestAsync("initialize", new InitializeArguments("codalus", "Codalus IDE", "clr"), s_json.InitializeArguments, s_json.Capabilities);
+        await dap.RequestAsync("attach", new NetFxDebugArguments(ProcessId: 4242, Request: "attach"), s_json.NetFxDebugArguments);
+        await dap.RequestAsync("configurationDone", new EmptyArguments(), s_json.EmptyArguments);
+        var continues = Volatile.Read(ref process.Continues);
+
+        var handed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        process.Send(new ClrModuleLoaded(module) { Resume = go => handed.TrySetResult(go) });
+        Assert.True(await handed.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        Assert.Equal(Path.GetFileName(fixture.Exe!), (await dap.NextAsync(DapEvents.Module)).GetProperty("module").GetProperty("name").GetString());
+
+        process.Send(new ClrExited(0));
+        await dap.NextAsync(DapEvents.Terminated);
+        Assert.Equal(continues, Volatile.Read(ref process.Continues));
+    }
+
+    [Fact]
     public async Task An_exception_keeps_its_inner_exceptions_when_its_stack_traces_evaluation_times_out()
     {
         // The StackTrace getter's func-eval deadlocked on a static constructor that another, suspended thread was running,

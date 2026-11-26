@@ -367,6 +367,7 @@ public sealed class DebugHotReload : IAsyncDisposable
             _starting = null;
             _startCancel = null;
             _session = null;
+            _agents.SessionEnded();
             if (_browserInUse)
             {
                 _browser = null;

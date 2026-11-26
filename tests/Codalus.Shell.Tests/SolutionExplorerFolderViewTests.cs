@@ -113,7 +113,9 @@ public class SolutionExplorerFolderViewTests
         var listings = explorer.FolderListings;
         change();
         await SettledAsync(explorer);
-        Assert.Equal(listings + folders, explorer.FolderListings);
+        var listed = explorer.FolderListings - listings;
+        Assert.True(listed == folders, $"{listed} folder listing(s), not {folders}: "
+            + string.Join(", ", explorer.RecentFolderListings.TakeLast(Math.Clamp(listed, 0, 32))));
     }
 
     private static ExplorerNode? Find(ExplorerNode node, string id)
@@ -395,8 +397,16 @@ public class SolutionExplorerFolderViewTests
         var project = Path.Combine(app, "App.csproj");
         var modules = Path.Combine(app, "node_modules");
         await f.Shell.LoadFolderProjectsAsync([project]);
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.TryGetValue(project, out var info) && info.State == ProjectStates.Loaded
-                                           && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true }, seconds: 120);
+        // Loaded, restored, and its design-time build after the restore done: the IDE restores the project after its first
+        // load, and the restore's obj, the reload and that build list src/App and the project again, about 0.7 s after the
+        // first load had completed. Inside the count below they were one listing more: the folder's (macOS CI, run
+        // 45785561846, 6 not 5) or the project's (Linux CI, run 45792844923, 3 not 2). A reload first sets the design-time
+        // progress to 0 of 0, which reads as completed: its build has a total.
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.TryGetValue(project, out var info) && info is { State: ProjectStates.Loaded, Restored: true }
+                                           && f.Shell.Solutions.RestoreState == "succeeded" && f.Shell.Solutions.Progress is { Completed: true }
+                                           && f.Shell.Solutions.DesignTimeProgress is { Completed: true, Total: > 0 }, seconds: 120,
+            () => $"the project's load and restore: {(f.Shell.Solutions.Projects.TryGetValue(project, out var info) ? $"{info.State}, restored {info.Restored}" : "not loaded")}, "
+                + $"restore {f.Shell.Solutions.RestoreState ?? "none"}, design-time {f.Shell.Solutions.DesignTimeProgress?.Completed}/{f.Shell.Solutions.DesignTimeProgress?.Total}");
         explorer.SetFolderView(false);
         explorer.ShowAllFiles = true;
         await ShellFixture.PumpUntil(() => explorer.Listings > 0, seconds: 60);
