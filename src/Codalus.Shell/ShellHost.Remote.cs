@@ -530,8 +530,12 @@ public sealed partial class ShellHost
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
-            UseRemoteCompanion(start.Value.Companion);
-            await Debugger.LaunchAsync([new DebugLaunch(name, plan) { Remote = new RemoteLaunch(start.Value.Adapter, arguments, new SourceMap(), remote.Display) }], CancellationToken.None).ConfigureAwait(true);
+            if (!Debugger.IsActive)
+            {
+                UseRemoteCompanion(start.Value.Companion); // the session's: a program that joins it (#547) is on the same machine
+            }
+
+            await Debugger.LaunchOrJoinAsync(new DebugLaunch(name, plan) { Remote = new RemoteLaunch(start.Value.Adapter, arguments, new SourceMap(), remote.Display) }, CancellationToken.None).ConfigureAwait(true);
         }
 
         if (plan.BrowserUrl is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.IsLoopback)

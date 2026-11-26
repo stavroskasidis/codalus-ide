@@ -156,15 +156,16 @@ public sealed class HiddenDebuggerWindowsTests
             await ShellFixture.PumpUntil(() => Volatile.Read(ref stops) > before && s.F.Shell.ThreadList.Rows.Count == Threads, seconds: 60);
             await WaitAsync(500);
             Assert.InRange(StackTraces(log, 1), asked + Threads, asked + Threads + 1); // the superseded loop asked for none of the rest (one in flight at most)
-            Assert.True(s.F.Shell.ThreadList.Rows.Single(r => r.IsCurrent).Id == 1);
+            Assert.True(s.F.Shell.ThreadList.Rows.Single(r => r.IsCurrent).DisplayId == 1); // the adapter's id, as the window shows it (#547)
 
             // Another thread: the marker moves to it; the locations stay, and no thread's stack is asked again.
             var read = StackTraces(log, 1);
-            await s.F.Shell.Debugger.SelectThreadAsync(7);
-            await ShellFixture.PumpUntil(() => s.F.Shell.ThreadList.Rows.SingleOrDefault(r => r.IsCurrent)?.Id == 7);
+            var seventh = s.F.Shell.ThreadList.Rows.Single(r => r.DisplayId == 7);
+            await s.F.Shell.Debugger.SelectThreadAsync(seventh.Id);
+            await ShellFixture.PumpUntil(() => s.F.Shell.ThreadList.Rows.SingleOrDefault(r => r.IsCurrent)?.DisplayId == 7);
             await WaitAsync(300);
             Assert.Equal(read, StackTraces(log, 1));
-            Assert.Equal("Program.Work7()", s.F.Shell.ThreadList.Rows.Single(r => r.Id == 7).Location);
+            Assert.Equal("Program.Work7()", s.F.Shell.ThreadList.Rows.Single(r => r.DisplayId == 7).Location);
         }
         finally
         {

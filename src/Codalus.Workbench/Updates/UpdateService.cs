@@ -14,7 +14,8 @@ public enum InstallKind
 
     /// <summary>
     /// A .deb, .rpm or Arch package in <c>/opt/codalus</c>: the system's package manager updates it (or, on Arch, the
-    /// install command run again: <see cref="InstallInfo.UpdateCommand"/>); the IDE only says a release is out.
+    /// install command run again: <see cref="InstallInfo.UpdateCommand"/>); the IDE only says a release is out, and how to
+    /// get it (<see cref="SystemPackageUpdates"/>).
     /// </summary>
     SystemPackage,
 

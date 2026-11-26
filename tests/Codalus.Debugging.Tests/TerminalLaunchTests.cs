@@ -144,6 +144,23 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     }
 
     [Fact]
+    public async Task Step_Into_New_Instance_stops_a_program_in_the_terminal_at_its_first_line()
+    {
+        // #547: netcoredbg attaches to a program held in the terminal, so its stopAtEntry doesn't apply: a temporary
+        // breakpoint at the entry point's first line (from its PDB) stops it there, once. The Codalus debugger stops there
+        // itself (stopAtEntry).
+        Assert.SkipWhen(OperatingSystem.IsMacOS() && !_debug.UsesCodalusAdapter, "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
+        var first = DebuggeeFixture.Line(debuggee.Program, "first");
+        await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan()) { Console = DebugConsoleKind.Terminal, StopAtEntry = true }], TestContext.Current.CancellationToken, joinable: true);
+        var stop = await NextStopAsync();
+        Assert.Equal(first, _debug.SelectedFrame?.Line);
+        Assert.Equal(debuggee.Program, _debug.SelectedFrame?.Source?.Path);
+        Assert.True(stop.Reason is "entry" or "breakpoint", stop.Reason);
+        Assert.Empty(_debug.Breakpoints.All); // the temporary one is gone once it stopped the program
+        await _debug.StopAsync();
+    }
+
+    [Fact]
     public async Task Stop_ends_a_program_launched_in_the_terminal()
     {
         Assert.SkipWhen(OperatingSystem.IsMacOS() && !_debug.UsesCodalusAdapter, "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");

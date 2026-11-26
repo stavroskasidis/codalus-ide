@@ -58,9 +58,19 @@ The script ([read it](https://codalus.dev/install-arch.sh)) downloads the newest
 - **Updating**: run the same command again. `pacman -Syu` doesn't update it, since no repository serves it; when a release is out, Codalus IDE says so with the command, and **Copy Command** copies it.
 - **Options**, after `bash -s --`: `--version 0.10.0` installs that release, and `--noconfirm` doesn't ask (where there's no terminal to ask on, it's needed).
 - **Removing**: `sudo pacman -R codalus-bin`.
+- **Nightly builds**: there's no Arch package of them; a nightly build's AppImage runs on Arch Linux and updates itself.
 - **By hand**: unzip the release's `aur-codalus-bin-<version>.zip` and run `makepkg -si` in its folder.
 
 The package isn't on the AUR yet, while the AUR's registrations are closed; the PKGBUILD is the one it will carry.
+
+### Nightly builds on Linux
+
+The AppImage of a nightly build updates itself to the next ones. The `.deb` and `.rpm` don't follow nightly builds by themselves:
+
+- **Update Channel** set to nightly tells you when a nightly build is out; it doesn't change what `apt`, `dnf` or `zypper` installs. The notice's **Copy Command** copies the command that downloads that build's package and installs it.
+- **By hand**: download the package from the nightly build's page on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases), and run `sudo apt install ./<file>.deb`, `sudo dnf install ./<file>.rpm` or `sudo zypper install ./<file>.rpm` in its folder.
+- **Keep the repository on `stable`**: its next stable release updates a nightly build that came before it. The repositories' own `nightly` channel changes only with each stable release, so it doesn't have the newest nightly builds, and it can be older than the stable one.
+- **Back to the stable release**: set Update Channel to stable and confirm; the notice's command installs the older package.
 
 ### The AppImage
 

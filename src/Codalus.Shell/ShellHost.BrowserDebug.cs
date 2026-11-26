@@ -368,7 +368,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task DebugWebPageAsync(string? argument = null)
     {
-        if (Debugger.IsActive)
+        if (Debugger.IsActive && !Debugger.CanAddLaunch)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.browserDebug.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
@@ -401,7 +401,7 @@ public sealed partial class ShellHost
         var webRoot = url.IsFile ? Path.GetDirectoryName(url.LocalPath)!
             : Solutions.Solution?.Directory is { } solution ? solution
             : ActiveEditor?.Model.Path is { } path && Path.IsPathRooted(path) ? Path.GetDirectoryName(path)! : Environment.CurrentDirectory;
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
         if (await PrepareBrowserAsync(message => Workbench.Notifications.Error(message)).ConfigureAwait(true) is not { } browser)
         {

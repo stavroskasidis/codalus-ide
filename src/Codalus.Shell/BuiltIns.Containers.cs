@@ -83,7 +83,7 @@ internal static partial class BuiltIns
             shell.OpenPublish(path);
             return Task.CompletedTask;
         }, "solutionOpen && solutionTrusted");
-        Add("containers.attach", "Attach to a Process in a Container…", path => shell.AttachToRemoteProcessAsync("container"), "!debugActive");
+        Add("containers.attach", "Attach to a Process in a Container…", path => shell.AttachToRemoteProcessAsync("container"), "!debugActive || debugCanAddProgram");
     }
 
     public static void RegisterContainerMenus(MenuRegistry menus)

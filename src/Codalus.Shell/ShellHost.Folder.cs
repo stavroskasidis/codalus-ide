@@ -363,7 +363,7 @@ public sealed partial class ShellHost
 
             if (debug)
             {
-                DebugLog.Clear();
+                ClearDebugLogForNewSession();
                 DebugLog.AppendLine($"> {plan.FileName} {plan.Arguments}   (launch configuration '{configuration.Name}')".TrimEnd());
                 Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
                 Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
@@ -408,7 +408,7 @@ public sealed partial class ShellHost
         }
 
         var (program, arguments) = debugger.Start();
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         DebugLog.AppendLine($"> {debugger.Label}: {configuration.Name}   ({program} {string.Join(' ', arguments)})".TrimEnd());
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
         try

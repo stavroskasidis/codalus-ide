@@ -9,6 +9,12 @@ public interface IDebugAdapter : IAsyncDisposable
 {
     Capabilities Capabilities { get; }
 
+    /// <summary>
+    /// The id the Threads window shows for <paramref name="threadId"/>: the program's own (the OS thread's, for .NET), which
+    /// a session of programs encodes with the program's place (#547); every other adapter's ids are their own.
+    /// </summary>
+    int DisplayThreadId(int threadId) => threadId;
+
     /// <summary>Completes on the adapter's <c>initialized</c> event: breakpoints can be sent, then <c>configurationDone</c>.</summary>
     Task Initialized { get; }
 

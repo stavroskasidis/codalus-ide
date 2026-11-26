@@ -26,6 +26,9 @@ public sealed class BreakAllTests
 
     private static object Thread(int id, string name, params object[] frames) => new { id, name, frames };
 
+    /// <summary>A thread's id as the adapter has it: the session's encode the program's place (#547: every session is one of programs).</summary>
+    private static int? Shown(DebugService debug, int? threadId) => threadId is { } id ? debug.DisplayThreadId(id) : null;
+
     /// <summary>A thread whose stack netcoredbg can't read.</summary>
     private static object Unreadable(int id, string name) => new { id, name, frames = "error" };
 
@@ -74,11 +77,11 @@ public sealed class BreakAllTests
     {
         await using var debug = await PausedAsync(Program(Thread(1, "<No name>")));
 
-        Assert.Equal(3, debug.SelectedThreadId);
-        Assert.Equal(3, debug.CurrentStop?.ThreadId);
+        Assert.Equal(3, Shown(debug, debug.SelectedThreadId));
+        Assert.Equal(3, Shown(debug, debug.CurrentStop?.ThreadId));
         Assert.Equal(["[Native Frames]", "Microsoft.UI.Xaml.Application.Start", "App.Program.Main"], debug.Frames.Select(f => f.Name));
         Assert.Equal("App.Program.Main", debug.SelectedFrame?.Name);
-        Assert.Equal([1, 2, 3], debug.Threads.Select(t => t.Id));
+        Assert.Equal([1, 2, 3], debug.Threads.Select(t => debug.DisplayThreadId(t.Id)));
     }
 
     [Fact]
@@ -86,7 +89,7 @@ public sealed class BreakAllTests
     {
         await using var debug = await PausedAsync(Program(Unreadable(1, "<No name>")));
 
-        Assert.Equal(3, debug.SelectedThreadId);
+        Assert.Equal(3, Shown(debug, debug.SelectedThreadId));
         Assert.Equal("App.Program.Main", debug.SelectedFrame?.Name);
     }
 
@@ -101,7 +104,7 @@ public sealed class BreakAllTests
             Thread(3, "Main Thread", Frame("[Native Frames]"), Frame("Microsoft.UI.Xaml.Application.Start")),
         ]);
 
-        Assert.Equal(2, debug.SelectedThreadId);
+        Assert.Equal(2, Shown(debug, debug.SelectedThreadId));
         Assert.Equal(["System.Threading.WaitHandle.WaitOneNoCheck"], debug.Frames.Select(f => f.Name));
         Assert.Equal("System.Threading.WaitHandle.WaitOneNoCheck", debug.SelectedFrame?.Name);
     }
@@ -115,7 +118,7 @@ public sealed class BreakAllTests
             Thread(2, "Worker", Frame("App.Worker.Run", 20)),
         ]);
 
-        Assert.Equal(1, debug.SelectedThreadId);
+        Assert.Equal(1, Shown(debug, debug.SelectedThreadId));
         Assert.Equal("App.Program.Main", debug.SelectedFrame?.Name);
     }
 
@@ -128,12 +131,12 @@ public sealed class BreakAllTests
         var console = new System.Text.StringBuilder();
         await using var debug = await PausedAsync([Thread(1, "<No name>"), Unreadable(2, ".NET Finalizer"), Thread(3, "Main Thread")], console: console);
 
-        Assert.Equal(1, debug.SelectedThreadId);
-        Assert.Equal(1, debug.CurrentStop?.ThreadId);
+        Assert.Equal(1, Shown(debug, debug.SelectedThreadId));
+        Assert.Equal(1, Shown(debug, debug.CurrentStop?.ThreadId));
         Assert.Equal("pause", debug.CurrentStop?.Reason);
         Assert.Empty(debug.Frames);
         Assert.Null(debug.SelectedFrame);
-        Assert.Equal([1, 2, 3], debug.Threads.Select(t => t.Id));
+        Assert.Equal([1, 2, 3], debug.Threads.Select(t => debug.DisplayThreadId(t.Id)));
         lock (console)
         {
             Assert.Contains("Paused in external code: none of the program's 3 threads is running .NET code", console.ToString(), StringComparison.Ordinal);
@@ -148,7 +151,7 @@ public sealed class BreakAllTests
     {
         await using var debug = await PausedAsync([Thread(4, "<No name>"), Thread(5, "Main Thread")], pauseNamesNoThread: true);
 
-        Assert.Equal(4, debug.SelectedThreadId);
+        Assert.Equal(4, Shown(debug, debug.SelectedThreadId));
         Assert.Empty(debug.Frames);
     }
 
@@ -157,7 +160,7 @@ public sealed class BreakAllTests
     {
         await using var debug = await PausedAsync(Program(Thread(1, "<No name>")), pauseNamesNoThread: true);
 
-        Assert.Equal(3, debug.SelectedThreadId);
+        Assert.Equal(3, Shown(debug, debug.SelectedThreadId));
         Assert.Equal("App.Program.Main", debug.SelectedFrame?.Name);
     }
 
