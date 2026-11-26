@@ -48,6 +48,14 @@ The maintainer's screenshots narrowed it: the blurry text was the bold and semib
 - The window is drawn at that many pixels, so text stays as sharp as at the system's own scale.
 - It's registered on every OS, so the catalogue is the same everywhere, and says "Linux only". A change on Linux offers **Restart**.
 
+### In the first-run setup
+
+The maintainer's request, the same day: the setup offers them too. This extends [ADR 0096](0096-the-first-run-setup-asks-about-ai.md), which kept the Appearance step to the editor's font size ("a zoom for the UI is a feature of its own").
+
+- Under the editor's font size, **The IDE's text**: the UI font (the system's UI font, then the installed families), the UI text size (8 to 24) with a smaller and a larger button, and Text smoothing as segments (As the system, Grayscale, Subpixel; Aliased stays in Options, and a saved Aliased is kept unless one is chosen). They preview on the setup window and the IDE behind it, as a theme does (`UiFont.Preview`, `TextRendering.Preview`), and Next saves each that changed; Skip setup drops the preview.
+- On Linux, **UI scale** as segments (100% to 200%), saved with the step and applied at the next start, which the step says.
+- The summary lists the UI font and size, the smoothing and, on Linux, the scale.
+
 ### Wayland's own scaling
 
 - The user guide's Troubleshooting says what makes XWayland windows sharp at a fractional scale: KDE's Display Configuration → Legacy Applications (X11) → **Apply scaling themselves**, and GNOME's `xwayland-native-scaling` experimental feature. Codalus reads the scale those give through `Xft.dpi`.

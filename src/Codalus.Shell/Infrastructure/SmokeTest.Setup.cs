@@ -46,6 +46,7 @@ internal sealed partial class SmokeTest
             Check(model.CodeSample.Count > 0 && model.FontSize == Math.Clamp(Math.Round(settings.GetDouble("editor.fontSize", 13)), SetupViewModel.MinFontSize, SetupViewModel.MaxFontSize), "the editor's font size shows on a sample");
             Check(model.Families.Select(f => f.Id).SequenceEqual([ThemeService.Classic, ThemeService.Harbor, ThemeService.Graphite, ThemeService.Daylight, ThemeService.Ember]), "the families as cards, Classic first");
             Check(model.SelectedFamily == ThemeService.Classic && model.IsMatchSystem, "Classic, matching the system, is chosen");
+            Check(model.UiFonts.Count > 1 && model.UiFontSize == UiFont.SizeOf(settings.GetDouble(UiFont.SizeSetting, UiFont.DefaultSize)) && model.TextRenderings.Count == 3 && model.OffersUiScale == OperatingSystem.IsLinux(), "the UI's font, its size, its smoothing (and on Linux its scale) are offered (#556)");
 
             // The website's picture: Classic, Light.
             model.Modes.Single(m => m.Id == "light").SelectCommand.Execute(null);

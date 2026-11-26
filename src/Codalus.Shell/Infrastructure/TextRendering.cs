@@ -41,6 +41,7 @@ internal sealed partial class TextRendering : IDisposable
     private readonly List<WeakReference<TopLevel>> _topLevels = [];
     private readonly IDisposable _templated;
     private TextOptions _options;
+    private string? _preview;
 
     public TextRendering(SettingsService settings, Func<SystemTextRendering>? system = null)
     {
@@ -91,24 +92,36 @@ internal sealed partial class TextRendering : IDisposable
         _templated.Dispose();
     }
 
+    /// <summary>
+    /// Shows a choice without saving it (the first-run setup's appearance step, as it previews a theme); null goes back to
+    /// the setting's. Call it on the UI thread.
+    /// </summary>
+    public void Preview(string? setting)
+    {
+        _preview = setting;
+        Refresh();
+    }
+
     private void OnSettingsChanged(object? sender, SettingsChangedEventArgs e)
     {
         if (e.Affects(Setting))
         {
-            Ui.Post(() =>
-            {
-                var options = Options(_settings.GetString(Setting), _system.Value);
-                if (options == _options)
-                {
-                    return;
-                }
+            Ui.Post(Refresh);
+        }
+    }
 
-                _options = options;
-                foreach (var topLevel in Live())
-                {
-                    Apply(topLevel, options, redraw: true);
-                }
-            });
+    private void Refresh()
+    {
+        var options = Options(_preview ?? _settings.GetString(Setting), _system.Value);
+        if (options == _options)
+        {
+            return;
+        }
+
+        _options = options;
+        foreach (var topLevel in Live())
+        {
+            Apply(topLevel, options, redraw: true);
         }
     }
 

@@ -45,6 +45,7 @@ public sealed class UiFont : IDisposable
 
     private readonly Application _app;
     private readonly SettingsService _settings;
+    private (string? Family, double Size)? _preview;
 
     public UiFont(Application app, SettingsService settings)
     {
@@ -77,6 +78,16 @@ public sealed class UiFont : IDisposable
     public static double RowSize(double defaultRowSize, double body) =>
         Math.Round(defaultRowSize * body / DefaultSize, MidpointRounding.AwayFromZero);
 
+    /// <summary>
+    /// Shows a family and size without saving them (the first-run setup's appearance step, as it previews a theme);
+    /// null goes back to the settings'.
+    /// </summary>
+    public void Preview((string? Family, double Size)? preview)
+    {
+        _preview = preview;
+        Update();
+    }
+
     public void Dispose() => _settings.Changed -= OnSettingsChanged;
 
     private void OnSettingsChanged(object? sender, SettingsChangedEventArgs e)
@@ -89,8 +100,8 @@ public sealed class UiFont : IDisposable
 
     private void Update()
     {
-        Family = FamilyOf(_settings.GetString(FamilySetting));
-        Size = SizeOf(_settings.GetDouble(SizeSetting, DefaultSize));
+        Family = FamilyOf(_preview is { } preview ? preview.Family : _settings.GetString(FamilySetting));
+        Size = SizeOf(_preview?.Size ?? _settings.GetDouble(SizeSetting, DefaultSize));
         var resources = _app.Resources;
         resources[FamilyResource] = Family;
         resources[FluentFamilyResource] = Family;

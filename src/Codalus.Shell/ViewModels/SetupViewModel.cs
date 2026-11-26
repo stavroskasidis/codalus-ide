@@ -385,8 +385,9 @@ public sealed class SetupIntegrationChoice : ObservableObject
 
 /// <summary>
 /// The first-run setup (M46): Appearance (the theme families as cards, Classic first (D36), and a mode; the setup window
-/// and the IDE behind it repaint as the user chooses, through <see cref="ThemeService.Preview"/>; and the editor's font
-/// size, on a sample), Keyboard (the scheme),
+/// and the IDE behind it repaint as the user chooses, through <see cref="ThemeService.Preview"/>; the editor's font
+/// size, on a sample; and the UI's text (#556): its font, size and smoothing, previewed the same way, and on Linux its
+/// scale, applied at the next start), Keyboard (the scheme),
 /// Your settings (import from VS Code, a <c>.vssettings</c> file or an export, or settings sync from a folder or a Git
 /// repository), Tools (M37's check; nothing installs without a yes; and M51's System Integration, off unless checked)
 /// and AI (ADR 0096: no AI, which is preselected, a coding agent, or the built-in assistant with a provider).
@@ -412,6 +413,12 @@ public sealed class SetupViewModel : ObservableObject
     private SetupPage _page = SetupPage.Steps;
     private SetupStep _current = SetupStep.Appearance;
     private double _fontSize = 13;
+    private string _uiFontFamily = string.Empty;
+    private double _uiFontSize = UiFont.DefaultSize;
+    private string _textRendering = TextRendering.System;
+    private double _uiScale = 1;
+    private bool _textRenderingChosen;
+    private IReadOnlyList<SetupChoice>? _uiFonts;
     private IReadOnlyList<ThemePictureCodeLine> _codeSample = [];
     private string? _origin;
     private string? _originScheme;
@@ -490,6 +497,19 @@ public sealed class SetupViewModel : ObservableObject
         ];
         DecreaseFontSizeCommand = new RelayCommand(() => FontSize -= 1, () => _fontSize > MinFontSize);
         IncreaseFontSizeCommand = new RelayCommand(() => FontSize += 1, () => _fontSize < MaxFontSize);
+        DecreaseUiFontSizeCommand = new RelayCommand(() => UiFontSize -= 1, () => _uiFontSize > UiFont.MinSize);
+        IncreaseUiFontSizeCommand = new RelayCommand(() => UiFontSize += 1, () => _uiFontSize < UiFont.MaxSize);
+        TextRenderings =
+        [
+            new(TextRendering.System, Localizer.Get("msg.firstRun.textSystem", "As the system"), Localizer.Get("msg.firstRun.textSystemDescription", "As your system's other apps smooth text."), SelectTextRendering),
+            new(TextRendering.Grayscale, Localizer.Get("msg.firstRun.textGrayscale", "Grayscale"), Localizer.Get("msg.firstRun.textGrayscaleDescription", "Smooth edges with no colored fringes."), SelectTextRendering),
+            new(TextRendering.Subpixel, Localizer.Get("msg.firstRun.textSubpixel", "Subpixel"), Localizer.Get("msg.firstRun.textSubpixelDescription", "Sharper on most LCD screens, with colored fringes."), SelectTextRendering),
+        ];
+        UiScales = [.. UiScaleChoices.Select(scale => new SetupChoice(
+            scale.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Localizer.Format("msg.firstRun.uiScaleValue", "{0}%", Math.Round(scale * 100)),
+            string.Empty,
+            SelectUiScale))];
         Families =
         [
             new(ThemeService.Classic, "Classic", Localizer.Get("msg.firstRun.classic", "The classic IDE's familiar look: docked tool windows, plain tabs and a blue accent. Its Blue theme is in Options."), SelectFamily),
@@ -735,6 +755,178 @@ public sealed class SetupViewModel : ObservableObject
     public ICommand DecreaseFontSizeCommand { get; }
 
     public ICommand IncreaseFontSizeCommand { get; }
+
+    /// <summary>The UI's text sizes the setup offers: those of <c>workbench.fontSize</c>.</summary>
+    public const double MinUiFontSize = UiFont.MinSize;
+
+    /// <summary>The UI scales the setup offers on Linux (<c>workbench.uiScale</c>); Options takes any from 0.5 to 4.</summary>
+    public static IReadOnlyList<double> UiScaleChoices { get; } = [1, 1.25, 1.5, 1.75, 2];
+
+    /// <summary>
+    /// The UI's font family (<c>workbench.fontFamily</c>; empty for the system's UI font), previewed on this window and the
+    /// IDE as it's chosen and saved with the step.
+    /// </summary>
+    public string UiFontFamily
+    {
+        get => _uiFontFamily;
+        set
+        {
+            if (SetField(ref _uiFontFamily, value?.Trim() ?? string.Empty))
+            {
+                OnPropertyChanged(nameof(SelectedUiFont));
+                OnPropertyChanged(nameof(SelectedUiFontIndex));
+                PreviewUiText();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The UI font list: the system's UI font, then the installed families. A family typed in Options that isn't installed
+    /// is listed too, so the step shows it.
+    /// </summary>
+    public IReadOnlyList<SetupChoice> UiFonts => _uiFonts ??= LoadUiFonts();
+
+    /// <summary>The chosen entry's index in <see cref="UiFonts"/>, which the step's list binds (its selected item didn't follow a new list).</summary>
+    public int SelectedUiFontIndex
+    {
+        get
+        {
+            for (var i = 0; i < UiFonts.Count; i++)
+            {
+                if (string.Equals(UiFonts[i].Id ?? string.Empty, _uiFontFamily, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+        set
+        {
+            if (value >= 0 && value < UiFonts.Count)
+            {
+                UiFontFamily = UiFonts[value].Id ?? string.Empty;
+            }
+        }
+    }
+
+    /// <summary>The chosen entry of <see cref="UiFonts"/>.</summary>
+    public SetupChoice? SelectedUiFont
+    {
+        get => UiFonts.FirstOrDefault(f => string.Equals(f.Id ?? string.Empty, _uiFontFamily, StringComparison.OrdinalIgnoreCase));
+        set
+        {
+            if (value is not null)
+            {
+                UiFontFamily = value.Id ?? string.Empty;
+            }
+        }
+    }
+
+    /// <summary>The UI's text size (<c>workbench.fontSize</c>), previewed as it's changed and saved with the step.</summary>
+    public double UiFontSize
+    {
+        get => _uiFontSize;
+        set
+        {
+            if (SetField(ref _uiFontSize, Math.Clamp(Math.Round(value), UiFont.MinSize, UiFont.MaxSize)))
+            {
+                OnPropertyChanged(nameof(UiFontSizeText));
+                (DecreaseUiFontSizeCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (IncreaseUiFontSizeCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                PreviewUiText();
+            }
+        }
+    }
+
+    /// <summary>"12 px".</summary>
+    public string UiFontSizeText => Localizer.Format("msg.firstRun.fontSizeValue", "{0} px", _uiFontSize);
+
+    public ICommand DecreaseUiFontSizeCommand { get; }
+
+    public ICommand IncreaseUiFontSizeCommand { get; }
+
+    /// <summary>How text is smoothed (<c>workbench.textRendering</c>): as the system, grayscale or subpixel (Options also has aliased).</summary>
+    public IReadOnlyList<SetupChoice> TextRenderings { get; }
+
+    /// <summary>The chosen smoothing, previewed as it's chosen and saved with the step.</summary>
+    public string SelectedTextRendering => _textRendering;
+
+    /// <summary>The chosen one's description, under the choices.</summary>
+    public string TextRenderingDescription => TextRenderings.FirstOrDefault(t => t.IsSelected)?.Description ?? string.Empty;
+
+    /// <summary>Whether the step offers the UI scale: Linux's alone (<see cref="Infrastructure.UiScale"/>).</summary>
+    public bool OffersUiScale { get; init; } = OperatingSystem.IsLinux();
+
+    /// <summary>The UI scales offered (100% to 200%).</summary>
+    public IReadOnlyList<SetupChoice> UiScales { get; }
+
+    /// <summary>The chosen UI scale (<c>workbench.uiScale</c>), saved with the step and applied at the next start.</summary>
+    public double UiScale => _uiScale;
+
+    private IReadOnlyList<SetupChoice> LoadUiFonts()
+    {
+        var families = Avalonia.Media.FontManager.Current.SystemFonts.Select(f => f.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name) && !name.StartsWith('.'))
+            .Append(_uiFontFamily)
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.CurrentCultureIgnoreCase);
+        return
+        [
+            new(string.Empty, Localizer.Get("msg.firstRun.uiFontSystem", "The system's UI font"), string.Empty, f => SelectedUiFont = f),
+            .. families.Select(name => new SetupChoice(name, name, string.Empty, f => SelectedUiFont = f)),
+        ];
+    }
+
+    private void SelectTextRendering(SetupChoice choice)
+    {
+        _textRendering = choice.Id ?? TextRendering.System;
+        _textRenderingChosen = true;
+        ShowUiText();
+        _shell.TextRendering.Preview(_textRendering);
+    }
+
+    private void SelectUiScale(SetupChoice choice)
+    {
+        _uiScale = double.Parse(choice.Id ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+        ShowUiText();
+    }
+
+    /// <summary>Shows the UI text's choices as selected.</summary>
+    private void ShowUiText()
+    {
+        foreach (var choice in TextRenderings)
+        {
+            choice.IsSelected = choice.Id == _textRendering;
+        }
+
+        // A scale typed in Options that the step doesn't offer selects none; it's kept unless one is chosen.
+        foreach (var choice in UiScales)
+        {
+            choice.IsSelected = Math.Abs(double.Parse(choice.Id!, System.Globalization.CultureInfo.InvariantCulture) - _uiScale) < 0.001;
+        }
+
+        OnPropertyChanged(nameof(SelectedTextRendering));
+        OnPropertyChanged(nameof(TextRenderingDescription));
+        OnPropertyChanged(nameof(UiScale));
+    }
+
+    /// <summary>Repaints this window and the IDE in the chosen UI font and size, unsaved until the step is left.</summary>
+    private void PreviewUiText()
+    {
+        if (_current == SetupStep.Appearance && _page == SetupPage.Steps)
+        {
+            _shell.UiFont.Preview((_uiFontFamily, _uiFontSize));
+        }
+    }
+
+    /// <summary>Ends the UI text's previews: what's saved shows again.</summary>
+    private void EndUiTextPreview()
+    {
+        _shell.UiFont.Preview(null);
+        _shell.TextRendering.Preview(null);
+    }
 
     /// <summary>The editor's font (<c>editor.fontFamily</c>), for the sample.</summary>
     public Avalonia.Media.FontFamily EditorFontFamily => _shell.EditorFont.Family;
@@ -1321,6 +1513,18 @@ public sealed class SetupViewModel : ObservableObject
         var scheme = settings.GetString(BuiltIns.KeyboardSchemeSetting, "default");
         Summary.Add(new(Localizer.Get("msg.firstRun.summaryKeys", "Keys"), Schemes.FirstOrDefault(s => s.Id == scheme)?.Title ?? scheme));
         Summary.Add(new(Localizer.Get("msg.firstRun.summaryFontSize", "Editor font size"), Localizer.Format("msg.firstRun.fontSizeValue", "{0} px", settings.GetDouble(FontSizeSetting, 13))));
+        var uiFamily = settings.GetString(UiFont.FamilySetting).Trim();
+        Summary.Add(new(Localizer.Get("msg.firstRun.summaryUiFont", "UI font"), Localizer.Format(
+            "msg.firstRun.summaryUiFontValue",
+            "{0}, {1} px",
+            uiFamily.Length > 0 ? uiFamily : Localizer.Get("msg.firstRun.uiFontSystem", "The system's UI font"),
+            UiFont.SizeOf(settings.GetDouble(UiFont.SizeSetting, UiFont.DefaultSize)))));
+        var rendering = settings.GetString(TextRendering.Setting, TextRendering.System);
+        Summary.Add(new(Localizer.Get("msg.firstRun.summaryTextRendering", "Text smoothing"), TextRenderings.FirstOrDefault(t => t.Id == rendering)?.Title ?? rendering));
+        if (OffersUiScale)
+        {
+            Summary.Add(new(Localizer.Get("msg.firstRun.summaryUiScale", "UI scale"), Localizer.Format("msg.firstRun.uiScaleValue", "{0}%", Math.Round(settings.GetDouble(Infrastructure.UiScale.Setting, 1) * 100))));
+        }
 
         var tools = _shell.Tools.Where(t => t.Id is "dotnet" or "git").ToList();
         Summary.Add(new(Localizer.Get("msg.firstRun.summaryTools", "Tools"), tools.Count == 0
@@ -1422,6 +1626,7 @@ public sealed class SetupViewModel : ObservableObject
         WasDone = done;
         _shell.ToolsChanged -= OnToolsChanged;
         _shell.Theme.Preview(null);
+        EndUiTextPreview();
         await _shell.Workbench.Settings.SetAsync(ShellHost.SetupCompletedSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         Finished?.Invoke(this, EventArgs.Empty);
     }
@@ -1438,6 +1643,27 @@ public sealed class SetupViewModel : ObservableObject
                 _family = parsed?.Family;
                 _variant = parsed?.Variant;
                 FontSize = _shell.Workbench.Settings.GetDouble(FontSizeSetting, 13);
+                var settings = _shell.Workbench.Settings;
+                _uiFontFamily = settings.GetString(UiFont.FamilySetting).Trim();
+                if (_uiFonts is not null && _uiFontFamily.Length > 0 && !_uiFonts.Any(f => string.Equals(f.Id, _uiFontFamily, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _uiFonts = null; // a family typed in Options that isn't installed: listed too
+                    OnPropertyChanged(nameof(UiFonts));
+                }
+                _uiFontSize = UiFont.SizeOf(settings.GetDouble(UiFont.SizeSetting, UiFont.DefaultSize));
+                var rendering = settings.GetString(TextRendering.Setting, TextRendering.System);
+                // Aliased, chosen in Options, shows no choice here, and is kept unless one is chosen.
+                _textRendering = TextRenderings.Any(t => t.Id == rendering) ? rendering : string.Empty;
+                _textRenderingChosen = false;
+                _uiScale = settings.GetDouble(Infrastructure.UiScale.Setting, 1);
+                OnPropertyChanged(nameof(UiFontFamily));
+                OnPropertyChanged(nameof(SelectedUiFont));
+                OnPropertyChanged(nameof(SelectedUiFontIndex));
+                OnPropertyChanged(nameof(UiFontSize));
+                OnPropertyChanged(nameof(UiFontSizeText));
+                (DecreaseUiFontSizeCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (IncreaseUiFontSizeCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                ShowUiText();
                 ShowAppearance(preview: false);
                 break;
             case SetupStep.Keyboard:
@@ -1490,7 +1716,29 @@ public sealed class SetupViewModel : ObservableObject
                     await settings.SetAsync(FontSizeSetting, _fontSize, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
                 }
 
+                // The UI's text, each written only when it changed. Aliased, chosen in Options, is kept: the step doesn't offer it.
+                if (!string.Equals(settings.GetString(UiFont.FamilySetting).Trim(), _uiFontFamily, StringComparison.Ordinal))
+                {
+                    await settings.SetAsync(UiFont.FamilySetting, _uiFontFamily, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                if (Math.Abs(UiFont.SizeOf(settings.GetDouble(UiFont.SizeSetting, UiFont.DefaultSize)) - _uiFontSize) >= 0.5)
+                {
+                    await settings.SetAsync(UiFont.SizeSetting, _uiFontSize, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                if (_textRenderingChosen && settings.GetString(TextRendering.Setting, TextRendering.System) != _textRendering)
+                {
+                    await settings.SetAsync(TextRendering.Setting, _textRendering, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                if (OffersUiScale && Math.Abs(settings.GetDouble(Infrastructure.UiScale.Setting, 1) - _uiScale) >= 0.001)
+                {
+                    await settings.SetAsync(Infrastructure.UiScale.Setting, _uiScale, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
                 _shell.Theme.Preview(null);
+                EndUiTextPreview();
                 break;
             case SetupStep.Keyboard:
                 if (settings.GetString(BuiltIns.KeyboardSchemeSetting, "default") != _scheme)
