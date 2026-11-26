@@ -52,6 +52,14 @@ public sealed class DebugDepthTests
         Assert.Equal("\"the inner one\"", f.Shell.QuickWatch.Roots.Single().Value);
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<QuickWatchView>().Any());
 
+        // A refresh that starts during an evaluation (a stop's, or the window shown for the first time) makes the
+        // evaluation's answer an earlier one's: the evaluation returns once the newer one has filled the rows (this
+        // step found them empty once in a full run).
+        var outer = f.Shell.QuickWatch.EvaluateAsync("$exception.Message");
+        f.Shell.QuickWatch.RequestRefresh();
+        await outer;
+        Assert.Contains("outer", f.Shell.QuickWatch.Roots.Single().Value, StringComparison.Ordinal);
+
         // Run to Cursor to the end of Run(): PerfTips, a data tip that edits, a JSON visualizer, Watch editing.
         await f.Shell.RunToLineAsync(depth, Line(depth, "depth-end"));
         await ShellFixture.PumpUntil(() => f.Shell.Debugger is { State: DebugState.Stopped, CurrentStop.Reason: not "exception" } && f.Shell.ActiveEditor?.Controller?.CurrentDebugLine() == Line(depth, "depth-end"), seconds: 60);
