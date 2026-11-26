@@ -15,7 +15,7 @@ using Codalus.Workbench.ToolWindows;
 namespace Codalus.Shell;
 
 /// <summary>
-/// Tools → .NET SDKs (ADR 0112): the .NET SDKs and runtimes of this machine, by folder, with their updates from
+/// Tools → .NET SDKs (ADR 0113): the .NET SDKs and runtimes of this machine, by folder, with their updates from
 /// Microsoft's release metadata; install another channel, update within a feature band, remove an SDK and the runtimes
 /// only it brought. Every change shows its exact command or folders first. A declarative view, as Components is.
 /// </summary>
@@ -42,7 +42,7 @@ public sealed partial class ShellHost
     private bool _selectRequest;
 
     /// <summary>
-    /// What a prompt asked the manager for (ADR 0112): the exact SDK a solution's <c>global.json</c> pins, or the
+    /// What a prompt asked the manager for (ADR 0113): the exact SDK a solution's <c>global.json</c> pins, or the
     /// newest SDK of a channel (no SDK at all, or the IDE's own runtime missing), with the reason the row shows.
     /// </summary>
     internal sealed record SdkRequest(ToolStatus Tool, string? Version, string? Channel, string Reason, bool ReloadSolution);
@@ -83,7 +83,7 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// A prompt's Install… for .NET (a solution's <c>global.json</c> SDK, no SDK, the IDE's runtime): the SDK manager,
-    /// opened with what's needed selected at the top of Available, where the user installs it (ADR 0112, the
+    /// opened with what's needed selected at the top of Available, where the user installs it (ADR 0113, the
     /// maintainer's choice of 2026-11-26). Without the release metadata to name a version (offline, no cache), the
     /// direct install of Check Environment runs, as before. Other tools install directly.
     /// </summary>
@@ -151,7 +151,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Opens the SDK manager (Tools → .NET SDKs…, Check Environment's Manage…, Project → .NET SDKs…' link).</summary>
-    /// <remarks>Opening it reads the folders and the release metadata again (ADR 0112: the metadata is fetched when the window opens).</remarks>
+    /// <remarks>Opening it reads the folders and the release metadata again (ADR 0113: the metadata is fetched when the window opens).</remarks>
     public void OpenDotnetSdks()
     {
         Layout.ShowToolWindow(DotnetSdksWindow, focus: true);
@@ -556,7 +556,7 @@ public sealed partial class ShellHost
         _sdksMessage = Localizer.Format("msg.sdks.updated", ".NET SDK {0} is installed.", newVersion);
         await AfterSdkChangeAsync(plan).ConfigureAwait(true);
 
-        // Side by side (the user's folders, the .pkg, winget): the old patch is still there, so offer it (ADR 0112).
+        // Side by side (the user's folders, the .pkg, winget): the old patch is still there, so offer it (ADR 0113).
         if (_sdkFacts?.Installations.FirstOrDefault(i => i.Root == row.Installation.Root) is { } after && after.Sdks.Contains(row.Version, StringComparer.OrdinalIgnoreCase))
         {
             if (_sdkFacts.Pinned.Contains(row.Version))
@@ -765,7 +765,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// After a new SDK: the workloads of an older band of its channel, offered for its band (ADR 0112), never installed
+    /// After a new SDK: the workloads of an older band of its channel, offered for its band (ADR 0113), never installed
     /// without the user's yes (a MAUI install is gigabytes).
     /// </summary>
     private void OfferWorkloads(string sdk)

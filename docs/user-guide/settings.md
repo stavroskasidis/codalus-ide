@@ -116,6 +116,8 @@ Tools → Options → Environment → **System Integration** has two choices, bo
 | macOS | An **Open with Codalus IDE** Quick Action on a folder's right-click in the Finder (under **Quick Actions**, or **Services**). | Codalus IDE becomes each type's default app. Turning it off gives each type back to the app that opened it before (or another app that opens it). The installed app only: a copy that doesn't run from `Codalus IDE.app` shows why it can't. |
 | Linux | **Open with Codalus IDE** in Dolphin's and Nemo's right-click menus, under **Scripts** in GNOME Files, and in Thunar's custom actions (when Thunar has been run). | The types are registered for you (`~/.local/share/mime`), with a desktop entry that opens them, and Codalus IDE becomes their default application (`xdg-mime`, or `~/.config/mimeapps.list`). A default you choose later for one of them stays yours. |
 
+On Linux, either choice also puts the Codalus IDE logo in your icon theme (`~/.local/share/icons/hicolor`), so the menus, the file managers and a taskbar entry pinned from the window show it when you run the AppImage or the tarball, which install no icon of their own. It goes when both choices are off.
+
 What it starts is this copy of Codalus IDE (the installed app, the AppImage file, or a development build), with your `--user-data-dir` if you started it with one. The folder or solution opens in a running window that has nothing open; otherwise in a new window. When a check box is neither on nor off, the entries are partly there (one was removed by hand, or a file manager was installed since) or start another copy of Codalus IDE: clicking it removes them, and clicking again registers them all for this copy.
 
 ## Window layouts

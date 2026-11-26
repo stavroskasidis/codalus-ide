@@ -8,5 +8,5 @@ Icon=codalus
 Terminal=false
 Categories=Development;IDE;
 MimeType=text/x-csharp;application/x-csproj;
-StartupWMClass=codalus
+StartupWMClass=Codalus
 Keywords=dotnet;csharp;ide;

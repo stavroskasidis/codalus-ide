@@ -10,7 +10,7 @@ public sealed record DotnetMetadata<T>(T Value, DateTimeOffset FetchedAt, bool F
 }
 
 /// <summary>
-/// Microsoft's .NET release metadata (ADR 0112): <c>releases-index.json</c> and each channel's <c>releases.json</c>,
+/// Microsoft's .NET release metadata (ADR 0113): <c>releases-index.json</c> and each channel's <c>releases.json</c>,
 /// fetched when asked (the SDK manager's window opening, Refresh) and kept in <paramref name="cacheFolder"/> for a day.
 /// A failed fetch falls back on the cache whatever its age; with no cache it throws. Nothing here runs on its own.
 /// </summary>

@@ -23,6 +23,10 @@
     <ProjectReference Include="..\Codalus.Remote.Protocol\Codalus.Remote.Protocol.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The logo the Linux OS integration's entries show (Icon=codalus), for copies no package installed it for. -->
+    <EmbeddedResource Include="..\..\assets\logo\codalus.svg" LogicalName="Codalus.Workbench.Setup.codalus.svg" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
     <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
     <InternalsVisibleTo Include="Codalus.Plugins.Tests" />

@@ -121,7 +121,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         shell.Dialogs.Opened += OnDialogOpened;
 
-        // ADR 0112: the SDK manager reads a local copy of Microsoft's release metadata, so no step (the sweep's included) reaches the network.
+        // ADR 0113: the SDK manager reads a local copy of Microsoft's release metadata, so no step (the sweep's included) reaches the network.
         shell.DotnetReleases = new Codalus.Workbench.Sdks.DotnetReleaseSource(Path.Combine(Work, "dotnet-releases-cache"), Path.Combine(samples, "DotnetReleases"));
         var exitCode = 1;
         try
@@ -308,8 +308,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
         await StepAsync("shell.setup", "M46", "The first-run setup: the welcome page's origin preselects the keys, a theme family previewed live, VS Code's settings imported, the tools checked, the AI step's three ways compared and left as they were; the summary's Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
-        // ADR 0112: Tools → .NET SDKs on this machine's own .NET, against the local copy of the release metadata (the website's picture).
-        await StepAsync("setup.dotnetSdks", "ADR 0112", "Tools → .NET SDKs lists this machine's SDKs and runtimes by folder, the folder in use marked, with their updates and what's available; nothing is installed or removed", DotnetSdksStepAsync).ConfigureAwait(true);
+        // ADR 0113: Tools → .NET SDKs on this machine's own .NET, against the local copy of the release metadata (the website's picture).
+        await StepAsync("setup.dotnetSdks", "ADR 0113", "Tools → .NET SDKs lists this machine's SDKs and runtimes by folder, the folder in use marked, with their updates and what's available; nothing is installed or removed", DotnetSdksStepAsync).ConfigureAwait(true);
 
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>

@@ -3,7 +3,7 @@ using Codalus.Plugins.Protocol;
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// ADR 0112's smoke step: Tools → .NET SDKs in the shipped app, on the machine's own .NET folders and the samples' copy
+/// ADR 0113's smoke step: Tools → .NET SDKs in the shipped app, on the machine's own .NET folders and the samples' copy
 /// of Microsoft's release metadata (set for the whole run, <see cref="RunAsync"/>). The window lists the SDK the run
 /// itself uses, in the folder marked in use, and what's available; nothing is installed or removed. Its picture is the
 /// website's <c>dotnet-sdks.png</c>.

@@ -1,4 +1,4 @@
-# 0112. The .NET SDK manager
+# 0113. The .NET SDK manager
 
 - **Status:** accepted (2026-11-26; the maintainer's answers of 2026-11-26)
 - **Date:** 2026-11-26

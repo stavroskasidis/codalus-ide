@@ -10,7 +10,7 @@ using Codalus.Workbench.Setup;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// Tools → .NET SDKs (ADR 0112) in the shell: a .NET folder of the test's own (in a temporary folder) and the samples'
+/// Tools → .NET SDKs (ADR 0113) in the shell: a .NET folder of the test's own (in a temporary folder) and the samples'
 /// copy of the release metadata. The list with its updates, a removal that deletes only after the confirmation, an
 /// install whose command goes to a stand-in, and Check Environment's Manage…. Nothing reaches the network or installs.
 /// </summary>

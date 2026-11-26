@@ -5,7 +5,7 @@ using Codalus.Workbench.Setup;
 namespace Codalus.Workbench.Tests.Sdks;
 
 /// <summary>
-/// The SDK manager's logic (ADR 0112) on described machines and the samples' release metadata: feature bands and
+/// The SDK manager's logic (ADR 0113) on described machines and the samples' release metadata: feature bands and
 /// updates, what's available, the install, update and removal plans for each kind of folder, and every removal guard.
 /// Nothing runs: the plans are only read.
 /// </summary>
