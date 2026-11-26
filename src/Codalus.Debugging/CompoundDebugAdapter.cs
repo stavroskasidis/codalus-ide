@@ -240,6 +240,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// <summary>Each part's adapter (<see cref="IDebugAdapter.Describe"/>).</summary>
     public string Describe() => string.Join(" | ", Parts().Select(p => $"{p.Name}{(p.Starting ? " (starting)" : string.Empty)}: {p.Adapter.Describe()}"));
 
+    public Task SettleAsync(TimeSpan wait) => Task.WhenAll(Parts().Select(p => p.Adapter.SettleAsync(wait)));
+
     private static DapJsonContext Json => DapJsonContext.Default;
 
     private void Attach(Part part)

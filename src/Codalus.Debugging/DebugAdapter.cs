@@ -128,6 +128,12 @@ public sealed partial class DebugAdapter : IDebugAdapter
                 {
                     _stderr.AppendLine(line);
                 }
+
+                _stderrTail.Enqueue(line);
+                if (_stderrTail.Count > 20)
+                {
+                    _stderrTail.Dequeue();
+                }
             }
 
             Log?.Invoke(this, line);
@@ -148,9 +154,43 @@ public sealed partial class DebugAdapter : IDebugAdapter
         }
     }
 
+    /// <summary>
+    /// The adapter process's exit code, or "unknown". On Unix .NET reports a process a signal ended as 128 plus the
+    /// signal, so that is named too: "139, signal 11".
+    /// </summary>
     private string ExitCode()
     {
-        return _process.Exited is { IsCompletedSuccessfully: true, Result: { } code } ? code.ToString(System.Globalization.CultureInfo.InvariantCulture) : "unknown";
+        if (_process.Exited is not { IsCompletedSuccessfully: true, Result: { } code })
+        {
+            return "unknown";
+        }
+
+        var text = code.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return !OperatingSystem.IsWindows() && code is > 128 and < 128 + 65 ? text + ", signal " + (code - 128).ToString(System.Globalization.CultureInfo.InvariantCulture) : text;
+    }
+
+    /// <summary>
+    /// The Codalus debugger's host ended right after a program's end without sending <c>exited</c>, and without its log
+    /// saying why: no unhandled exception and no "[adapter] ends" (Linux CI, PR #561's run 45872761291). So a session
+    /// whose connection closed waits a moment for the process to finish ending, and <see cref="Describe"/> says how it
+    /// ended and what it wrote to stderr.
+    /// </summary>
+    public async Task SettleAsync(TimeSpan wait) =>
+        await ((Task)_process.Exited).WaitAsync(wait).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+    /// <summary>The adapter's last lines of stderr, where a crash says what happened (<see cref="_stderr"/> keeps the first ones).</summary>
+    private readonly Queue<string> _stderrTail = new();
+
+    /// <summary>The last lines the adapter wrote to stderr (up to 1,000 characters), or null.</summary>
+    private string? StderrTail()
+    {
+        string text;
+        lock (_stderr)
+        {
+            text = string.Join(" / ", _stderrTail.Where(l => !string.IsNullOrWhiteSpace(l))).Trim();
+        }
+
+        return text.Length == 0 ? null : text.Length > 1000 ? "…" + text[^1000..] : text;
     }
 
     /// <summary>The start of the adapter's stderr, to say why a pipe transport failed.</summary>
@@ -392,7 +432,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
     {
         var adapter = _process.Id is { } id
             ? $"netcoredbg {id.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
-              + (_process.Exited.IsCompleted ? $" (exited, code {ExitCode()})" : ThreadWaits(id) is { } adapterWaits ? $" ({adapterWaits})" : string.Empty)
+              + (_process.Exited.IsCompleted ? $" (exited, code {ExitCode()}{(StderrTail() is { } stderr ? "; its stderr: " + stderr : string.Empty)})" : ThreadWaits(id) is { } adapterWaits ? $" ({adapterWaits})" : string.Empty)
             : "netcoredbg on another machine";
         string program;
         using (var running = RunningProgram())

@@ -1012,6 +1012,17 @@ public sealed class CompoundDebugAdapterTests
 
         public void Close() => _closed.TrySetResult();
 
+        /// <summary>What <see cref="Describe"/> says: "settled" once <see cref="SettleAsync"/> ran (the session-end diagnostic).</summary>
+        public string Description { get; private set; } = "not settled";
+
+        public string Describe() => Description;
+
+        public Task SettleAsync(TimeSpan wait)
+        {
+            Description = "settled";
+            return Task.CompletedTask;
+        }
+
         public Task DisconnectGate { get; init; } = Task.CompletedTask;
 
         public Capabilities Capabilities { get; init; } = new() { SupportsBreakWithOtherPrograms = true };
