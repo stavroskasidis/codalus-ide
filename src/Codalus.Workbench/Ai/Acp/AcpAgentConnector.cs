@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Codalus.Platform;
 using Codalus.Rpc;
 using Codalus.Workbench.Localization;
+using Codalus.Workbench.Node;
 using Codalus.Workbench.Settings;
 using Codalus.Workbench.Setup;
 
@@ -116,8 +117,11 @@ public sealed record AcpConnectRequest(AcpAgentTemplate Template, AcpSignInOptio
     /// <summary>The dialog's "Turn on AI assistance" box is checked (unsaved: written only with the entry, D43).</summary>
     public bool Consent { get; init; }
 
-    /// <summary>Codalus's own Node.js runs the agent (D-node, the user's opt-in).</summary>
-    public bool UseCodalusNode { get; init; }
+    /// <summary>
+    /// The Node.js the agent runs on, as its entry's <c>node</c> says: <c>builtIn</c> for Codalus's own (D-node, the user's
+    /// opt-in), a version manager's id (<c>nvm</c>…) for its Node.js, null for the one on the PATH.
+    /// </summary>
+    public string? Node { get; init; }
 
     /// <summary>The key never prints (a record would).</summary>
     public override string ToString() => $"{Template.Id} ({SignIn.Id})";
@@ -150,6 +154,15 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
 
     /// <summary>The OS, for the install options.</summary>
     public PlatformKind Platform { get; set; } = PlatformInfo.Current;
+
+    /// <summary>
+    /// Reads the variables that locate the version managers' Node.js (<c>HOME</c>, <c>NVM_DIR</c>…); null: this
+    /// process's, unless <see cref="SearchPath"/> holds stand-ins, when none is looked for (a test never meets this
+    /// machine's nvm).
+    /// </summary>
+    public Func<string, string?>? VersionManagerEnvironment { get; set; }
+
+    private Func<string, string?>? ManagerEnvironment => VersionManagerEnvironment ?? (SearchPath is null ? Environment.GetEnvironmentVariable : null);
 
     /// <summary><c>/etc/os-release</c>'s ID and ID_LIKE (Linux).</summary>
     public string? Distribution { get; set; } = OperatingSystem.IsLinux() ? InstallPlans.LinuxDistribution() : null;
@@ -195,22 +208,22 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
 
     /// <summary>
     /// What <paramref name="template"/> needs and has, off the caller's thread, each program found on the PATH and asked its
-    /// version once; with the install options for the first one missing. With <paramref name="codalusNode"/>, Node.js is
-    /// Codalus's own.
+    /// version once; with the install options for the first one missing. <paramref name="node"/> is the Node.js chosen
+    /// (<see cref="AcpConnectRequest.Node"/>): Codalus's own, a version manager's, or null for the PATH's.
     /// </summary>
-    public async Task<AcpRequirements> CheckAsync(AcpAgentTemplate template, bool codalusNode, CancellationToken cancellationToken)
+    public async Task<AcpRequirements> CheckAsync(AcpAgentTemplate template, string? node, CancellationToken cancellationToken)
     {
         ThrowIfRemote();
         var rows = new List<AcpRequirement>();
-        var nodeFolder = codalusNode && CodalusNode is { IsInstalled: true } runtime ? Path.GetDirectoryName(runtime.NodePath) : null;
+        var nodeFolder = NodeFolder(node, template.NodeMajor);
         var path = nodeFolder is null ? SearchPath ?? Environment.GetEnvironmentVariable("PATH") : nodeFolder;
         if (template.Package is not null || template.NeedsCli && template.CliInstall(Platform).Any(o => o.Id == "npm"))
         {
             var needed = template.NodeMajor;
-            var node = await ProbeAsync("node", "Node.js", path, cancellationToken).ConfigureAwait(false);
-            rows.Add(node.State == AcpRequirementState.Found && needed is { } major && AcpNodeInstall.Major(node.Version ?? "") < major
-                ? node with { State = AcpRequirementState.TooOld, Needed = major.ToString(CultureInfo.InvariantCulture) }
-                : node with { Needed = needed?.ToString(CultureInfo.InvariantCulture) });
+            var found = await ProbeAsync("node", "Node.js", path, cancellationToken).ConfigureAwait(false);
+            rows.Add(found.State == AcpRequirementState.Found && needed is { } major && AcpNodeInstall.Major(found.Version ?? "") < major
+                ? found with { State = AcpRequirementState.TooOld, Needed = major.ToString(CultureInfo.InvariantCulture) }
+                : found with { Needed = needed?.ToString(CultureInfo.InvariantCulture) });
             rows.Add(await ProbeAsync("npx", "npx", path, cancellationToken).ConfigureAwait(false));
         }
 
@@ -233,11 +246,28 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
         if (missing.Id is "node" or "npx")
         {
             var facts = await NodeFactsAsync(cancellationToken).ConfigureAwait(false);
-            var (options, note) = AcpNodeInstall.Options(facts, template.NodeMajor);
-            var title = template.NodeMajor is { } major
-                ? Localizer.Format("msg.acp.connect.installNodeMajor", "Install Node.js {0} or later", major)
+
+            // A version manager's Node.js the login shell doesn't put on the PATH (nvm in ~/.bashrc, fish as the login
+            // shell), offered first: nothing to install.
+            var managed = node is null && ManagerEnvironment is { } environment
+                ? NodeVersionManagers.Find(environment, template.NodeMajor, Platform).Select(ManagerOption).ToList()
+                : [];
+
+            // The distribution's Node.js without npx: its npm package (Arch, Debian, Fedora… package it apart).
+            var nodeRow = rows[0];
+            var npm = missing.Id == "npx" && nodeRow.State == AcpRequirementState.Found && AcpNodeInstall.IsDistributionNode(nodeRow.Path)
+                ? AcpNodeInstall.NpmOptions(facts, nodeRow.Version!)
+                : [];
+            var (options, note) = npm.Count > 0 ? (npm, (string?)null) : AcpNodeInstall.Options(facts, template.NodeMajor);
+            var title = npm.Count > 0 && managed.Count == 0 ? Localizer.Get("msg.acp.connect.installNpm", "Install npm, which brings npx")
+                : template.NodeMajor is { } major ? Localizer.Format("msg.acp.connect.installNodeMajor", "Install Node.js {0} or later", major)
                 : Localizer.Get("msg.acp.connect.installNode", "Install Node.js");
-            return new AcpRequirements(rows, options, title, note);
+            if (managed.Count > 0)
+            {
+                Log(template.Id, "found " + string.Join(", ", managed.Select(o => o.Name)) + ", not on the PATH");
+            }
+
+            return new AcpRequirements([.. rows], [.. managed, .. options], title, note);
         }
 
         var cliOptions = new List<AcpInstallOption>();
@@ -250,6 +280,30 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
 
         return new AcpRequirements(rows, cliOptions, Localizer.Format("msg.acp.connect.installCli", "Install {0}", template.Agent.Cli + (template.CliMinimum is { } min ? " " + min + "+" : "")), null);
     }
+
+    /// <summary>
+    /// The folder of the Node.js <paramref name="node"/> names (<see cref="AcpConnectRequest.Node"/>): Codalus's own when
+    /// installed, a version manager's for an agent that needs <paramref name="major"/>; null for the PATH's.
+    /// </summary>
+    private string? NodeFolder(string? node, int? major) => node switch
+    {
+        null => null,
+        "builtIn" => CodalusNode is { IsInstalled: true } runtime ? Path.GetDirectoryName(runtime.NodePath) : null,
+        _ => ManagerEnvironment is { } environment ? NodeVersionManagers.Resolve(node, environment, major, Platform)?.Folder : null,
+    };
+
+    /// <summary>The option that runs the agent on a version manager's Node.js: nothing installs.</summary>
+    private AcpInstallOption ManagerOption(ManagedNode node) =>
+        new(node.Manager, Localizer.Format("msg.acp.connect.managedNode", "{0}'s Node.js {1}", node.ManagerName, node.Version),
+            Localizer.Format("msg.acp.connect.managedNodeDescription", "In {0}, which your login shell doesn't put on the PATH. The agent runs with it first on its PATH; your shell stays as it is.", Tilde(node.Folder)),
+            InstallKind.Run, node.Folder)
+        { NodeManager = node.Manager };
+
+    /// <summary><paramref name="folder"/> with the home folder as <c>~</c>.</summary>
+    private string Tilde(string folder) =>
+        ManagerEnvironment?.Invoke("HOME") is { Length: > 0 } home && folder.StartsWith(home.TrimEnd('/') + "/", StringComparison.Ordinal)
+            ? "~" + folder[home.TrimEnd('/').Length..]
+            : folder;
 
     /// <summary>A program on <paramref name="path"/> and its <c>--version</c>.</summary>
     private async Task<AcpRequirement> ProbeAsync(string program, string name, string? path, CancellationToken cancellationToken)
@@ -295,7 +349,9 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
         return null;
     }
 
-    /// <summary>What decides the Node.js install options: the OS's package managers, and the version apt or dnf would install.</summary>
+    private static readonly Dictionary<string, string> s_english = new(StringComparer.Ordinal) { ["LC_ALL"] = "C" };
+
+    /// <summary>What decides the Node.js install options: the OS's package managers, and the version the distribution's would install.</summary>
     private async Task<AcpNodeFacts> NodeFactsAsync(CancellationToken cancellationToken)
     {
         var path = SearchPath ?? Environment.GetEnvironmentVariable("PATH");
@@ -314,6 +370,18 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
             dnf = code == 0 ? AcpNodeInstall.DnfCandidate(string.Join('\n', lines)) : null;
         }
 
+        // Arch, openSUSE and Alpine, from what's on the machine (no refresh), in English whatever the user's language.
+        async Task<int?> AskAsync(string program, string[] arguments, Func<string, int?> read)
+        {
+            if (Platform != PlatformKind.Linux || FindOnPath(program, path) is not { } found)
+            {
+                return null;
+            }
+
+            var (code, lines) = await RunAsync(Start(found, arguments, path) with { Environment = s_english }, null, ProbeTimeout, cancellationToken).ConfigureAwait(false);
+            return code == 0 ? read(string.Join('\n', lines)) : null;
+        }
+
         return new AcpNodeFacts(
             Platform,
             Distribution,
@@ -322,7 +390,12 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
             Platform == PlatformKind.Linux && FindOnPath("snap", path) is not null,
             apt,
             dnf,
-            CodalusNode is not null && Node.NodeRuntime.Platform is not null);
+            CodalusNode is not null && Node.NodeRuntime.Platform is not null)
+        {
+            PacmanCandidate = ids.Contains("arch") ? await AskAsync("pacman", ["-Si", "nodejs"], text => InstallPlans.PackageCandidate(text) is { } v ? AcpNodeInstall.Major(v) : null).ConfigureAwait(false) : null,
+            ZypperCandidate = ids.Any(i => i.Contains("suse", StringComparison.Ordinal)) ? await AskAsync("zypper", ["--non-interactive", "--no-refresh", "search", "nodejs*"], AcpNodeInstall.ZypperCandidate).ConfigureAwait(false) : null,
+            ApkCandidate = ids.Contains("alpine") ? await AskAsync("apk", ["policy", "nodejs"], AcpNodeInstall.ApkCandidate).ConfigureAwait(false) : null,
+        };
     }
 
     /// <summary>Whether npm's global folder (<c>npm config get prefix</c>) can be written without sudo (a distribution's Node.js: not).</summary>
@@ -364,6 +437,11 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
     public async Task<int?> InstallAsync(string agent, AcpInstallOption option, IAcpConnectHost host, Action<string>? output, CancellationToken cancellationToken)
     {
         ThrowIfRemote();
+        if (option.NodeManager is not null)
+        {
+            return null; // a version manager's Node.js is there already: choosing it is all
+        }
+
         Log(agent, $"install {option.Id}: {option.Command}");
         int? exit;
         if (option.IsCodalusNode)
@@ -439,7 +517,7 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
         {
             Log(template.Id, $"test {template.Tag}, sign-in {option.Id}");
             progress?.Report(new AcpTestProgress(AcpTestStep.Requirements, AcpStepState.Running, null));
-            var requirements = await CheckAsync(template, request.UseCodalusNode, cancel.Token).ConfigureAwait(false);
+            var requirements = await CheckAsync(template, request.Node, cancel.Token).ConfigureAwait(false);
             if (!requirements.Met)
             {
                 var missing = requirements.Rows.First(r => r.State != AcpRequirementState.Found);
@@ -522,10 +600,10 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
         }
     }
 
-    /// <summary>The PATH the test runs with: the stand-ins' or Codalus's Node.js first, else null (this process's).</summary>
+    /// <summary>The PATH the test runs with: the stand-ins' or the chosen Node.js (Codalus's, a version manager's) first, else null (this process's).</summary>
     private string? TestPath(AcpConnectRequest request)
     {
-        var nodeFolder = request.UseCodalusNode && CodalusNode is { IsInstalled: true } runtime ? Path.GetDirectoryName(runtime.NodePath) : null;
+        var nodeFolder = NodeFolder(request.Node, request.Template.NodeMajor);
         var path = SearchPath;
         if (nodeFolder is not null)
         {
@@ -822,7 +900,7 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
             await secrets.StoreAsync(template.Id, option.EnvVar!, request.ApiKey ?? throw new AcpException("Type the key first."), cancellationToken).ConfigureAwait(false);
         }
 
-        var entry = KeepChoices(AcpAgentCatalog.Entry(template.Agent.Command, template.Agent.Args, secretEnv, option.UnsetEnv, template.Tag, request.UseCodalusNode ? "builtIn" : null), template.Id);
+        var entry = KeepChoices(AcpAgentCatalog.Entry(template.Agent.Command, template.Agent.Args, secretEnv, option.UnsetEnv, template.Tag, request.Node), template.Id);
         try
         {
             await settings.SetMemberAsync(AcpAgents.AgentsSetting, template.Id, entry, SettingScope.User, cancellationToken).ConfigureAwait(false);
