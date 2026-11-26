@@ -23,10 +23,21 @@ internal static partial class Rendering
     /// <summary>DXGI_ADAPTER_FLAG_SOFTWARE.</summary>
     private const uint SoftwareAdapterFlag = 2;
 
-    /// <summary>The X11 options: the framebuffer retained (see <c>Program.BuildAvaloniaApp</c>), software when asked for.</summary>
+    /// <summary>
+    /// The window's X11 class (<c>WM_CLASS</c> is <c>codalus</c>, the process's name, and <c>Codalus</c>): docks and task
+    /// managers match it to a desktop entry's <c>StartupWMClass</c>. The packages' and the system integration's entries say
+    /// <c>Codalus</c>, and so does the one inside the AppImage, which Velopack writes with the package id; GNOME also tries
+    /// the instance name, so entries earlier versions wrote with <c>codalus</c> still match.
+    /// </summary>
+    public const string WindowClass = "Codalus";
+
+    /// <summary>
+    /// The X11 options: the framebuffer retained (see <c>Program.BuildAvaloniaApp</c>), software when asked for, and the
+    /// window's class (<see cref="WindowClass"/>).
+    /// </summary>
     public static X11PlatformOptions X11(string? setting)
     {
-        var options = new X11PlatformOptions { UseRetainedFramebuffer = true };
+        var options = new X11PlatformOptions { UseRetainedFramebuffer = true, WmClass = WindowClass };
         if (Choice(setting) is true)
         {
             options.RenderingMode = [X11RenderingMode.Software];
