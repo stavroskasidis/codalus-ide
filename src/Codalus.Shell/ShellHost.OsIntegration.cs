@@ -48,6 +48,20 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>At startup, off the UI thread: what a registration from an earlier version lacks (<see cref="OsIntegration.RepairAsync"/>).</summary>
+    private async Task RepairOsIntegrationAsync()
+    {
+        var integration = OsIntegration;
+        try
+        {
+            await Task.Run(() => integration.RepairAsync(CancellationToken.None)).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Workbench.Log.AppendLine($"[os] Repairing the system integration failed: {ex.Message}");
+        }
+    }
+
     /// <summary>How <paramref name="feature"/> stands, read off the UI thread.</summary>
     public Task<OsIntegrationStatus> OsIntegrationStatusAsync(OsIntegrationFeature feature)
     {

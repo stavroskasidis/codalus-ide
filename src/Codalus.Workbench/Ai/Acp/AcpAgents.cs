@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Codalus.Platform;
 using Codalus.Workbench.Settings;
 
 namespace Codalus.Workbench.Ai.Acp;
@@ -174,6 +175,14 @@ public sealed class AcpAgents : IAsyncDisposable, IAiExternalAnswerer
 
     /// <summary>The folder of Codalus's own Node.js (D-node) for entries with <c>"node": "builtIn"</c>, or null when it isn't installed.</summary>
     public Func<string?> BuiltInNodeFolder { get; set; } = () => null;
+
+    /// <summary>
+    /// The folder of a version manager's Node.js for entries with <c>"node": "nvm"</c> (or another manager's id), for an
+    /// agent that needs the major given; null when it has none. Chosen again at each start, so a newer one installed
+    /// meanwhile counts. Tests give their own.
+    /// </summary>
+    public Func<string, int?, string?> ManagedNodeFolder { get; set; } =
+        (manager, major) => Node.NodeVersionManagers.Resolve(manager, Environment.GetEnvironmentVariable, major, PlatformInfo.Current)?.Folder;
 
     private void OnSecretChanged(object? sender, string agent)
     {
@@ -466,18 +475,27 @@ public sealed class AcpAgents : IAsyncDisposable, IAiExternalAnswerer
     /// <summary>
     /// <paramref name="config"/> ready to start: its <c>secretEnv</c> values (read once and kept for later sessions until a
     /// key is stored or deleted, so a turn doesn't ask the OS store, which can prompt or be slow) and Codalus's Node.js
-    /// folder for <c>"node": "builtIn"</c>. Throws <see cref="AcpException"/> with what to do when one is missing.
+    /// folder for <c>"node": "builtIn"</c>, or a version manager's for its id. Throws <see cref="AcpException"/> with what to do when one is missing.
     /// </summary>
     public async Task<AcpAgentConfig> ResolveAsync(string name, AcpAgentConfig config, CancellationToken cancellationToken)
     {
-        if (config.Node is { } node)
+        if (config.Node is "builtIn")
         {
-            if (node != "builtIn")
+            config = config with { NodeFolder = BuiltInNodeFolder() ?? throw new AcpException($"{name} runs on Codalus's own Node.js, which isn't installed: connect it again (AI: Connect to an Agent…).") };
+        }
+        else if (config.Node is { } manager)
+        {
+            if (!Node.NodeVersionManagers.Names.Contains(manager))
             {
-                throw new AcpException($"ai.agents.{name}: \"node\" can only be \"builtIn\" (Codalus's own Node.js), or left out for yours.");
+                throw new AcpException($"ai.agents.{name}: \"node\" can only be \"builtIn\" (Codalus's own Node.js), {string.Join(", ", Node.NodeVersionManagers.Names)} (that version manager's), or left out for yours.");
             }
 
-            config = config with { NodeFolder = BuiltInNodeFolder() ?? throw new AcpException($"{name} runs on Codalus's own Node.js, which isn't installed: connect it again (AI: Connect to an Agent…).") };
+            var major = AcpAgentTemplates.FromTag(config.Template)?.NodeMajor;
+            config = config with
+            {
+                NodeFolder = ManagedNodeFolder(manager, major) ?? throw new AcpException(
+                    $"{name} runs on {Node.NodeVersionManagers.DisplayName(manager)}'s Node.js, which has none{(major is { } m ? $" at {m} or later" : "")} with npx now: install one with {manager}, or connect it again (AI: Connect to an Agent…)."),
+            };
         }
 
         if (config.SecretEnv.Count == 0)

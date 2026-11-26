@@ -28,7 +28,10 @@ public sealed record AcpAgentConfig(string Command, IReadOnlyList<string> Args, 
     /// <summary><c>template</c>: the template it was connected from (<c>claude@0.94.0</c>), or null for an entry written by hand.</summary>
     public string? Template { get; init; }
 
-    /// <summary><c>node</c>: <c>builtIn</c> when Codalus's own Node.js runs it (D-node, ADR 0083); null for the user's.</summary>
+    /// <summary>
+    /// <c>node</c>: <c>builtIn</c> when Codalus's own Node.js runs it (D-node, ADR 0083), a version manager's id
+    /// (<c>nvm</c>, <c>fnm</c>, <c>volta</c>, <c>asdf</c>, <c>mise</c>) for its Node.js; null for the one on the PATH.
+    /// </summary>
     public string? Node { get; init; }
 
     /// <summary>
@@ -53,7 +56,7 @@ public sealed record AcpAgentConfig(string Command, IReadOnlyList<string> Args, 
     /// <summary>The <see cref="SecretEnv"/> values, read when the session starts; never in settings, the log or a message.</summary>
     public IReadOnlyDictionary<string, string> SecretValues { get; init; } = s_none;
 
-    /// <summary>The folder of Codalus's Node.js when <see cref="Node"/> is <c>builtIn</c> (resolved when it starts), or null.</summary>
+    /// <summary>The folder of the Node.js <see cref="Node"/> names (resolved when it starts), or null.</summary>
     public string? NodeFolder { get; init; }
 
     /// <summary>The same command, arguments and environment, and the same keys (the settings or a key changed when not).</summary>
