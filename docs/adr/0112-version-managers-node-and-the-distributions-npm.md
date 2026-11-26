@@ -1,4 +1,4 @@
-# 0111. A version manager's Node.js, and the distributions' npm
+# 0112. A version manager's Node.js, and the distributions' npm
 
 - **Status:** accepted (2026-11-26; the maintainer's answers of 2026-11-26)
 - **Date:** 2026-11-26

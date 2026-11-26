@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Plugins;
 using Codalus.Workbench.Settings;
 
@@ -16,6 +17,29 @@ public sealed partial class ShellHost
 
     /// <summary>Tests: what starts the restarted IDE, instead of a process.</summary>
     internal Action<ProcessStartInfo>? RestartStarter { get; set; }
+
+    /// <summary>
+    /// <c>workbench.uiScale</c> applies when the windowing system starts (<see cref="Infrastructure.UiScale"/>): a change
+    /// offers a restart.
+    /// </summary>
+    private void OfferRestartForUiScale(object? sender, SettingsChangedEventArgs e)
+    {
+        if (!e.Affects(Infrastructure.UiScale.Setting) || !OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        Infrastructure.Ui.Post(() => _ = OfferRestartForUiScaleAsync());
+    }
+
+    private async Task OfferRestartForUiScaleAsync()
+    {
+        var restart = Localizer.Get("msg.uiScale.restart", "Restart");
+        if (await Workbench.Notifications.Info(Localizer.Get("msg.uiScale.changed", "The UI scale changes when Codalus IDE starts again."), restart).Result.ConfigureAwait(true) == restart)
+        {
+            Restart();
+        }
+    }
 
     /// <summary>Closes the window; once the IDE has exited, it starts again.</summary>
     public void Restart()
