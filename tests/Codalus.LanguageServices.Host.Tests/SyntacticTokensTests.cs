@@ -49,7 +49,14 @@ public sealed class SyntacticTokensTests : IAsyncLifetime
 
     private async Task<LanguageHostClient> StartAsync(TimeSpan? wait)
     {
-        var client = new LanguageHostClient("C# language service", ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly), policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) })
+        // The cold request's full answer waits for the syntax's, so the first answer is the syntax's however fast the full
+        // one is: without the hold the two race, and on a warm host the full one landed first (macOS CI, runs 45702937714
+        // and 45782940764: "Expected: syntactic, Actual: null").
+        var launch = ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly) with
+        {
+            Environment = wait is null ? null : new Dictionary<string, string> { ["CODALUS_LSHOST_HOLD_COLD_FULL"] = "1" },
+        };
+        var client = new LanguageHostClient("C# language service", launch, policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) })
         {
             SyntacticTokensWait = wait,
         };

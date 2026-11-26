@@ -502,8 +502,9 @@ internal sealed class LanguageServer : IAsyncDisposable
             path = Path.GetFullPath(path);
             if (_coldAnswers.TryAdd(path, ColdAnswer.Partial))
             {
-                var full = AnswerAsync(p, ct);
-                var quick = await Task.WhenAny(full, Task.Delay(coldWait, CancellationToken.None)).ConfigureAwait(false) == full && full.IsCompletedSuccessfully;
+                var syntaxFirst = s_holdColdFull ? new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) : null;
+                var full = syntaxFirst is null ? AnswerAsync(p, ct) : HeldAsync(syntaxFirst.Task, p, ct);
+                var quick =await Task.WhenAny(full, Task.Delay(coldWait, CancellationToken.None)).ConfigureAwait(false) == full && full.IsCompletedSuccessfully;
                 if (quick && answered!(full.Result))
                 {
                     _coldAnswers[path] = ColdAnswer.Full;
@@ -514,7 +515,12 @@ internal sealed class LanguageServer : IAsyncDisposable
                 // the syntax's (a parse of its own) would then hold it back by its time and the client's next request
                 // (CI's same-runner A/B, run 45531093514: full colors 5 to 7% later on Linux).
                 var syntactic = SyntacticAsync(p, ct);
-                if (await Task.WhenAny(full, syntactic).ConfigureAwait(false) == full && full.IsCompletedSuccessfully && answered!(full.Result))
+                if (syntaxFirst is not null)
+                {
+                    _ = syntactic.ContinueWith(_ => syntaxFirst.TrySetResult(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                }
+
+                if (syntaxFirst is null && await Task.WhenAny(full, syntactic).ConfigureAwait(false) == full && full.IsCompletedSuccessfully && answered!(full.Result))
                 {
                     _ = syntactic.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
                     _coldAnswers[path] = ColdAnswer.Full;
@@ -557,6 +563,13 @@ internal sealed class LanguageServer : IAsyncDisposable
 
             var text = await document.GetTextVersionAsync(ct).ConfigureAwait(false);
             return (await cold!(document, p, ct).ConfigureAwait(false), text);
+        }
+
+        // The full answer started once the gate opens (CODALUS_LSHOST_HOLD_COLD_FULL, tests only).
+        async Task<TResult> HeldAsync(Task gate, TParams p, CancellationToken ct)
+        {
+            await gate.ConfigureAwait(false);
+            return await AnswerAsync(p, ct).ConfigureAwait(false);
         }
 
         // The cold request's full answer when this request asks for the same range of the same text, else a new one.
@@ -609,6 +622,13 @@ internal sealed class LanguageServer : IAsyncDisposable
     /// client's <c>codalusSyntacticTokens</c> capability; null (other clients), never.
     /// </summary>
     private TimeSpan? _coldWait;
+
+    /// <summary>
+    /// <c>CODALUS_LSHOST_HOLD_COLD_FULL=1</c> (tests only): a C# file's first token request starts its full answer only
+    /// once the syntax's answer is there, so the syntax's answer is the one it returns. Without it the two race and the
+    /// first to land is returned, which on a warm host can be the full one (macOS CI, runs 45702937714 and 45782940764).
+    /// </summary>
+    private static readonly bool s_holdColdFull = Environment.GetEnvironmentVariable("CODALUS_LSHOST_HOLD_COLD_FULL") == "1";
 
     /// <summary>How many requests took the full answer a cold request had kept computing (tests).</summary>
     internal int ReusedColdAnswers => Volatile.Read(ref _reusedColdAnswers);
