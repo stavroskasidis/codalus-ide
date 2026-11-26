@@ -68,7 +68,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     /// <summary>Replaces Avalonia's system font collection; call it before any text is laid out.</summary>
     public static void Install() => FontManager.Current.AddFontCollection(Create());
 
-    /// <summary>A glyph typeface for a font file's bytes, or null when the platform can't read it (tests).</summary>
+    /// <summary>A glyph typeface for a font file's bytes, or null when the platform can't read it (tests). The platform keeps the stream, and disposes it.</summary>
     internal static GlyphTypeface? FromFile(Stream stream) =>
         TryCreateGlyphTypeface(PlatformImpl(FontManager.Current), stream, FontSimulations.None, out var platformTypeface)
             ? Create(platformTypeface, FontSimulations.None)

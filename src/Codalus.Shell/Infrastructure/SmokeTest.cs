@@ -348,12 +348,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // #556 (ADR 0111): the UI's text in the shipped app, whose HarfBuzz and fontconfig calls are Native AOT's.
         await StepAsync("shell.uiText", "1.1.0", "The UI's text: a variable font laid out at the weight asked for, the windows smoothing text the setting's way, and the UI's font size applied at once", async () =>
         {
-            using (var file = File.OpenRead(Path.Combine(samples, "Fonts", "InterVariable-ascii.ttf")))
             {
-                var regular = ShellSystemFonts.FromFile(file);
+                // The platform keeps (and disposes) the stream it reads a face from: one each.
+                var font = await File.ReadAllBytesAsync(Path.Combine(samples, "Fonts", "InterVariable-ascii.ttf")).ConfigureAwait(true);
+                var regular = ShellSystemFonts.FromFile(new MemoryStream(font, writable: false));
                 Check(regular is not null && ShellSystemFonts.IsVariable(regular.PlatformTypeface), "the variable font fixture reads as variable");
-                file.Position = 0;
-                var bold = ShellSystemFonts.FromFile(file)!;
+                var bold = ShellSystemFonts.FromFile(new MemoryStream(font, writable: false))!;
                 Check(VariableFonts.Apply(bold, Avalonia.Media.FontWeight.Bold), "HarfBuzz takes the variable font's weight");
                 static double Advance(Avalonia.Media.GlyphTypeface face) =>
                     Avalonia.Media.TextFormatting.TextShaper.Current.ShapeText("AI: Provider", new Avalonia.Media.TextFormatting.TextShaperOptions(face, 14)).Sum(g => g.GlyphAdvance);
