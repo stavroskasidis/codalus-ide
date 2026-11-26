@@ -173,7 +173,7 @@ public sealed class BlazorWasmTests
                 && program.Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, seconds: 240);
 
             // WebAssembly runs the components in the browser: Hot Reload needs the page open there.
-            page = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(browser!.Path)
+            page = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(browser!.Executable(profile))
             {
                 ArgumentList = { "--headless=new", "--disable-gpu", "--no-first-run", $"--user-data-dir={profile}", $"http://localhost:{port}/counter" },
                 UseShellExecute = false,

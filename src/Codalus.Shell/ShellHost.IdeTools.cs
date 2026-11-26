@@ -1643,7 +1643,7 @@ public sealed partial class ShellHost
         var start = app ?? throw new IdeToolException(NoWebAppText());
         var browser = Browsers.Find(Workbench.Settings.GetString(Browsers.SettingKey, "auto")) ?? throw new IdeToolException("No Chromium browser (Chrome, Edge or Chromium) was found; set debug.browser to one.");
         var ownProfile = Path.Combine(Paths.State, "agent-browser");
-        _agentBrowser = await AgentBrowser.StartAsync(browser.Path, ownProfile, start, Browsers.Headless, cancellationToken).ConfigureAwait(true);
+        _agentBrowser = await AgentBrowser.StartAsync(browser.Executable(ownProfile), ownProfile, start, Browsers.Headless, cancellationToken).ConfigureAwait(true);
         return (_agentBrowser, app);
     }
 
