@@ -21,6 +21,9 @@ public sealed class HotReloadAgents : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _gate = new();
     private readonly List<Agent> _agents = [];
+
+    /// <summary>The session's edits so far, for a program whose agent connects after them (<see cref="NotifyAsync"/>).</summary>
+    private readonly List<string> _sent = [];
     private Task? _accepting;
 
     /// <summary>The pipe's name, unique to this IDE.</summary>
@@ -73,21 +76,44 @@ public sealed class HotReloadAgents : IAsyncDisposable
 
             lock (_gate)
             {
-                _agents.Add(new Agent(pipe));
+                var agent = new Agent(pipe);
+                _agents.Add(agent);
+                foreach (var line in _sent)
+                {
+                    agent.Enqueue(line);
+                }
             }
+        }
+    }
+
+    /// <summary>
+    /// The debug session ended: a program the next one starts doesn't get its edits. Its programs that are still
+    /// connected stay until they end.
+    /// </summary>
+    public void SessionEnded()
+    {
+        lock (_gate)
+        {
+            _sent.Clear();
         }
     }
 
     /// <summary>
     /// Tells every connected program an edit's updated types, and waits up to <paramref name="timeout"/> for each to say
     /// its handlers ran. A program stopped at a breakpoint answers once it runs: the wait then ends with the others. The
-    /// handlers' errors, one per program that had any; a program that ended is forgotten.
+    /// handlers' errors, one per program that had any; a program that ended is forgotten. A program whose agent
+    /// connects later in the session gets the session's edits then, in order, unwaited: its agent connects from a thread
+    /// of its own, which can lose the race with an edit applied right after the program started, more so on a loaded
+    /// machine or one held at a breakpoint before it connected (macOS CI, run 45691348896: neither edit's handlers ran).
     /// </summary>
     public async Task<IReadOnlyList<string>> NotifyAsync(IReadOnlyList<HotReloadModuleUpdate> updates, TimeSpan timeout, CancellationToken cancellationToken)
     {
+        var line = "update " + string.Join(";", updates.Select(u => u.ModuleId.ToString("D") + ":" + string.Join(",", u.UpdatedTypes.Select(t => t.ToString(CultureInfo.InvariantCulture)))));
         Agent[] agents;
         lock (_gate)
         {
+            // In the lock: a program that connects now gets the line either from here or from the history, never twice.
+            _sent.Add(line);
             agents = [.. _agents];
         }
 
@@ -96,7 +122,6 @@ public sealed class HotReloadAgents : IAsyncDisposable
             return [];
         }
 
-        var line = "update " + string.Join(";", updates.Select(u => u.ModuleId.ToString("D") + ":" + string.Join(",", u.UpdatedTypes.Select(t => t.ToString(CultureInfo.InvariantCulture)))));
         var answers = await Task.WhenAll(agents.Select(a => a.SendAsync(line, timeout, cancellationToken))).ConfigureAwait(false);
         lock (_gate)
         {
@@ -198,14 +223,15 @@ public sealed class HotReloadAgents : IAsyncDisposable
             }
         }
 
-        public async Task<string?> SendAsync(string line, TimeSpan timeout, CancellationToken cancellationToken)
+        /// <summary>Sends a line; its answer, or null once the program ended.</summary>
+        public Task<string?> Enqueue(string line)
         {
             var answer = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             lock (_gate)
             {
                 if (Ended)
                 {
-                    return null;
+                    return Task.FromResult<string?>(null);
                 }
 
                 // In the lock: answers come back in the order the lines go out.
@@ -213,9 +239,15 @@ public sealed class HotReloadAgents : IAsyncDisposable
                 _lines.Writer.TryWrite(Encoding.UTF8.GetBytes(line + "\n"));
             }
 
+            return answer.Task;
+        }
+
+        public async Task<string?> SendAsync(string line, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            var answer = Enqueue(line);
             try
             {
-                return await answer.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+                return await answer.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {

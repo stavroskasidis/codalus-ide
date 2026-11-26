@@ -204,6 +204,12 @@ internal sealed class CorDebugTarget : IClrProcess
     internal static readonly TimeSpan ExitProcessGrace = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// How long a callback waits for the session to handle a module, thread or log event before it continues anyway
+    /// (<see cref="QueueThenContinue"/>): the session doesn't stop on those, so going on is what it would say.
+    /// </summary>
+    internal static readonly TimeSpan HandledWait = TimeSpan.FromSeconds(30);
+
+    /// <summary>
     /// <c>CODALUS_CLR_DEBUGGER_DROP_EXIT_PROCESS=1</c> (tests only): the runtime's <c>ExitProcess</c> is logged and
     /// dropped, as on Linux CI (run 44879237998), so a test can see the session end without it.
     /// </summary>
@@ -474,10 +480,10 @@ internal sealed class CorDebugTarget : IClrProcess
                 ContinueFromCallback(e);
                 return;
             case LoadModuleCorDebugManagedCallbackEventArgs load:
-                Queue(new ClrModuleLoaded(Module(load.Module)), e, evaluating);
+                QueueThenContinue(new ClrModuleLoaded(Module(load.Module)), e, evaluating);
                 return;
             case UnloadModuleCorDebugManagedCallbackEventArgs unload:
-                Queue(new ClrModuleUnloaded(Module(unload.Module)), e, evaluating);
+                QueueThenContinue(new ClrModuleUnloaded(Module(unload.Module)), e, evaluating);
                 lock (_gate)
                 {
                     _modules.Remove(Key(unload.Module));
@@ -485,7 +491,7 @@ internal sealed class CorDebugTarget : IClrProcess
 
                 return;
             case CreateThreadCorDebugManagedCallbackEventArgs thread:
-                Queue(new ClrThreadStarted(Thread(thread.Thread)), e, evaluating);
+                QueueThenContinue(new ClrThreadStarted(Thread(thread.Thread)), e, evaluating);
                 return;
             case ExitThreadCorDebugManagedCallbackEventArgs exit:
                 var exited = Thread(exit.Thread);
@@ -494,10 +500,10 @@ internal sealed class CorDebugTarget : IClrProcess
                     _threads.Remove(exited.Id);
                 }
 
-                Queue(new ClrThreadExited(exited), e, evaluating);
+                QueueThenContinue(new ClrThreadExited(exited), e, evaluating);
                 return;
             case LogMessageCorDebugManagedCallbackEventArgs message:
-                Queue(new ClrLogMessage(message.Message), e, evaluating);
+                QueueThenContinue(new ClrLogMessage(message.Message), e, evaluating);
                 return;
             case EvalCompleteCorDebugManagedCallbackEventArgs:
                 _eval?.TrySetResult(true);
@@ -575,6 +581,49 @@ internal sealed class CorDebugTarget : IClrProcess
         else
         {
             _events.Writer.TryWrite(clrEvent);
+        }
+    }
+
+    /// <summary>
+    /// An event the session handles without stopping (a module, a thread, a log message): it's queued, this callback
+    /// waits until the session has handled it (a module's breakpoints bound), and the continue goes from here, the
+    /// runtime's callback thread. The session continued them from its own thread, and on macOS a continue from there
+    /// as the program ended crashed mscordbi: its transport thread faulted (<c>DbgTransportSession::TransportWorker</c>,
+    /// a null access) while a thread-pool thread was sending the continue (<c>CordbRCEventThread::SendIPCEvent</c>) and
+    /// the callback thread handled the exit (<c>ExitProcessWorkItem::Do</c>); the adapter's log ended with
+    /// "continue (the session's)" after a module that loaded during the exit (CI runs 43344309044 and 45578318597). On
+    /// the callback thread the continue and the exit's handling are one after the other. Breakpoints, steps and
+    /// exceptions aren't held here: the session may evaluate on those (a condition), which needs this thread.
+    /// </summary>
+    private void QueueThenContinue(ClrEvent clrEvent, CorDebugManagedCallbackEventArgs e, bool evaluating)
+    {
+        if (evaluating)
+        {
+            Queue(clrEvent, e, true);
+            return;
+        }
+
+        var handled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_events.Writer.TryWrite(clrEvent with { Resume = go => handled.TrySetResult(go) }))
+        {
+            ContinueFromCallback(e); // the session has ended
+            return;
+        }
+
+        bool resume;
+        if (handled.Task.Wait(HandledWait))
+        {
+            resume = handled.Task.Result;
+        }
+        else
+        {
+            Continuing?.Invoke($"[clr] the session didn't handle {clrEvent.GetType().Name} in {HandledWait.TotalSeconds.ToString(CultureInfo.InvariantCulture)} s: it continues");
+            resume = true;
+        }
+
+        if (resume)
+        {
+            ContinueFromCallback(e);
         }
     }
 

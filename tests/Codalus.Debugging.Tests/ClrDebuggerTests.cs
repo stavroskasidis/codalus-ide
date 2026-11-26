@@ -231,6 +231,57 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         }
     }
 
+    /// <summary>
+    /// A module that loads, a thread that starts or ends, and a log message are continued from the runtime's callback
+    /// thread once the session has handled them, not by the session from its own thread: a continue from there as the
+    /// program ended crashed mscordbi's transport thread on macOS (CI runs 43344309044 and 45578318597; the adapter's
+    /// log ended with "continue (the session's)" after a module that loaded during the exit). A program run to its end
+    /// with no breakpoint has no stop: the session continues only its exceptions (it may evaluate on those, which needs
+    /// the callback thread), and every other continue in the log is the callback's.
+    /// </summary>
+    [Fact]
+    public async Task Modules_and_threads_are_continued_from_the_runtimes_callback_thread_not_the_sessions()
+    {
+        var logs = Directory.CreateTempSubdirectory("codalus-clr-dap-").FullName;
+        try
+        {
+            await using (var adapter = await DebugAdapter.StartAsync(Adapter() with { Environment = new Dictionary<string, string> { ["CODALUS_CLR_DEBUGGER_LOG"] = logs } }, Ct))
+            {
+                var events = new EventLog(adapter);
+                await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll], fixture.Folder, Type: "coreclr"), s_json.NetFxDebugArguments, Ct);
+                await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+                await adapter.ConfigurationDoneAsync(Ct);
+
+                Assert.Equal(15, (await events.NextAsync(DapEvents.Exited)).Body.GetProperty("exitCode").GetInt32());
+                await events.NextAsync(DapEvents.Terminated);
+            }
+
+            var log = await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(logs, "clr-dap-*.log")), Ct);
+            Assert.True(log.Contains("[clr] continue after LoadModule", StringComparison.Ordinal)
+                && log.Contains("[clr] continue after CreateThread", StringComparison.Ordinal)
+                && !log.Contains("the session didn't handle", StringComparison.Ordinal), "The adapter's log:\n" + log);
+
+            // Each of the session's continues follows an exception (the program throws and catches one), never a module,
+            // a thread or a log message.
+            string? before = null;
+            foreach (var line in log.Split('\n').Select(l => l.Trim()).Where(l => l.StartsWith("[clr] ", StringComparison.Ordinal)))
+            {
+                if (line == "[clr] continue (the session's)")
+                {
+                    Assert.True(before?.StartsWith("[clr] continue after Exception", StringComparison.Ordinal) == true, $"A continue of the session's after '{before}'. The adapter's log:\n{log}");
+                }
+                else
+                {
+                    before = line;
+                }
+            }
+        }
+        finally
+        {
+            Directory.Delete(logs, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task The_launch_gives_the_program_its_arguments_environment_and_working_directory()
     {

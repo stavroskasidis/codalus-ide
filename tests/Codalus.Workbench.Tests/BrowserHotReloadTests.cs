@@ -312,6 +312,47 @@ public sealed class BrowserHotReloadTests
         Assert.Equal(["second"], await notifying);
     }
 
+    [Fact]
+    public async Task A_program_whose_agent_connects_after_an_edit_gets_the_sessions_edits_but_not_an_ended_sessions()
+    {
+        // The agent connects from a thread of its own, which an edit applied right after the start can beat (macOS CI,
+        // run 45691348896: the program's handlers never ran).
+        await using var agents = new HotReloadAgents();
+        var (_, value) = agents.Variable();
+        var module = Guid.NewGuid();
+        Assert.Empty(await agents.NotifyAsync([Update(module, "/p.csproj")], TimeSpan.FromSeconds(30), Ct));
+        Assert.Empty(await agents.NotifyAsync([Update(module, "/p.csproj")], TimeSpan.FromSeconds(30), Ct));
+
+        await using var late = new NamedPipeClientStream(".", value, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await late.ConnectAsync(Ct);
+        using var reader = new StreamReader(late, leaveOpen: true);
+        await using var writer = new StreamWriter(late, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        read.CancelAfter(TimeSpan.FromSeconds(30));
+        Assert.Equal($"update {module:D}:{0x02000002}", await reader.ReadLineAsync(read.Token));
+        Assert.Equal($"update {module:D}:{0x02000002}", await reader.ReadLineAsync(read.Token));
+        await ShellLikeWait(() => agents.Count == 1);
+
+        // The replayed edits' answers don't stand in for the next edit's.
+        await writer.WriteLineAsync("done");
+        await writer.WriteLineAsync("done");
+        var notifying = agents.NotifyAsync([Update(module, "/p.csproj")], TimeSpan.FromSeconds(30), Ct);
+        await reader.ReadLineAsync(read.Token);
+        await writer.WriteLineAsync("error third");
+        Assert.Equal(["third"], await notifying);
+
+        // The next session's program gets none of them.
+        agents.SessionEnded();
+        await using var next = new NamedPipeClientStream(".", value, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await next.ConnectAsync(Ct);
+        await ShellLikeWait(() => agents.Count == 2);
+        using var nextReader = new StreamReader(next, leaveOpen: true);
+        var other = Guid.NewGuid();
+        notifying = agents.NotifyAsync([Update(other, "/q.csproj")], TimeSpan.FromMilliseconds(100), Ct);
+        Assert.Equal($"update {other:D}:{0x02000002}", await nextReader.ReadLineAsync(read.Token));
+        await notifying;
+    }
+
     private static async Task ShellLikeWait(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
