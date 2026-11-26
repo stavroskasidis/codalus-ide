@@ -125,6 +125,35 @@ internal static partial class BuiltIns
                 Order = 2,
             },
             ColorThemeSetting(ThemeService.Choices),
+            SettingDescriptor.Create(Theming.UiFont.FamilySetting, "\"\"", SettingType.String, shell) with
+            {
+                Title = "UI Font Family",
+                Category = "Appearance",
+                Description = "Comma-separated fonts for menus, tool windows, tabs and dialogs; the first installed one is used. Empty: the system's UI font. The editor's font is Text Editor → Font Family.",
+                Scope = SettingScope.User,
+                Order = 1,
+            },
+            SettingDescriptor.Create(Theming.UiFont.SizeSetting, "12", SettingType.Number, shell) with
+            {
+                Title = "UI Font Size",
+                Category = "Appearance",
+                Description = "The size of the UI's text in pixels (12 is 9 pt); headings and small text, and the rows of lists and trees, grow and shrink with it. The editor's size is Text Editor → Font Size.",
+                Minimum = Theming.UiFont.MinSize,
+                Maximum = Theming.UiFont.MaxSize,
+                Scope = SettingScope.User,
+                Order = 1,
+            },
+            SettingDescriptor.Create(TextRendering.Setting, "\"system\"", SettingType.String, shell) with
+            {
+                Title = "Text Rendering",
+                Category = "Appearance",
+                Description = "How text is smoothed, in the UI and the editor. System: as the system's other apps (fontconfig's settings on Linux, ClearType on Windows, grayscale on macOS). Grayscale: smooth edges with no colored fringes. Subpixel: sharper on most LCD screens, with colored fringes. Aliased: no smoothing.",
+                Enum = TextRendering.Choices,
+                EnumDescriptions = ["System", "Grayscale", "Subpixel", "Aliased"],
+                Scope = SettingScope.User,
+                Order = 1,
+            },
+            UiScaleSetting(shell),
             SettingDescriptor.Create("workbench.statusBar.visible", "true", SettingType.Boolean, shell) with
             {
                 Title = "Status Bar Visible",
@@ -457,6 +486,19 @@ internal static partial class BuiltIns
     /// <c>workbench.colorTheme</c> (D32), offering <paramref name="choices"/> (the built-in themes, and plugins' once they're
     /// known) and accepting the values written before the theme families, which read as Classic.
     /// </summary>
+    /// <summary><c>workbench.uiScale</c> (#556): Linux's alone, read at the start (<see cref="UiScale"/>).</summary>
+    public static SettingDescriptor UiScaleSetting(ContributionSource source) =>
+        SettingDescriptor.Create(UiScale.Setting, "1", SettingType.Number, source) with
+        {
+            Title = "UI Scale",
+            Category = "Appearance",
+            Description = "Linux only: makes the whole window larger or smaller, over the display's own scale (1.25 is a quarter larger), drawn at that resolution so text stays sharp. Takes effect after a restart. For when the desktop's scale isn't the one you want, such as an X11 session that doesn't say it (on Wayland, see the user guide's Troubleshooting about blurry text). Windows and macOS use the system's display scale.",
+            Minimum = UiScale.Min,
+            Maximum = UiScale.Max,
+            Scope = SettingScope.User,
+            Order = 1,
+        };
+
     public static SettingDescriptor ColorThemeSetting(IReadOnlyList<ThemeChoice> choices) =>
         SettingDescriptor.Create(ThemeService.SettingKey, "\"" + ThemeService.DefaultSetting + "\"", SettingType.String, ContributionSource.Shell) with
         {

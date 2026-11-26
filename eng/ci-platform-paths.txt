@@ -22,6 +22,10 @@ src/Codalus.Projects.Host/
 # Rendering, single instance, installation and updates
 src/Codalus.Shell/Program.cs
 src/Codalus.Shell/Infrastructure/Rendering.cs
+src/Codalus.Shell/Infrastructure/TextRendering.cs
+src/Codalus.Shell/Infrastructure/VariableFonts.cs
+src/Codalus.Shell/Infrastructure/ShellSystemFonts.cs
+src/Codalus.Shell/Infrastructure/UiScale.cs
 src/Codalus.Shell/Infrastructure/SingleInstance.cs
 src/Codalus.Shell/Infrastructure/Installation.cs
 src/Codalus.Shell/Infrastructure/MacUpdateLocator.cs

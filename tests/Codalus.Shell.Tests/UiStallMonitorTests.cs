@@ -153,8 +153,11 @@ public sealed class UiStallMonitorTests
         using var monitor = new UiStallMonitor();
         ShellFixture.Pump();
         monitor.Reset();
-        Thread.Sleep(30); // the monitor's next probe is posted
-        Thread.Sleep(300); // and waits for the UI thread, which the flow's last step holds
+
+        // The flow's last step holds the UI thread until the monitor's next probe has waited 300 ms for it. Two sleeps (30 ms
+        // for the probe to be posted, 300 for it to wait) measured nothing on a busy runner, whose monitor thread hadn't
+        // posted a probe in 330 ms (Windows CI, run 45847369745: twenty threads waiting for a processor).
+        monitor.HoldUntilAProbeWaited(300);
 
         var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => monitor.AssertResponsive("a flow ending in a stall", 100));
         Assert.Contains("didn't answer input", failure.Message, StringComparison.Ordinal);
@@ -168,8 +171,7 @@ public sealed class UiStallMonitorTests
         using var monitor = new UiStallMonitor();
         ShellFixture.Pump();
         monitor.Reset();
-        Thread.Sleep(30); // the monitor's next probe is posted
-        Thread.Sleep(300); // and waits for the UI thread, asleep in the kernel
+        monitor.HoldUntilAProbeWaited(300); // asleep in the kernel (1 ms sleeps) until a probe has waited 300 ms, however late it's posted
         await ShellFixture.PumpUntil(() => monitor.Report().LongestMilliseconds > 0);
 
         var report = monitor.Report();
