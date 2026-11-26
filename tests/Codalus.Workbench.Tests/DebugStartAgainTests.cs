@@ -916,7 +916,7 @@ public sealed class DebugStartAgainTests : IDisposable
             await pausing.WaitAsync(Timeout());
             var stop = await stopped.Task.WaitAsync(Timeout());
             Assert.Equal("pause", stop.Reason);
-            Assert.Equal(1, stop.ThreadId);
+            Assert.Equal(1, debug.DisplayThreadId(stop.ThreadId)); // the adapter's id: the session's encodes the program's place (#547)
             Assert.Equal(DebugState.Stopped, debug.State);
             Assert.Equal(["App.Program.Main"], debug.Frames.Select(f => f.Name));
             string text;

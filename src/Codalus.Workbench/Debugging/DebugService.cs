@@ -508,6 +508,12 @@ public sealed class DebugService : IAsyncDisposable
 
     public IReadOnlyList<DapThread> Threads { get; private set; } = [];
 
+    /// <summary>
+    /// The id the Threads window shows for <paramref name="threadId"/>, one of <see cref="Threads"/>: its program's own (the
+    /// OS thread's), where the session's ids encode the program's place (#547: every session is one of programs).
+    /// </summary>
+    public int DisplayThreadId(int threadId) => _adapter is { } adapter ? adapter.DisplayThreadId(threadId) : threadId;
+
     public int? SelectedThreadId { get; private set; }
 
     /// <summary>The selected thread's frames while stopped.</summary>
@@ -541,13 +547,34 @@ public sealed class DebugService : IAsyncDisposable
     /// variables expanded) as its <c>launch</c> request. The session is as any other: breakpoints, stepping, the Debug
     /// Console. Throws when the adapter doesn't start or refuses the launch.
     /// </summary>
-    public Task LaunchAdapterAsync(string name, DebugAdapterStartInfo adapter, System.Text.Json.JsonElement launch, CancellationToken cancellationToken) =>
-        StartAsync(
+    /// <returns>Its index in <see cref="Processes"/>: it joined the running session (#547), or began one (0).</returns>
+    public Task<int> LaunchAdapterAsync(string name, DebugAdapterStartInfo adapter, System.Text.Json.JsonElement launch, CancellationToken cancellationToken) =>
+        StartOrJoinAsync(
+            name,
             async ct => await DebugAdapter.StartAsync(adapter, ct, Terminal).ConfigureAwait(false),
             started => started.LaunchAsync(launch, DapJsonContext.Default.JsonElement, cancellationToken),
             attached: false,
-            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            new DebugProcess(name, null, DebugProcess.Launched, null),
             cancellationToken);
+
+    /// <summary>
+    /// Launches <paramref name="launch"/> in the running session of programs as one more, once it has joined (#547), or
+    /// in a session of its own that others can join. Throws when it couldn't start.
+    /// </summary>
+    /// <returns>Its index in <see cref="Processes"/>.</returns>
+    public async Task<int> LaunchOrJoinAsync(DebugLaunch launch, CancellationToken cancellationToken)
+    {
+        if (CanAddLaunch)
+        {
+            var (index, joined) = AddLaunch(launch, cancellationToken);
+            return await joined.ConfigureAwait(false)
+                ? index
+                : throw new InvalidOperationException($"{launch.Name} didn't start (see the Debug Console).");
+        }
+
+        await LaunchAsync([launch], cancellationToken, joinable: true).ConfigureAwait(false);
+        return 0;
+    }
 
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
@@ -899,9 +926,19 @@ public sealed class DebugService : IAsyncDisposable
             {
                 if (launch.StopAtEntry)
                 {
-                    // netcoredbg's stopAtEntry is a launch's: this program is attached to. TODO(issue): stop it at its
-                    // entry point too (a breakpoint at the entry method's first line, read from its PDB).
-                    Output?.Invoke(this, DebugOutput.Diagnostic($"[{launch.Name}] netcoredbg doesn't stop at the entry point of a program it attaches to in {(window ? "a console window" : "the integrated terminal")}: it runs to its first breakpoint. The Codalus debugger (debug.adapter) stops there.\n"));
+                    // netcoredbg's stopAtEntry is a launch's, and this program is attached to: a temporary breakpoint
+                    // at its entry point's first line (from its PDB) stops it there instead, once.
+                    if (EntryAssembly(launch.Plan) is { } entry && EntryPoints.FirstLine(entry) is var (document, line))
+                    {
+                        if (Breakpoints.At(document, line) is null)
+                        {
+                            Breakpoints.Set(new BreakpointSpec(document, line, Temporary: true));
+                        }
+                    }
+                    else
+                    {
+                        Output?.Invoke(this, DebugOutput.Diagnostic($"[{launch.Name}] Its entry point's first line isn't in a portable PDB, so it runs to its first breakpoint.\n"));
+                    }
                 }
 
                 HeldLaunch? held = null;
@@ -982,6 +1019,24 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     private static string ProgramName(LaunchPlan plan) => Path.GetFileNameWithoutExtension(EntryModule(plan));
+
+    /// <summary>The program's main assembly, by its full path: <c>dotnet exec</c>'s <c>.dll</c>, or the one next to its apphost; null when it isn't there.</summary>
+    internal static string? EntryAssembly(LaunchPlan plan)
+    {
+        var program = Path.GetFileName(plan.FileName);
+        string candidate;
+        if (Path.GetFileNameWithoutExtension(program).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+            && plan.SplitArguments().FirstOrDefault(a => a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) is { } dll)
+        {
+            candidate = Path.IsPathRooted(dll) || string.IsNullOrEmpty(plan.WorkingDirectory) ? dll : Path.Combine(plan.WorkingDirectory, dll);
+        }
+        else
+        {
+            candidate = plan.FileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? plan.FileName : Path.ChangeExtension(plan.FileName, ".dll");
+        }
+
+        return File.Exists(candidate) ? candidate : null;
+    }
 
     /// <summary>Waits until a module named <paramref name="name"/> is loaded (or <paramref name="timeout"/> passes).</summary>
     private async Task WaitForModuleAsync(string name, TimeSpan timeout, CancellationToken cancellationToken)
@@ -1168,46 +1223,56 @@ public sealed class DebugService : IAsyncDisposable
     /// Attaches to process <paramref name="processId"/>: here, or with <paramref name="remote"/> on another machine
     /// (M14c: over SSH, in a container or a WSL distribution) through netcoredbg there.
     /// </summary>
-    public async Task AttachAsync(int processId, CancellationToken cancellationToken, RemoteAttach? remote = null, string? name = null)
+    /// <returns>Its index in <see cref="Processes"/>: it joined the running session (#547), or began one (0).</returns>
+    public async Task<int> AttachAsync(int processId, CancellationToken cancellationToken, RemoteAttach? remote = null, string? name = null)
     {
         var process = new DebugProcess(name ?? ProcessName(processId), processId, DebugProcess.Attached, remote?.Target);
+        int index;
         if (remote is null && IsDesktopClrProcess(processId))
         {
             // A .NET Framework process (M43b): the desktop-CLR adapter attaches.
-            await StartAsync(
+            index = await StartOrJoinAsync(
+                process.Name,
                 ct => StartDesktopClrAdapterAsync(ct, Is32BitDesktopClrProcess(processId)),
                 adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
-                [process],
+                process,
                 cancellationToken).ConfigureAwait(false);
         }
         else if (remote is null && UseCodalusAdapter(processId))
         {
             // Codalus IDE's CoreCLR adapter (M54, ADR 0086).
-            await StartAsync(
+            index = await StartOrJoinAsync(
+                process.Name,
                 ct => StartCoreClrAdapterAsync(ct, x64: IsX64ProcessOnArm64Mac(processId)),
                 adapter => adapter.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
-                [process],
+                process,
                 cancellationToken).ConfigureAwait(false);
         }
         else if (remote is null)
         {
-            await StartAsync(ct => StartNetcoredbgAsync(ct), adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken), attached: true, [process], cancellationToken).ConfigureAwait(false);
+            index = await StartOrJoinAsync(process.Name, ct => StartNetcoredbgAsync(ct), adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken), attached: true, process, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await StartAsync(
+            index = await StartOrJoinAsync(
+                process.Name,
                 ct => StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct),
                 adapter => remote.Adapter.IsCodalus
                     ? adapter.Inner.AttachAsync(CoreClrAttach(processId) with { SourcesOnClient = true }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                     : adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
                 attached: true,
-                [process],
+                process,
                 cancellationToken).ConfigureAwait(false);
         }
 
-        OnProcess(processId);
+        if (index == 0)
+        {
+            OnProcess(processId); // the session's first program (a joining one's process is its row's)
+        }
+
+        return index;
     }
 
     private static string ProcessName(int processId)
@@ -3085,7 +3150,9 @@ public sealed class DebugService : IAsyncDisposable
             }
         }
 
-        return new BreakpointFilterContext(threadId, threadName, ProcessId, processName);
+        // The program's own thread id, which the Threads window shows and a filter names (#547: a session of programs
+        // encodes its ids with the program's place).
+        return new BreakpointFilterContext(adapter.DisplayThreadId(threadId), threadName, ProcessId, processName);
     }
 
     private async Task<bool> ShouldBreakAsync(IDebugAdapter adapter, BreakpointSpec breakpoint, StackFrame[] frames, int threadId)

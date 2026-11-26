@@ -489,7 +489,7 @@ public sealed partial class ShellHost
             run.RunStamps[name] = stamp;
         }
 
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
         Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);

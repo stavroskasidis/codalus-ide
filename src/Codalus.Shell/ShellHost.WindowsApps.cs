@@ -103,7 +103,7 @@ public sealed partial class ShellHost
 
             var (info, profiles, error) = await Runs.GetProfilesAsync(project.Path, CancellationToken.None, framework).ConfigureAwait(true);
             var plan = await Runs.LaunchPlanAsync(info, Runs.ResolveProfile(project.Path, profiles), CancellationToken.None).ConfigureAwait(true);
-            DebugLog.Clear();
+            ClearDebugLogForNewSession();
             if (error is not null)
             {
                 DebugLog.AppendLine("Ignoring the launch settings: " + error);
@@ -228,7 +228,7 @@ public sealed partial class ShellHost
             channel.AppendLine(Localizer.Format("msg.windowsApps.started", "{0} is running (process {1}).", project.Name, processId));
             if (debug)
             {
-                DebugLog.Clear();
+                ClearDebugLogForNewSession();
                 DebugLog.AppendLine($"> {aumid}: attaching to process {processId.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
                 Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
                 Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);

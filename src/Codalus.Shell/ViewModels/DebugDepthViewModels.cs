@@ -241,7 +241,10 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
 
     public int Id => Thread.Id;
 
-    public string IdText => Thread.Id.ToString(CultureInfo.InvariantCulture);
+    /// <summary>The id it shows: the program's own (the OS thread's), not the session's (<see cref="DebugService.DisplayThreadId"/>).</summary>
+    public int DisplayId { get; init; } = thread.Id;
+
+    public string IdText => DisplayId.ToString(CultureInfo.InvariantCulture);
 
     public string Name => string.IsNullOrEmpty(Thread.Name) ? "<No Name>" : Thread.Name;
 
@@ -397,7 +400,10 @@ public sealed class ThreadsViewModel : ObservableObject, IShownAware
                 {
                     _flagged.Remove(row.Id);
                 }
-            }));
+            })
+            {
+                DisplayId = _debugger.DisplayThreadId(thread.Id),
+            });
         }
 
         Rows.Reset(rows);

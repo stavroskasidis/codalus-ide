@@ -195,7 +195,20 @@ public sealed class WcfServiceIntegrationTests : IAsyncLifetime
         _service.BeginErrorReadLine();
         var exited = _service.WaitForExitAsync(ct);
         var first = await Task.WhenAny(listening.Task, exited, Task.Delay(TimeSpan.FromSeconds(90), ct));
-        Assert.True(first == listening.Task, "The service didn't start:\n" + _output);
+        if (first != listening.Task)
+        {
+            // The output under its lock, and only for a failure: the message was built on every call, reading the
+            // builder while the service's later lines went on appending to it ("A concurrent update was performed on
+            // this collection", a local run of the workbench tests, 2026-11-26).
+            string output;
+            lock (_output)
+            {
+                output = _output.ToString();
+            }
+
+            Assert.Fail("The service didn't start:\n" + output);
+        }
+
         return await listening.Task;
     }
 

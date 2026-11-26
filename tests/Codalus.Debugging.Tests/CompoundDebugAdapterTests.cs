@@ -383,6 +383,25 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task The_threads_window_shows_each_programs_own_thread_ids()
+    {
+        // #547: every session is one of programs, whose thread ids encode the program's place; the Threads window shows
+        // the program's own (the OS thread's), through a nested web app's group too.
+        var api = new FakeAdapter([new DapThread(4242, "Main Thread")]);
+        var server = new FakeAdapter([new DapThread(77, "Main Thread")]);
+        var page = new FakeAdapter([new DapThread(3, "localhost:5000")]);
+        var session = new CompoundDebugAdapter(api, "Api", independent: true) { NamesSoleProgram = false };
+        var group = new CompoundDebugAdapter(server, "Server", slots: CompoundDebugAdapter.GroupSlots);
+        await session.AddAsync("Web", _ => Task.FromResult<IDebugAdapter>(group), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 1, Ct);
+        await group.AddAsync(page, "Browser", _ => Task.CompletedTask, Ct);
+
+        var threads = await session.ThreadsAsync(Ct);
+        Assert.Equal([4242, 77, 3], threads.Select(t => session.DisplayThreadId(t.Id)));
+        Assert.NotEqual(4242, threads[0].Id); // the session's own ids route requests
+        Assert.Equal(12345, ((IDebugAdapter)api).DisplayThreadId(12345)); // an adapter's ids are its own
+    }
+
+    [Fact]
     public async Task Stop_ends_the_launched_programs_and_detaches_from_the_attached_ones()
     {
         // #547: a session of programs holds launches and attaches; ending it terminates each launched program and leaves
