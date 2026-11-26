@@ -315,7 +315,7 @@ public sealed class LinuxOsIntegration(OsLauncher launcher, string dataHome, str
         Icon=codalus
         Terminal=false
         NoDisplay=true
-        StartupWMClass=codalus
+        StartupWMClass=Codalus
         MimeType={string.Concat(MimeTypes.Select(t => t.Type + ";"))}
         X-Codalus-Integration={Marker}
 

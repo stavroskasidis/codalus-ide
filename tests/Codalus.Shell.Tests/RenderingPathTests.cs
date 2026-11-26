@@ -69,6 +69,7 @@ public sealed class RenderingPathTests
     public void X11_keeps_its_framebuffer_and_draws_in_software_only_when_asked()
     {
         Assert.True(Rendering.X11(null).UseRetainedFramebuffer);
+        Assert.Equal("Codalus", Rendering.X11(null).WmClass); // the desktop entries' StartupWMClass, the AppImage's too
         Assert.Equal(new X11PlatformOptions().RenderingMode, Rendering.X11(null).RenderingMode);
         Assert.Equal(new X11PlatformOptions().RenderingMode, Rendering.X11("gpu").RenderingMode);
         Assert.Equal([X11RenderingMode.Software], Rendering.X11("software").RenderingMode);

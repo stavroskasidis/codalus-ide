@@ -331,6 +331,7 @@ public sealed class OsIntegrationTests : IDisposable
         var desktop = await File.ReadAllTextAsync(linux.DesktopEntry, Ct);
         Assert.Contains("Exec=\"/home/ann/Apps/Codalus IDE.AppImage\" %f\n", desktop, StringComparison.Ordinal);
         Assert.Contains("NoDisplay=true\n", desktop, StringComparison.Ordinal);
+        Assert.Contains("StartupWMClass=Codalus\n", desktop, StringComparison.Ordinal); // the window's class
         Assert.Contains("MimeType=application/x-sln;application/x-slnx;application/x-slnf;application/x-csproj;application/x-vbproj;application/x-fsproj;\n", desktop, StringComparison.Ordinal);
         Assert.Contains("text/html=firefox.desktop;", await File.ReadAllTextAsync(linux.MimeAppsList, Ct), StringComparison.Ordinal);
 
