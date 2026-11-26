@@ -104,25 +104,25 @@ public sealed partial class ShellHost
             return null;
         }
 
-        if (Debugger.IsAttached)
+        if (Debugger.Processes.Count >= Codalus.Debugging.CompoundDebugAdapter.MaxParts)
         {
-            return Localizer.Get("msg.newInstance.sessionAttached", "it's attached to a process, and an attach doesn't take other programs yet.");
+            return Localizer.Get("msg.newInstance.sessionFull", "it holds as many programs as a session can.");
         }
 
-        if (Debugger.IsCompound)
+        if (WatchedServerDebugSession is not null)
         {
-            return Debugger.Processes.Count >= Codalus.Debugging.CompoundDebugAdapter.MaxParts
-                ? Localizer.Get("msg.newInstance.sessionFull", "it holds as many programs as a session can.")
-                : Localizer.Get("msg.newInstance.sessionWebApp", "it debugs a web app's server with its page, which doesn't take other programs yet.");
+            // TODO(issue): dotnet watch restarts the server by ending the session and starting it again (#75).
+            return Localizer.Get("msg.newInstance.sessionWatched", "its web app's server runs under dotnet watch, which ends the session to restart it (netcoredbg's Hot Reload while debugging).");
         }
 
-        return Localizer.Get("msg.newInstance.sessionAlone", "it debugs a program that runs alone (in a browser, on a device, on another machine, or through a plugin's debugger), which doesn't take other programs yet.");
+        return Localizer.Get("msg.newInstance.sessionStarting", "it's still starting or ending.");
     }
 
     /// <summary>
-    /// Builds <paramref name="project"/> and adds it to the running session. A project of a kind that runs on its own
-    /// (a web app's page, an AppHost, a container, a device, a packaged app, a remote window) is said instead. When the
-    /// session ended during the build, the project starts a session of its own.
+    /// Builds <paramref name="project"/> and adds it to the running session: a program on this machine or in WSL as one
+    /// more program, and every other kind (a web app, a device's, a packaged app, a remote window's, an AppHost, a
+    /// container profile) through F5's own start for it, which joins the session. When the session ended during the
+    /// build, the project starts a session of its own.
     /// </summary>
     private async Task JoinSessionAsync(string project, Launch launch)
     {
@@ -133,9 +133,23 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (Remote is null && IsMobileProject(project))
+        {
+            // A .NET MAUI app on its device: its platform's build deploys it, and the Mono debugger joins the session.
+            await JoinAsF5Async(project, () => StartOnDeviceAsync(project, debug: true)).ConfigureAwait(true);
+            return;
+        }
+
         if (WarnIfWindowsOnly(project))
         {
             return; // a WinForms, WPF, WinUI or .NET Framework app off Windows
+        }
+
+        if (Remote is null && OperatingSystem.IsWindows() && Solutions.Projects.TryGetValue(project, out var packaged) && packaged.UsesWinUI && RunsAsPackage(packaged))
+        {
+            // A packaged WinUI app: registered and started by Windows, then attached to in the session.
+            await JoinAsF5Async(project, () => TryStartPackagedAppAsync(project, debug: true)).ConfigureAwait(true);
+            return;
         }
 
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true) || launch.IsCanceled)
@@ -154,9 +168,24 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
-            if (WebKindCannotJoinReason(info, profile) is { } web)
+            if (Remote is { } remote)
             {
-                Workbench.Notifications.Warning(Localizer.Format("msg.newInstance.projectCannotJoin", "{0} can't join the running debug session: {1} Stop the session to debug it, or start it without debugging.", name, web));
+                // A remote window's project: the debugger there, through its server.
+                await JoinAsF5Async(project, () => StartRemoteAsync(remote, project, info, profile, debug: true)).ConfigureAwait(true);
+                return;
+            }
+
+            if (IsAspireHost(project))
+            {
+                // An AppHost: it joins, and so do its projects, as F5's do.
+                await JoinAsF5Async(project, () => StartAspireAsync(project, debug: true)).ConfigureAwait(true);
+                return;
+            }
+
+            if (IsContainerProfile(profile))
+            {
+                // Its "Container (Dockerfile)" profile: the container's program joins, launched or attached to there.
+                await JoinAsF5Async(project, () => StartInContainerAsync(project, info, profile!, debug: true)).ConfigureAwait(true);
                 return;
             }
 
@@ -164,6 +193,11 @@ public sealed partial class ShellHost
             if (error is not null)
             {
                 DebugLog.AppendLine($"[{name}] Ignoring the launch settings: {error}");
+            }
+
+            if (plan.Wsl is null && await JoinWebAppAsync(project, info, profile, plan, launch).ConfigureAwait(true))
+            {
+                return; // a web app's page, with its server or its dev server (#547's web step)
             }
 
             debugLaunch = plan.Wsl is not null
@@ -253,53 +287,100 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// Why <paramref name="project"/> can't join a running session, before it's built, or null. These kinds start on
-    /// their own today (F5's own paths); TODO(issue): #547's later steps add them to the session (ADR 0109).
+    /// Why <paramref name="project"/> can't join a running session, before it's built, or null: a second AppHost (one
+    /// runs at a time: its resources, its dashboard and the IDE's endpoint are its own).
     /// </summary>
-    private string? ProjectCannotJoinReason(string project)
+    private string? ProjectCannotJoinReason(string project) =>
+        IsAspireHost(project) && _aspire is not null
+            ? Localizer.Get("msg.newInstance.aspireRunning", "an AppHost runs already, and one runs at a time (its resources, its dashboard and the IDE's endpoint are its own).")
+            : null;
+
+    /// <summary>
+    /// A kind of project F5 starts its own way (a device, a packaged app, a remote window, an AppHost, a container) joins
+    /// the session through that way, whose start adds it to the running session (#547's last step, ADR 0109).
+    /// </summary>
+    private async Task JoinAsF5Async(string project, Func<Task> start)
     {
-        if (Remote is not null)
+        var before = Debugger.Processes.Count;
+        Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
+        Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
+        Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+        try
         {
-            return Localizer.Get("msg.newInstance.remoteWindow", "in a remote window a project is debugged on its own.");
+            await start().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or IOException or JsonRpcRemoteException or JsonRpcConnectionLostException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.newInstance.couldNotDebug", "Could not start debugging {0}: {1}", Path.GetFileNameWithoutExtension(project), ex.Message));
+            return;
         }
 
-        if (IsMobileProject(project))
+        if (Debugger.IsActive && Debugger.Processes.Count > before)
         {
-            return Localizer.Get("msg.newInstance.mobile", "a mobile app is debugged on its device, in a session of its own.");
+            _joinedInstances.Add(new JoinedInstance(project, before));
+            StatusBar.ShowMessage(Localizer.Format("msg.newInstance.joined", "{0} joined the debug session.", Path.GetFileNameWithoutExtension(project)), TimeSpan.FromSeconds(4));
         }
-
-        if (IsAspireHost(project))
-        {
-            return Localizer.Get("msg.newInstance.aspire", "an Aspire AppHost debugs its projects in a session of its own.");
-        }
-
-        if (OperatingSystem.IsWindows() && Solutions.Projects.TryGetValue(project, out var info) && info.UsesWinUI && RunsAsPackage(info))
-        {
-            return Localizer.Get("msg.newInstance.packaged", "a packaged app is started by Windows and debugged in a session of its own.");
-        }
-
-        return null;
     }
 
-    /// <summary>Why a project of <paramref name="info"/> with <paramref name="profile"/> can't join a running session (its launch profile's kind), or null.</summary>
-    private string? WebKindCannotJoinReason(RunInfo info, LaunchProfile? profile)
+    /// <summary>
+    /// A web app joins the running session (#547's web step, ADR 0109), and true; false when it isn't one whose page is
+    /// debugged. A Blazor WebAssembly app's page is one more program (its dev server runs beside it); a web app debugged
+    /// with its page joins as one program, its server and its page together, as F5 debugs it. Neither gets the
+    /// session's Hot Reload: that stays its first program's (TODO(issue)). When the session ended during the build, the
+    /// app starts as F5 starts it.
+    /// </summary>
+    private async Task<bool> JoinWebAppAsync(string project, RunInfo info, LaunchProfile? profile, LaunchPlan plan, Launch launch)
     {
-        if (IsContainerProfile(profile))
+        var wasm = LaunchPlanner.BrowserDebugTarget(info, profile);
+        var page = wasm is null ? LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) : null;
+        if (wasm is null && page is null)
         {
-            return Localizer.Get("msg.newInstance.container", "its launch profile runs it in a container, which is debugged in a session of its own.");
+            return false;
         }
 
-        if (LaunchPlanner.BrowserDebugTarget(info, profile) is not null)
+        var name = Path.GetFileNameWithoutExtension(project);
+        if (!Debugger.IsActive)
         {
-            return Localizer.Get("msg.newInstance.webAssembly", "a Blazor WebAssembly app is debugged in the browser, in a session of its own.");
+            await StartDebuggingAsync(project, launch).ConfigureAwait(true);
+            if (Debugger.IsActive)
+            {
+                _sessionProject = project;
+            }
+
+            return true;
         }
 
-        if (LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is not null)
+        if (SessionCannotJoinReason() is { } reason)
         {
-            return Localizer.Get("msg.newInstance.webPage", "a web app whose page is debugged too is a session of its own (its server and its page).");
+            Workbench.Notifications.Warning(Localizer.Format("msg.newInstance.sessionCannotJoin", "{0} can't join the running debug session: {1} Stop it to debug {0}, or start {0} without debugging.", name, reason));
+            return true;
         }
 
-        return null;
+        Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
+        Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
+        Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+        int? index;
+        if (wasm is { } target)
+        {
+            index = await StartBrowserDebuggingAsync(project, target, joining: true).ConfigureAwait(true);
+        }
+        else
+        {
+            if (BlazorProjects.IsWebAppServer(project, Solutions.Projects) && Workbench.Settings.GetBoolean(DebugHotReloadSetting, true))
+            {
+                DebugLog.AppendLine(Localizer.Format("msg.browserDebug.joinedWithoutHotReload", "{0} joined the session without Hot Reload: edits to it take effect after a restart.", name));
+            }
+
+            index = await StartCompoundDebuggingAsync(project, plan, page!.Value, joining: true, stopAtEntry: launch.StopAtEntry).ConfigureAwait(true);
+        }
+
+        if (index is { } joined)
+        {
+            _joinedInstances.Add(new JoinedInstance(project, joined));
+            StatusBar.ShowMessage(Localizer.Format("msg.newInstance.joined", "{0} joined the debug session.", name), TimeSpan.FromSeconds(4));
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -324,6 +405,18 @@ public sealed partial class ShellHost
             {
                 await JoinSessionAsync(project, launch).ConfigureAwait(true);
             }
+        }
+    }
+
+    /// <summary>
+    /// A start clears the Debug Console for its session, unless it joins a running one (#547): the console is the
+    /// session's, every program's output in it.
+    /// </summary>
+    private void ClearDebugLogForNewSession()
+    {
+        if (!Debugger.IsActive)
+        {
+            DebugLog.Clear();
         }
     }
 

@@ -489,7 +489,7 @@ public sealed partial class ShellHost
             run.RunStamps[name] = stamp;
         }
 
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
         Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
@@ -748,7 +748,7 @@ public sealed partial class ShellHost
                     return false;
                 }
 
-                if (Debugger.IsActive && !Debugger.IsCompound)
+                if (Debugger.IsActive && !Debugger.CanAddLaunch)
                 {
                     StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
                     return false;

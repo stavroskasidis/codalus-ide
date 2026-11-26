@@ -146,7 +146,7 @@ public sealed partial class ShellHost
         }
 
         var launches = new List<DebugLaunch>();
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         _pendingBrowserUrls.Clear();
         foreach (var target in targets)
         {
@@ -270,7 +270,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task AttachToRemoteProcessAsync(string? argument = null)
     {
-        if (Debugger.IsActive)
+        if (Debugger.IsActive && !Debugger.CanAddLaunch)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
@@ -454,7 +454,7 @@ public sealed partial class ShellHost
 
         try
         {
-            DebugLog.Clear();
+            ClearDebugLogForNewSession();
             DebugLog.AppendLine($"Attaching to {process.Name} ({process.Id.ToString(CultureInfo.InvariantCulture)}) on {target.Display} through {debugger.Path}…");
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);

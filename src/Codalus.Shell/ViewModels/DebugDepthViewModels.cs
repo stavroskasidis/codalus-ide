@@ -24,11 +24,14 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
     private string? _error;
     private int _generation;
 
+    /// <summary>The latest evaluation (the UI thread's): the one whose answer fills the rows.</summary>
+    private Task _evaluation = Task.CompletedTask;
+
     public QuickWatchViewModel(DebugService debugger, Func<string, Task> addWatch)
     {
         _debugger = debugger;
         _addWatch = addWatch;
-        _refresh = new ShownRefresh(() => _ = ReevaluateAsync(), stale: false);
+        _refresh = new ShownRefresh(() => _ = StartEvaluation(), stale: false);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
@@ -86,8 +89,22 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
             Expression = expression;
         }
 
-        await ReevaluateAsync().ConfigureAwait(true);
+        // A refresh can start a newer evaluation of the same expression meanwhile (the window shown for the first time
+        // refreshes it), which makes this one's answer an earlier one's: it's the newer one that fills the rows, so this
+        // returns once the latest has (DebugDepthTests found the rows empty after it returned, once in a full run).
+        var evaluation = StartEvaluation();
+        await evaluation.ConfigureAwait(true);
+        while (!ReferenceEquals(_evaluation, evaluation))
+        {
+            evaluation = _evaluation;
+            await evaluation.ConfigureAwait(true);
+        }
     }
+
+    private Task StartEvaluation() => _evaluation = ReevaluateAsync();
+
+    /// <summary>A stop's refresh, as the debugger's <c>Stopped</c> asks for one (tests: one that starts during an evaluation).</summary>
+    internal void RequestRefresh() => _refresh.Request();
 
     private async Task ReevaluateAsync()
     {
@@ -148,7 +165,7 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
         var error = await VariableEditing.SetAsync(_debugger, node, value, Roots.Contains(node)).ConfigureAwait(true);
         if (error is null)
         {
-            await ReevaluateAsync().ConfigureAwait(true);
+            await StartEvaluation().ConfigureAwait(true);
         }
 
         return error;
@@ -224,7 +241,10 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
 
     public int Id => Thread.Id;
 
-    public string IdText => Thread.Id.ToString(CultureInfo.InvariantCulture);
+    /// <summary>The id it shows: the program's own (the OS thread's), not the session's (<see cref="DebugService.DisplayThreadId"/>).</summary>
+    public int DisplayId { get; init; } = thread.Id;
+
+    public string IdText => DisplayId.ToString(CultureInfo.InvariantCulture);
 
     public string Name => string.IsNullOrEmpty(Thread.Name) ? "<No Name>" : Thread.Name;
 
@@ -380,7 +400,10 @@ public sealed class ThreadsViewModel : ObservableObject, IShownAware
                 {
                     _flagged.Remove(row.Id);
                 }
-            }));
+            })
+            {
+                DisplayId = _debugger.DisplayThreadId(thread.Id),
+            });
         }
 
         Rows.Reset(rows);

@@ -41,7 +41,7 @@ public sealed class CallStackExternalCodeTests
         Assert.Equal(FrameRow.ExternalCode, row.Name);
         Assert.Equal(string.Empty, row.Location);
         Assert.False(callStack.IsEmpty);
-        Assert.Equal(1, callStack.SelectedThread?.Id);
+        Assert.Equal(1, debug.DisplayThreadId(callStack.SelectedThread!.Id)); // the adapter's id (#547: the session's encodes the program's place)
 
         // Not a frame of the adapter's: activating it selects no frame (Locals would ask the adapter for its scopes) and opens nothing.
         await callStack.ActivateAsync(row);

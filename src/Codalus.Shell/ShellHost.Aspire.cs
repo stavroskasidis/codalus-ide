@@ -154,11 +154,19 @@ public sealed partial class ShellHost
         {
             if (debug)
             {
-                DebugLog.Clear();
+                ClearDebugLogForNewSession();
                 Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
                 Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
                 Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
-                await Debugger.LaunchAsync([new DebugLaunch(name, plan)], CancellationToken.None, compound: true).ConfigureAwait(true);
+                if (Debugger.CanAddLaunch)
+                {
+                    // Start New Instance (#547): the AppHost joins the running session, and its projects join it as F5's do.
+                    await Debugger.LaunchOrJoinAsync(new DebugLaunch(name, plan), CancellationToken.None).ConfigureAwait(true);
+                }
+                else
+                {
+                    await Debugger.LaunchAsync([new DebugLaunch(name, plan)], CancellationToken.None, compound: true).ConfigureAwait(true);
+                }
             }
             else
             {
@@ -345,7 +353,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (Debugger.IsActive)
+        if (Debugger.IsActive && !Debugger.CanAddLaunch)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
@@ -363,7 +371,7 @@ public sealed partial class ShellHost
 
         try
         {
-            DebugLog.Clear();
+            ClearDebugLogForNewSession();
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);

@@ -91,7 +91,7 @@ public sealed class LongArrayTests
             Assert.Equal([(1000, 1000)], VariablesOf(log, 5).Select(r => (r.Start ?? -1, r.Count ?? -1)));
             Assert.Equal(("[1000]", "1000", "numbers[1000]"), (elements.Nodes[0].Name, elements.Nodes[0].Value, elements.Nodes[0].EvaluateName));
             Assert.Equal("[1999]", elements.Nodes[^1].Name);
-            Assert.Equal(5, elements.Nodes[0].ParentReference); // set in the array, whichever range it shows in
+            Assert.Equal(5 * Codalus.Debugging.CompoundDebugAdapter.MaxParts, elements.Nodes[0].ParentReference); // set in the array, whichever range it shows in (the session's reference: the adapter's times its programs, #547)
             Assert.InRange(elements.Rows.Count, 1, 40);
             Assert.InRange(Volatile.Read(ref DataTipRow.Built) - built, 1, 60); // it built 500,500 for 1,000 members
             monitor.AssertResponsive("opening a range of 1,000 elements", 1000);

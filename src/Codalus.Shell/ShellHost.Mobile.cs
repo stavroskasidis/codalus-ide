@@ -407,7 +407,7 @@ public sealed partial class ShellHost
 
         using var failed = new CancellationTokenSource();
         _ = program.Exited.ContinueWith(t => { if (t.Result != 0) { failed.Cancel(); } }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         DebugLog.AppendLine($"> {name}: the Mono debugger, port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
         try
         {

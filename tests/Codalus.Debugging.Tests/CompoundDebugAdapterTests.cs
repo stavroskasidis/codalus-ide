@@ -328,6 +328,97 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task A_web_apps_group_nests_in_a_session_of_programs_with_ids_that_stay_within_an_int()
+    {
+        // #547: a web app's server and its page join a session of programs as one of them, a group of GroupSlots. Its
+        // ids are multiplied by both sessions; a Linux thread id (up to 2^22) still fits an int, and every request
+        // reaches the adapter it came from.
+        const int Tid = (1 << 22) - 1;
+        var api = new FakeAdapter([new DapThread(Tid, "Main Thread")]);
+        var server = new FakeAdapter([new DapThread(Tid, "Main Thread")]);
+        var page = new FakeAdapter([new DapThread(3, "localhost:5000/counter")]);
+        var session = new CompoundDebugAdapter(api, "Api", independent: true) { NamesSoleProgram = false };
+        var group = new CompoundDebugAdapter(server, "Server", slots: CompoundDebugAdapter.GroupSlots);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CompoundDebugAdapter(server, "Server", slots: 1));
+        await session.AddAsync("Web", _ => Task.FromResult<IDebugAdapter>(group), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 1, Ct);
+        await group.AddAsync(page, "Browser", _ => Task.CompletedTask, Ct);
+        Assert.Same(group, session.AdapterOf(1));
+        Assert.Null(session.AdapterOf(2));
+
+        const int G = CompoundDebugAdapter.GroupSlots;
+        var threads = await session.ThreadsAsync(Ct);
+        Assert.Equal(
+            [
+                new DapThread(Tid * M, "Api: Main Thread"),
+                new DapThread(((Tid * G) + 0) * M + 1, "Web: Main Thread"),
+                new DapThread(((3 * G) + 1) * M + 1, "Web: Browser: localhost:5000/counter"),
+            ],
+            threads);
+        Assert.All(threads, t => Assert.True(t.Id > 0));
+
+        await session.ContinueAsync(threads[1].Id, Ct);
+        Assert.Contains($"continue {Tid}", server.Requests);
+        Assert.DoesNotContain($"continue {Tid}", api.Requests);
+        var frames = (await session.StackTraceAsync(threads[2].Id, 20, Ct)).StackFrames;
+        Assert.Contains("stackTrace 3", page.Requests);
+        await session.ScopesAsync(frames[0].Id, Ct);
+        Assert.Contains("scopes 7", page.Requests);
+    }
+
+    [Fact]
+    public async Task The_session_disposes_every_programs_adapter_those_that_ended_before_it_too()
+    {
+        // #547: a page joined as a program, and js-debug's DAP server outlives its session unless its adapter is
+        // disposed; a program ends as its adapter closes (Stop's disconnect), before the session is disposed.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var page = new FakeAdapter([new DapThread(1, "localhost:5000")]) { ClosesOnDispose = false };
+        var session = new CompoundDebugAdapter(first, "Debuggee", independent: true);
+        await session.AddAsync("Browser", _ => Task.FromResult<IDebugAdapter>(page), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 1, Ct);
+        await page.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.False(page.Disposed);
+
+        await session.DisposeAsync();
+        Assert.True(page.Disposed);
+        Assert.True(first.Disposed);
+    }
+
+    [Fact]
+    public async Task The_threads_window_shows_each_programs_own_thread_ids()
+    {
+        // #547: every session is one of programs, whose thread ids encode the program's place; the Threads window shows
+        // the program's own (the OS thread's), through a nested web app's group too.
+        var api = new FakeAdapter([new DapThread(4242, "Main Thread")]);
+        var server = new FakeAdapter([new DapThread(77, "Main Thread")]);
+        var page = new FakeAdapter([new DapThread(3, "localhost:5000")]);
+        var session = new CompoundDebugAdapter(api, "Api", independent: true) { NamesSoleProgram = false };
+        var group = new CompoundDebugAdapter(server, "Server", slots: CompoundDebugAdapter.GroupSlots);
+        await session.AddAsync("Web", _ => Task.FromResult<IDebugAdapter>(group), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 1, Ct);
+        await group.AddAsync(page, "Browser", _ => Task.CompletedTask, Ct);
+
+        var threads = await session.ThreadsAsync(Ct);
+        Assert.Equal([4242, 77, 3], threads.Select(t => session.DisplayThreadId(t.Id)));
+        Assert.NotEqual(4242, threads[0].Id); // the session's own ids route requests
+        Assert.Equal(12345, ((IDebugAdapter)api).DisplayThreadId(12345)); // an adapter's ids are its own
+    }
+
+    [Fact]
+    public async Task Stop_ends_the_launched_programs_and_detaches_from_the_attached_ones()
+    {
+        // #547: a session of programs holds launches and attaches; ending it terminates each launched program and leaves
+        // each attached one running, whichever began the session.
+        var attached = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var launched = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var session = new CompoundDebugAdapter(attached, "Service", independent: true, attached: true);
+        Assert.True(session.AllAttached);
+        await session.AddAsync("Client", _ => Task.FromResult<IDebugAdapter>(launched), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 1, Ct);
+        Assert.False(session.AllAttached);
+
+        await session.DisconnectAsync(terminateDebuggee: true, Ct);
+        Assert.Contains("disconnect False", attached.Requests);
+        Assert.Contains("disconnect True", launched.Requests);
+    }
+
+    [Fact]
     public async Task A_program_added_under_its_callers_index_is_reported_and_reached_by_it()
     {
         // The debug service numbers its programs before their adapters start (an Aspire AppHost's projects added at
