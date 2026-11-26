@@ -25,7 +25,7 @@ public sealed class EnvironmentDocument : ShellDocument
 }
 
 /// <summary>A tool's row: how it stands, and its fix.</summary>
-public sealed class ToolRowViewModel(ToolStatus tool, InstallPlan? plan, Func<ToolStatus, Task> install)
+public sealed class ToolRowViewModel(ToolStatus tool, InstallPlan? plan, Func<ToolStatus, Task> install, Action? manage = null)
 {
     public ToolStatus Tool { get; } = tool;
 
@@ -64,6 +64,11 @@ public sealed class ToolRowViewModel(ToolStatus tool, InstallPlan? plan, Func<To
     public string? Command => plan?.Command;
 
     public ICommand FixCommand => new RelayCommand(() => _ = install(Tool));
+
+    /// <summary>The .NET SDK's row opens the SDK manager (ADR 0111): Manage….</summary>
+    public bool CanManage => manage is not null;
+
+    public ICommand ManageCommand => new RelayCommand(() => manage?.Invoke());
 }
 
 /// <summary>Every tool Codalus IDE uses, as found now, with a fix for what's missing; Check Again runs the check.</summary>
@@ -112,7 +117,7 @@ public sealed class EnvironmentViewModel : ObservableObject
         Rows.Clear();
         foreach (var tool in _shell.Tools)
         {
-            Rows.Add(new ToolRowViewModel(tool, _shell.PlanFor(tool), t => _shell.InstallToolAsync(t)));
+            Rows.Add(new ToolRowViewModel(tool, _shell.PlanFor(tool), t => _shell.InstallToolAsync(t), tool.Id is "dotnet" or "dotnet-runtime" ? _shell.OpenDotnetSdks : null));
         }
     }
 }

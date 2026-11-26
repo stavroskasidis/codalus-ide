@@ -358,7 +358,7 @@ internal static partial class BuiltIns
         ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties", "toolbox"];
 
     /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
-    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId, ShellHost.CodeSearchToolWindowId, RemotePortsViewModel.ToolWindowId, AndroidDeviceManagerViewModel.ToolWindowId, AndroidSdkManagerViewModel.ToolWindowId, DeviceLogViewModel.ToolWindowId };
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId, ShellHost.CodeSearchToolWindowId, RemotePortsViewModel.ToolWindowId, AndroidDeviceManagerViewModel.ToolWindowId, AndroidSdkManagerViewModel.ToolWindowId, DeviceLogViewModel.ToolWindowId, ShellHost.DotnetSdksWindow };
 
     /// <summary>
     /// Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one (Code Search's window

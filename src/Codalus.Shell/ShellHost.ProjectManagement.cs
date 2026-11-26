@@ -110,7 +110,7 @@ public sealed partial class ShellHost
             return null;
         }
 
-        return OpenManagement("sdks", () => new SdkViewModel(ProjectManagement, Workbench.Notifications, ReopenSolutionAsync), _ => ".NET SDKs");
+        return OpenManagement("sdks", () => new SdkViewModel(ProjectManagement, Workbench.Notifications, ReopenSolutionAsync, OpenDotnetSdks), _ => ".NET SDKs");
     }
 
     private T OpenManagement<T>(string id, Func<T> create, Func<T, string> title)

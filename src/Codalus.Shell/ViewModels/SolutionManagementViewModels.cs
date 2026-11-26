@@ -741,9 +741,10 @@ public sealed class SdkViewModel : ObservableObject, ILoadable
     private string _rollForward = "latestFeature";
     private string? _error;
 
-    public SdkViewModel(ProjectManagementService management, NotificationService notifications, Func<Task> restartHost)
+    public SdkViewModel(ProjectManagementService management, NotificationService notifications, Func<Task> restartHost, Action? manage = null)
     {
         _management = management;
+        ManageCommand = new RelayCommand(() => manage?.Invoke(), () => manage is not null);
         _notifications = notifications;
         _restartHost = restartHost;
         PinCommand = new RelayCommand(() => _ = PinAsync(_selected?.Version), () => _selected is not null);
@@ -762,6 +763,9 @@ public sealed class SdkViewModel : ObservableObject, ILoadable
     public ICommand UnpinCommand { get; }
 
     public ICommand RefreshCommand { get; }
+
+    /// <summary>Opens Tools → .NET SDKs (ADR 0111): install, update and remove SDKs for the whole machine.</summary>
+    public ICommand ManageCommand { get; }
 
     public string ResolvedText => _info?.ResolvedVersion is { } version ? $"In use: .NET SDK {version} ({_info.ResolvedSdk})" : "In use: unknown";
 

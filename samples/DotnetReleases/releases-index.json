@@ -1,0 +1,69 @@
+{
+  "releases-index": [
+    {
+      "channel-version": "11.0",
+      "latest-release": "11.0.0",
+      "latest-release-date": "2026-11-10",
+      "security": false,
+      "latest-runtime": "11.0.0",
+      "latest-sdk": "11.0.100",
+      "product": ".NET",
+      "support-phase": "active",
+      "eol-date": "2028-11-14",
+      "release-type": "sts",
+      "releases.json": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/11.0/releases.json"
+    },
+    {
+      "channel-version": "10.0",
+      "latest-release": "10.0.12",
+      "latest-release-date": "2026-11-10",
+      "security": true,
+      "latest-runtime": "10.0.12",
+      "latest-sdk": "10.0.401",
+      "product": ".NET",
+      "support-phase": "active",
+      "eol-date": "2028-11-14",
+      "release-type": "lts",
+      "releases.json": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json"
+    },
+    {
+      "channel-version": "9.0",
+      "latest-release": "9.0.11",
+      "latest-release-date": "2026-11-10",
+      "security": true,
+      "latest-runtime": "9.0.11",
+      "latest-sdk": "9.0.308",
+      "product": ".NET",
+      "support-phase": "eol",
+      "eol-date": "2026-11-10",
+      "release-type": "sts",
+      "releases.json": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/9.0/releases.json"
+    },
+    {
+      "channel-version": "8.0",
+      "latest-release": "8.0.22",
+      "latest-release-date": "2026-11-10",
+      "security": true,
+      "latest-runtime": "8.0.22",
+      "latest-sdk": "8.0.416",
+      "product": ".NET",
+      "support-phase": "eol",
+      "eol-date": "2026-11-10",
+      "release-type": "lts",
+      "releases.json": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/8.0/releases.json"
+    },
+    {
+      "channel-version": "12.0",
+      "latest-release": "12.0.0-preview.1.27060.1",
+      "latest-release-date": "2027-02-09",
+      "security": false,
+      "latest-runtime": "12.0.0-preview.1.27060.1",
+      "latest-sdk": "12.0.100-preview.1.27060.1",
+      "product": ".NET",
+      "support-phase": "preview",
+      "eol-date": null,
+      "release-type": "lts",
+      "releases.json": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/12.0/releases.json"
+    }
+  ]
+}
