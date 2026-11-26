@@ -117,7 +117,8 @@ public sealed class ColorItemViewModel(FontsAndColorsViewModel owner, ColorItemK
 /// Tools → Fonts and Colors (M23a): the colors of kinds of code, of the editor and of the window, over the active
 /// theme. A color typed here goes into <c>editor.tokenColorCustomizations</c> or <c>workbench.colorCustomizations</c>,
 /// for the active theme only or for every theme (<see cref="ForAllThemes"/>); Reset removes it. Fonts are the editor
-/// settings (<c>editor.fontFamily</c>, <c>editor.fontSize</c>), linked from here.
+/// settings (<c>editor.fontFamily</c>, <c>editor.fontSize</c>) and the UI's (<c>workbench.fontFamily</c>,
+/// <c>workbench.fontSize</c>), linked from here.
 /// </summary>
 public sealed class FontsAndColorsViewModel : ObservableObject
 {
@@ -172,6 +173,7 @@ public sealed class FontsAndColorsViewModel : ObservableObject
 
         shell.ThemeChanged += (_, _) => Ui.Post(Refresh);
         OpenFontSettingsCommand = new RelayCommand(_ => shell.OpenSettings("editor.font"));
+        OpenUiFontSettingsCommand = new RelayCommand(_ => shell.OpenSettings(UiFontQuery));
         Refresh();
         Fill();
     }
@@ -181,6 +183,12 @@ public sealed class FontsAndColorsViewModel : ObservableObject
     public ObservableCollection<ColorItemViewModel> Items { get; } = [];
 
     public RelayCommand OpenFontSettingsCommand { get; }
+
+    /// <summary>The settings search the UI Font button opens: the UI's font family and size (#556).</summary>
+    public const string UiFontQuery = "workbench.font";
+
+    /// <summary>The Environment's font, as the classic IDE's Fonts and Colors offers it beside the editor's (#556).</summary>
+    public RelayCommand OpenUiFontSettingsCommand { get; }
 
     public string ThemeTitle => ThemeService.CustomizationTitle(_shell.Theme.ActiveTheme);
 

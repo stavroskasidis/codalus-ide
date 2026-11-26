@@ -345,6 +345,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(shell.Workbench.Settings.GetValue("editor.fontSize").GetRawText() == fontSize, "Default's settings came back");
         }).ConfigureAwait(true);
 
+        // #556 (ADR 0111): the UI's text in the shipped app, whose HarfBuzz and fontconfig calls are Native AOT's.
+        await StepAsync("shell.uiText", "1.1.0", "The UI's text: a variable font laid out at the weight asked for, the windows smoothing text the setting's way, and the UI's font size applied at once", async () =>
+        {
+            using (var file = File.OpenRead(Path.Combine(samples, "Fonts", "InterVariable-ascii.ttf")))
+            {
+                var regular = ShellSystemFonts.FromFile(file);
+                Check(regular is not null && ShellSystemFonts.IsVariable(regular.PlatformTypeface), "the variable font fixture reads as variable");
+                file.Position = 0;
+                var bold = ShellSystemFonts.FromFile(file)!;
+                Check(VariableFonts.Apply(bold, Avalonia.Media.FontWeight.Bold), "HarfBuzz takes the variable font's weight");
+                static double Advance(Avalonia.Media.GlyphTypeface face) =>
+                    Avalonia.Media.TextFormatting.TextShaper.Current.ShapeText("AI: Provider", new Avalonia.Media.TextFormatting.TextShaperOptions(face, 14)).Sum(g => g.GlyphAdvance);
+                Check(Advance(bold) > Advance(regular!), $"bold is laid out wider than regular ({Advance(bold):F1} against {Advance(regular!):F1})");
+            }
+
+            Check(Avalonia.Media.TextOptions.GetTextOptions(window) == shell.TextRendering.Current, $"the main window smooths text the setting's way ({shell.TextRendering.Current.TextRenderingMode}, {shell.TextRendering.Current.TextHintingMode})");
+            var settings = shell.Workbench.Settings;
+            await settings.SetAsync(Theming.UiFont.SizeSetting, 14, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.FontSize == 14, "the UI font size applies at once").ConfigureAwait(true);
+            await settings.SetAsync(Theming.UiFont.SizeSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.FontSize == Theming.UiFont.DefaultSize, "and goes back to 12").ConfigureAwait(true);
+        }).ConfigureAwait(true);
+
         // M34d: the UI gallery's empty states, before a solution opens.
         await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryEmptyStepAsync).ConfigureAwait(true);
 
