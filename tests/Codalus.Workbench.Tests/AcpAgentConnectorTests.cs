@@ -121,7 +121,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
     {
         var template = Template(AcpSignInCheck.SessionNew);
         StandIns();
-        var met = await _connector.CheckAsync(template, codalusNode: false, Ct);
+        var met = await _connector.CheckAsync(template, node: null, Ct);
         Assert.True(met.Met);
         Assert.Equal(["node", "npx"], met.Rows.Select(r => r.Id));
         Assert.Equal(("22.11.0", "22"), (met.Rows[0].Version, met.Rows[0].Needed));
@@ -131,7 +131,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
 
         // Ubuntu's Node.js 18 for an agent that needs 22: too old; no snap or apt here, so the page only.
         StandIns(node: "v18.19.1");
-        var old = await _connector.CheckAsync(template, codalusNode: false, Ct);
+        var old = await _connector.CheckAsync(template, node: null, Ct);
         Assert.Equal(AcpRequirementState.TooOld, old.Rows[0].State);
         Assert.Equal("Install Node.js 22 or later", old.InstallTitle);
         Assert.Equal(["page"], old.Install.Select(o => o.Id));
@@ -140,11 +140,11 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         // apt-cache says the candidate is 22 and snap is there: both offered, with their exact commands.
         StandInNode.Program(_connector.SearchPath!, "apt-cache", "nodejs:\n  Installed: (none)\n  Candidate: 22.12.0-1nodesource1");
         StandInNode.Program(_connector.SearchPath!, "snap", "");
-        var offered = await _connector.CheckAsync(template, codalusNode: false, Ct);
+        var offered = await _connector.CheckAsync(template, node: null, Ct);
         Assert.Equal(["snap", "apt", "page"], offered.Install.Select(o => o.Id));
 
         StandIns(node: null);
-        var missing = await _connector.CheckAsync(template, codalusNode: false, Ct);
+        var missing = await _connector.CheckAsync(template, node: null, Ct);
         Assert.Equal(AcpRequirementState.Missing, missing.Rows[0].State);
         Assert.Contains("Node.js is missing", AiLog, StringComparison.Ordinal);
     }
@@ -154,7 +154,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
     {
         StandIns(node: null);
         var template = Template(AcpSignInCheck.SessionNew);
-        Assert.False((await _connector.CheckAsync(template, false, Ct)).Met);
+        Assert.False((await _connector.CheckAsync(template, null, Ct)).Met);
 
         // A stand-in "installer" that puts node on the search path; run in the (stand-in) terminal, which waits for it.
         var installer = Path.Combine(_root, "installer");
@@ -166,11 +166,58 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         var option = new AcpInstallOption("snap", "Snap", "", Setup.InstallKind.Terminal, "sudo snap install node") { Program = script };
         Assert.Equal(0, await _connector.InstallAsync("stand-in", option, _host, null, Ct));
         Assert.Equal("Snap", Assert.Single(_host.Runs).Title);
-        Assert.True((await _connector.CheckAsync(template, false, Ct)).Met);
+        Assert.True((await _connector.CheckAsync(template, null, Ct)).Met);
         Assert.Contains("install snap: sudo snap install node", AiLog, StringComparison.Ordinal);
 
         // A page only opens: nothing runs here.
         Assert.Null(await _connector.InstallAsync("stand-in", new AcpInstallOption("page", "nodejs.org", "", Setup.InstallKind.OpenPage, AcpNodeInstall.Page), _host, null, Ct));
+    }
+
+    [Fact]
+    public async Task A_version_managers_node_off_the_path_is_offered_first_and_the_entry_names_the_manager()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Version managers' Node.js is looked for on macOS and Linux.");
+        await _workbench.Settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, Ct);
+        StandIns(node: null); // the login shell's PATH has no Node.js (nvm is loaded by ~/.bashrc, the login shell is fish)
+        var template = Template(AcpSignInCheck.SessionNew);
+
+        // nvm in the home folder: an old 18 and the default 24, each with node and npx; this machine's own nvm is never read.
+        var home = Path.Combine(_root, "home");
+        var nvm = Path.Combine(home, ".nvm");
+        StandInNode.Create(Path.Combine(nvm, "versions", "node", "v18.20.0", "bin"), "v18.20.0", Dotnet, AcpAgentTests.StandInAgent);
+        var bin = StandInNode.Create(Path.Combine(nvm, "versions", "node", "v24.1.0", "bin"), "v24.1.0", Dotnet, AcpAgentTests.StandInAgent, agentEnv: new Dictionary<string, string> { ["ACP_FAKE_LOG"] = _log });
+        Directory.CreateDirectory(Path.Combine(nvm, "alias"));
+        File.WriteAllText(Path.Combine(nvm, "alias", "default"), "24\n");
+        Func<string, string?> environment = name => name == "HOME" ? home : null;
+        _connector.VersionManagerEnvironment = environment;
+
+        var missing = await _connector.CheckAsync(template, node: null, Ct);
+        Assert.False(missing.Met);
+        var offered = missing.Install[0];
+        Assert.Equal(("nvm", "nvm's Node.js 24.1.0", "nvm", bin), (offered.Id, offered.Name, offered.NodeManager, offered.Command));
+        Assert.Contains("In ~/.nvm/versions/node/v24.1.0/bin, which your login shell doesn't put on the PATH", offered.Description, StringComparison.Ordinal);
+        Assert.Equal("page", missing.Install[^1].Id); // the usual options follow
+        Assert.Null(await _connector.InstallAsync("stand-in", offered, _host, null, Ct)); // nothing to install
+        Assert.Empty(_host.Runs);
+
+        // Chosen: found in nvm's folder, tested there, and the entry names nvm, not the folder.
+        var met = await _connector.CheckAsync(template, node: "nvm", Ct);
+        Assert.True(met.Met);
+        Assert.Equal(Path.Combine(bin, "node"), met.Rows[0].Path);
+        var (result, _) = await TestAsync(new AcpConnectRequest(template, Already) { Node = "nvm" });
+        Outcome(AcpTestOutcome.Connected, result);
+        await _connector.SaveAsync(new AcpConnectRequest(template, Already) { Node = "nvm" }, Ct);
+        Assert.Equal("nvm", Agents!.Value.GetProperty("stand-in").GetProperty("node").GetString());
+
+        // Each start chooses nvm's Node.js again: gone, it says what to do.
+        _agents.ManagedNodeFolder = (manager, major) => Codalus.Workbench.Node.NodeVersionManagers.Resolve(manager, environment, major, PlatformKind.Linux)?.Folder;
+        var entry = _agents.Configured["stand-in"];
+        Assert.Equal(bin, (await _agents.ResolveAsync("stand-in", entry, Ct)).NodeFolder);
+        Directory.Delete(Path.Combine(nvm, "versions", "node", "v24.1.0"), recursive: true);
+        Assert.Equal(Path.Combine(nvm, "versions", "node", "v18.20.0", "bin"), (await _agents.ResolveAsync("stand-in", entry, Ct)).NodeFolder); // a template Codalus doesn't know: any major
+        Directory.Delete(Path.Combine(nvm, "versions"), recursive: true);
+        Assert.StartsWith("stand-in runs on nvm's Node.js, which has none", (await Assert.ThrowsAsync<AcpException>(() => _agents.ResolveAsync("stand-in", entry, Ct))).Message, StringComparison.Ordinal);
+        Assert.Contains("can only be \"builtIn\"", (await Assert.ThrowsAsync<AcpException>(() => _agents.ResolveAsync("stand-in", entry with { Node = "nodenv" }, Ct))).Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -385,7 +432,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         var template = Template(AcpSignInCheck.SessionNew);
         var expected = "Agents can't be connected from a remote window: they would run on this machine, while the folder and its terminal are on the remote one. Connect it from a local window.";
         Assert.Equal(expected, _connector.WhyNot());
-        Assert.Equal(expected, (await Assert.ThrowsAsync<AcpException>(() => _connector.CheckAsync(template, false, Ct))).Message);
+        Assert.Equal(expected, (await Assert.ThrowsAsync<AcpException>(() => _connector.CheckAsync(template, null, Ct))).Message);
         Assert.Equal(expected, (await Assert.ThrowsAsync<AcpException>(() => _connector.TestAsync(new AcpConnectRequest(template, Already) { Consent = true }, _host, null, Ct))).Message);
         await Assert.ThrowsAsync<AcpException>(() => _connector.SaveAsync(new AcpConnectRequest(template, Already), Ct));
         await Assert.ThrowsAsync<AcpException>(() => _connector.InstallAsync("stand-in", AcpNodeInstall.Options(new AcpNodeFacts(PlatformKind.Linux, "ubuntu", false, false, true, null, null, false), 22).Options[0], _host, null, Ct));

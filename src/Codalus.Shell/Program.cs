@@ -152,6 +152,10 @@ internal static partial class Program
             ? Task.Run(Codalus.Workbench.Setup.LoginShellPath.Import)
             : Task.FromResult(false);
         App.Options = options;
+
+        // workbench.uiScale (Linux): Avalonia's X11 backend reads its scale factor as it starts (UiScale).
+        App.UiScaleApplied = Infrastructure.UiScale.Apply(Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir).SettingsFile);
+
         try
         {
             var code = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

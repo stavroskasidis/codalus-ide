@@ -331,6 +331,7 @@ public sealed class OsIntegrationTests : IDisposable
         var desktop = await File.ReadAllTextAsync(linux.DesktopEntry, Ct);
         Assert.Contains("Exec=\"/home/ann/Apps/Codalus IDE.AppImage\" %f\n", desktop, StringComparison.Ordinal);
         Assert.Contains("NoDisplay=true\n", desktop, StringComparison.Ordinal);
+        Assert.Contains("StartupWMClass=Codalus\n", desktop, StringComparison.Ordinal); // the window's class
         Assert.Contains("MimeType=application/x-sln;application/x-slnx;application/x-slnf;application/x-csproj;application/x-vbproj;application/x-fsproj;\n", desktop, StringComparison.Ordinal);
         Assert.Contains("text/html=firefox.desktop;", await File.ReadAllTextAsync(linux.MimeAppsList, Ct), StringComparison.Ordinal);
 
@@ -366,6 +367,73 @@ public sealed class OsIntegrationTests : IDisposable
 
         _ = await linux.UnregisterAsync(OsIntegrationFeature.FileTypes, Ct);
         Assert.Equal("# mine\n[Default Applications]\napplication/x-csproj=rider.desktop;\n\n[Removed Associations]\ntext/plain=gedit.desktop;\n", await File.ReadAllTextAsync(linux.MimeAppsList, Ct));
+    }
+
+    [Fact]
+    public async Task Linux_puts_the_logo_in_the_users_icon_theme_while_either_feature_is_registered()
+    {
+        // The entries say Icon=codalus, which only the packages install: an AppImage's were blank (and so was a taskbar
+        // entry pinned from the window, which the desktop matches to codalus-solutions.desktop).
+        var data = Path.Combine(_dir, "data");
+        var calls = new List<string>();
+        var linux = Linux(new OsLauncher("/home/ann/Apps/Codalus IDE.AppImage", []), data, Path.Combine(_dir, "config"), calls);
+        Assert.Equal(Path.Combine(data, "icons", "hicolor", "scalable", "apps", "codalus.svg"), linux.IconFile);
+
+        _ = await linux.RegisterAsync(OsIntegrationFeature.Folders, Ct);
+        var icon = await File.ReadAllTextAsync(linux.IconFile, Ct);
+        Assert.StartsWith("<!-- codalus-os-integration", icon, StringComparison.Ordinal);
+        Assert.Equal("svg", XDocument.Parse(icon).Root!.Name.LocalName);
+        Assert.Contains("Icon=codalus\n", await File.ReadAllTextAsync(linux.DolphinServiceMenu, Ct), StringComparison.Ordinal);
+        Assert.DoesNotContain(calls, c => c.Contains("gtk-update-icon-cache", StringComparison.Ordinal)); // no cache there: none made
+
+        _ = await linux.RegisterAsync(OsIntegrationFeature.FileTypes, Ct);
+        Assert.Contains("Icon=codalus\n", await File.ReadAllTextAsync(linux.DesktopEntry, Ct), StringComparison.Ordinal);
+
+        // The other feature still names it.
+        Assert.Equal(OsIntegrationState.NotRegistered, (await linux.UnregisterAsync(OsIntegrationFeature.Folders, Ct)).State);
+        Assert.True(File.Exists(linux.IconFile));
+
+        Assert.Equal(OsIntegrationState.NotRegistered, (await linux.UnregisterAsync(OsIntegrationFeature.FileTypes, Ct)).State);
+        Assert.False(File.Exists(linux.IconFile));
+        Assert.False(Directory.Exists(Path.Combine(data, "icons")));
+    }
+
+    [Fact]
+    public async Task Linux_repairs_the_icon_of_an_earlier_registration_and_leaves_one_that_isnt_its_own()
+    {
+        var data = Path.Combine(_dir, "data");
+        var calls = new List<string>();
+        var linux = Linux(new OsLauncher("/opt/codalus/codalus", []), data, Path.Combine(_dir, "config"), calls);
+
+        // Nothing registered: the start adds nothing.
+        await linux.RepairAsync(Ct);
+        Assert.False(Directory.Exists(data));
+
+        // Registered by a version that wrote no icon, in a theme folder GTK keeps a cache of.
+        _ = await linux.RegisterAsync(OsIntegrationFeature.FileTypes, Ct);
+        File.Delete(linux.IconFile);
+        var cache = Path.Combine(data, "icons", "hicolor", "icon-theme.cache");
+        File.WriteAllText(cache, string.Empty);
+        calls.Clear();
+        await linux.RepairAsync(Ct);
+        Assert.Equal(LinuxOsIntegration.IconSvg, await File.ReadAllTextAsync(linux.IconFile, Ct));
+        Assert.Equal([$"/usr/bin/gtk-update-icon-cache --force --ignore-theme-index {Path.Combine(data, "icons", "hicolor")}"], calls);
+        Assert.Equal(OsIntegrationState.Registered, linux.GetStatus(OsIntegrationFeature.FileTypes).State); // the icon isn't an entry
+
+        // An older logo is replaced; the current one is left as it is.
+        File.WriteAllText(linux.IconFile, "<!-- codalus-os-integration --><svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+        await linux.RepairAsync(Ct);
+        Assert.Equal(LinuxOsIntegration.IconSvg, await File.ReadAllTextAsync(linux.IconFile, Ct));
+        calls.Clear();
+        await linux.RepairAsync(Ct);
+        Assert.Empty(calls);
+
+        // The user's own codalus.svg is never written over or removed.
+        const string mine = "<svg xmlns=\"http://www.w3.org/2000/svg\"><title>mine</title></svg>";
+        File.WriteAllText(linux.IconFile, mine);
+        await linux.RepairAsync(Ct);
+        _ = await linux.UnregisterAsync(OsIntegrationFeature.FileTypes, Ct);
+        Assert.Equal(mine, await File.ReadAllTextAsync(linux.IconFile, Ct));
     }
 
     // ------------------------------------------------------------------ macOS

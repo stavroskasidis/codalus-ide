@@ -16,11 +16,21 @@ public sealed class App : Application
     /// </summary>
     internal static Task<bool> LoginShellImport { get; set; } = Task.FromResult(false);
 
+    /// <summary>Whether Program.Main set Avalonia's scale factor for <c>workbench.uiScale</c> (<see cref="Infrastructure.UiScale"/>).</summary>
+    internal static bool UiScaleApplied { get; set; }
+
     public ShellHost? Shell { get; internal set; }
 
     public override void RegisterServices()
     {
         base.RegisterServices();
+
+        // The windowing system read its scale factor as it started: no process the IDE starts inherits it.
+        if (UiScaleApplied)
+        {
+            Infrastructure.UiScale.Started();
+        }
+
         Infrastructure.ShellSystemFonts.Install();
     }
 

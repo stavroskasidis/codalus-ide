@@ -3,6 +3,7 @@
 - **Status:** accepted (0.6.0, task #79, 2026-10-22; D43)
 - **Date:** 2026-10-22
 - **Deciders:** maintainer (D43: the mockups and the plan's decisions, approved 2026-10-21)
+- **Amended by:** [ADR 0112](0112-version-managers-node-and-the-distributions-npm.md) (2026-11-26: a version manager's Node.js is offered first and named by the entry's `node`; pacman, zypper and apk install Node.js, and a distribution's Node.js without npx gets its npm package)
 - **Amends:** [ADR 0079](0079-external-agents-over-the-agent-client-protocol.md) (terminal sign-in is advertised; Connect replaces Add agent…; `secretEnv`, `unsetEnv`; agents' keys), [ADR 0031](0031-git-hosting-and-repository-features.md) (a plugin host's `secrets/*` requests are checked against its own plugins)
 
 ## Context

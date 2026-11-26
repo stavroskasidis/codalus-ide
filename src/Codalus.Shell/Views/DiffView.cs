@@ -1034,7 +1034,8 @@ public sealed class DiffView : UserControl, IPaneView
 
     private static (Border Chip, TextBlock Text) Chip(string background, string foreground)
     {
-        var text = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        text.Bind(TextBlock.FontSizeProperty, text.GetResourceObservable("Shell.FontSize.Small"));
         text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable(foreground));
         var chip = new Border { Child = text, Padding = new Thickness(5, 0), Margin = new Thickness(2, 0), CornerRadius = new CornerRadius(3), VerticalAlignment = VerticalAlignment.Center, MinHeight = 18 };
         chip.Bind(Border.BackgroundProperty, chip.GetResourceObservable(background));

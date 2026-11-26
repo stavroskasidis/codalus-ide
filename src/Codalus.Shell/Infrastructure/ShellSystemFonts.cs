@@ -68,6 +68,29 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     /// <summary>Replaces Avalonia's system font collection; call it before any text is laid out.</summary>
     public static void Install() => FontManager.Current.AddFontCollection(Create());
 
+    /// <summary>A glyph typeface for a font file's bytes, or null when the platform can't read it (tests). The platform keeps the stream, and disposes it.</summary>
+    internal static GlyphTypeface? FromFile(Stream stream) =>
+        TryCreateGlyphTypeface(PlatformImpl(FontManager.Current), stream, FontSimulations.None, out var platformTypeface)
+            ? Create(platformTypeface, FontSimulations.None)
+            : null;
+
+    /// <summary>
+    /// The advances Skia draws <paramref name="glyphs"/> with at <paramref name="size"/>, unhinted, from the typeface the
+    /// platform matched (for a variable font, the instance's), or null for another platform's typeface (tests).
+    /// </summary>
+    internal static float[]? DrawnAdvances(GlyphTypeface face, ushort[] glyphs, float size)
+    {
+        try
+        {
+            using var font = new SKFont(SkiaTypeface(face.PlatformTypeface), size) { Subpixel = true, Hinting = SKFontHinting.None, LinearMetrics = true };
+            return font.GetGlyphWidths(glyphs);
+        }
+        catch (InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>A collection on the platform's font manager, with nothing looked up yet (tests).</summary>
     internal static ShellSystemFonts Create() => new(PlatformImpl(FontManager.Current));
 
@@ -96,13 +119,16 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return false;
         }
 
-        // Not a perfect match: the nearest the collection already has (or a synthetic made from it) may be closer.
-        if (key != KeyOf(platformTypeface) && TryGetGlyphTypeface(familyName, key, allowNearestMatch: true, out glyphTypeface))
+        // Not a perfect match: the nearest the collection already has (or a synthetic made from it) may be closer. Not for a
+        // variable font: the platform matched the instance for the weight, and every instance reports the file's default
+        // weight, so the nearest would be another instance, or a synthetic made from the file's default one (#556).
+        var variable = IsVariable(platformTypeface);
+        if (!variable && key != KeyOf(platformTypeface) && TryGetGlyphTypeface(familyName, key, allowNearestMatch: true, out glyphTypeface))
         {
             return true;
         }
 
-        if (Create(platformTypeface, FontSimulations.None) is not { } created)
+        if (Create(platformTypeface, FontSimulations.None, variable ? DrawnWeight(platformTypeface) ?? key.Weight : null) is not { } created)
         {
             _lastFailure = $"no glyph typeface could be made of '{platformTypeface.FamilyName}', the platform's match for '{familyName}' ({style}, {weight}, {stretch}): {t_createError?.GetType().Name}: {t_createError?.Message}";
             return false;
@@ -118,7 +144,8 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         // emboldened (fontconfig's synthetic faces report it, Skia's simulations don't) read as the family's regular one
         // once an italic or a bold was asked for first, and every regular text after it came out slanted or bold.
         // Another thread may have added these keys meanwhile: the faces in the collection win.
-        if (platformTypeface.FontSimulations == FontSimulations.None)
+        // A variable font's instance is filed only under the style asked for: its own says the file's default weight.
+        if (platformTypeface.FontSimulations == FontSimulations.None && !variable)
         {
             TryAddGlyphTypeface(created, KeyOf(platformTypeface));
         }
@@ -155,7 +182,9 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             simulations |= FontSimulations.Bold;
         }
 
-        if (simulations == FontSimulations.None)
+        // A variable font's synthetic would be made from its file, whose outlines are the default instance's: the platform
+        // has the instance for a weight (TryGetGlyphTypeface), and a slant of the default instance is no closer.
+        if (simulations == FontSimulations.None || IsVariable(glyphTypeface.PlatformTypeface))
         {
             return false;
         }
@@ -198,15 +227,17 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         }
 
         // A face cached for the family and style, when it has the character: the lookup also matches another family by its
-        // name's prefix ("SimSun-ExtB" for "SimSun"), where Avalonia's reads only the family's own entry.
-        var platformKey = KeyOf(platformTypeface);
+        // name's prefix ("SimSun-ExtB" for "SimSun"), where Avalonia's reads only the family's own entry. A variable font's
+        // instance is the one for the style asked for, filed under it (its own style says the file's default weight).
+        var variable = IsVariable(platformTypeface);
+        var platformKey = variable ? key : KeyOf(platformTypeface);
         if (TryGetGlyphTypeface(platformTypeface.FamilyName, platformKey, allowNearestMatch: false, out glyphTypeface)
             && glyphTypeface.CharacterToGlyphMap.ContainsGlyph(codepoint))
         {
             return true;
         }
 
-        if (Create(platformTypeface, FontSimulations.None) is not { } created)
+        if (Create(platformTypeface, FontSimulations.None, variable ? DrawnWeight(platformTypeface) ?? key.Weight : null) is not { } created)
         {
             return false;
         }
@@ -287,12 +318,54 @@ internal sealed class ShellSystemFonts : FontCollectionBase
 
     private static FontCollectionKey KeyOf(IPlatformTypeface typeface) => new(typeface.Style, typeface.Weight, typeface.Stretch);
 
-    /// <summary>A glyph typeface for <paramref name="platformTypeface"/>, or null for a font whose tables can't be read.</summary>
-    private static GlyphTypeface? Create(IPlatformTypeface platformTypeface, FontSimulations simulations)
+    /// <summary>The OpenType <c>fvar</c> table's tag: a font with it is variable.</summary>
+    private const uint FontVariationsTable = ('f' << 24) | ('v' << 16) | ('a' << 8) | 'r';
+
+    /// <summary>Whether <paramref name="typeface"/>'s font is variable (has an <c>fvar</c> table); false for another platform's.</summary>
+    internal static bool IsVariable(IPlatformTypeface typeface)
     {
         try
         {
-            return new GlyphTypeface(platformTypeface, simulations);
+            return SkiaTypeface(typeface).TryGetTableTags(out var tags) && tags.Contains(FontVariationsTable);
+        }
+        catch (InvalidCastException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The weight of the instance the platform matched, which Skia draws: not always the one asked for. fontconfig gives
+    /// a font's nearest named instance (800 is Source Sans's Bold, 700), and CoreText Kefa III's for SemiBold was another
+    /// (macOS CI, run 45853727391: laid out at 43.33 px, drawn at 44.52). Null for another platform's typeface.
+    /// </summary>
+    internal static FontWeight? DrawnWeight(IPlatformTypeface typeface)
+    {
+        try
+        {
+            return SkiaTypeface(typeface).FontStyle.Weight is var weight and > 0 ? (FontWeight)weight : null;
+        }
+        catch (InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A glyph typeface for <paramref name="platformTypeface"/>, or null for a font whose tables can't be read; a variable
+    /// font's laid out at <paramref name="variableWeight"/>, the instance the platform matched (<see cref="VariableFonts"/>).
+    /// </summary>
+    private static GlyphTypeface? Create(IPlatformTypeface platformTypeface, FontSimulations simulations, FontWeight? variableWeight = null)
+    {
+        try
+        {
+            var created = new GlyphTypeface(platformTypeface, simulations);
+            if (variableWeight is { } weight)
+            {
+                VariableFonts.Apply(created, weight);
+            }
+
+            return created;
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IndexOutOfRangeException or NotSupportedException)
         {
