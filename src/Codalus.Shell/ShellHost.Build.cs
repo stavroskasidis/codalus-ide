@@ -397,6 +397,9 @@ public sealed partial class ShellHost
         /// <summary>What the toolbar says while it isn't building: "Starting App…".</summary>
         public string Status { get; } = status;
 
+        /// <summary>Step Into New Instance (#547): the program stops at its entry point.</summary>
+        public bool StopAtEntry { get; set; }
+
         public bool IsCanceled => _cancel.IsCancellationRequested;
 
         public void Cancel() => _cancel.Cancel();

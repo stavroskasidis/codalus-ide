@@ -32,6 +32,13 @@ public sealed record DebugLaunch(string Name, LaunchPlan Plan)
 
     /// <summary>Set for a program that runs on another machine (the WSL launch profile).</summary>
     public RemoteLaunch? Remote { get; init; }
+
+    /// <summary>
+    /// The program stops at its entry point's first line, as if a breakpoint were there (#547: Debug → Step Into New
+    /// Instance): the launch's <c>stopAtEntry</c>, which netcoredbg and the Codalus debugger report as a stop for
+    /// <c>entry</c>.
+    /// </summary>
+    public bool StopAtEntry { get; init; }
 }
 
 /// <summary>

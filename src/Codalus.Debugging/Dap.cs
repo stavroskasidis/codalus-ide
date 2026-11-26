@@ -166,6 +166,13 @@ public sealed record NetFxDebugArguments(
     public Codalus.Debugging.Symbols.SymbolOptions? Symbols { get; init; } = Symbols;
 
     /// <summary>
+    /// A launch stops at the program's entry point's first line, with a stop for <c>entry</c> (#547: Debug → Step Into
+    /// New Instance), as netcoredbg's <c>stopAtEntry</c> does: the user code <c>Main</c> runs first, its state machine's
+    /// for an async <c>Main</c> or top-level statements with <c>await</c>.
+    /// </summary>
+    public bool StopAtEntry { get; init; }
+
+    /// <summary>
     /// The types the client shows in a view of its own (<c>System.Collections.Generic.List`1</c>, by their metadata
     /// names): the Codalus debugger lists their own members, without their <c>[DebuggerTypeProxy]</c>'s view (M58).
     /// </summary>

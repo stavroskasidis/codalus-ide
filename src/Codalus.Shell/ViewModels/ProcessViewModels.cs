@@ -12,6 +12,15 @@ public sealed record ProcessRow(int Id, string Name, string Path, string Title, 
     public string IdText => Id.ToString(CultureInfo.InvariantCulture);
 
     public string AccessibleName => $"{Name}, process {IdText}, {State}, {Kind}";
+
+    /// <summary>Its place in the session's programs (<see cref="DebugService.Processes"/>), for Terminate Process and Detach Process (#547).</summary>
+    public int Index { get; init; } = -1;
+
+    /// <summary>It still runs: Terminate Process ends it alone.</summary>
+    public bool CanTerminate { get; init; }
+
+    /// <summary>It still runs and can be left running (attached to, or with a console of its own): Detach Process.</summary>
+    public bool CanDetach { get; init; }
 }
 
 /// <summary>
@@ -37,10 +46,14 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
     private int _session;
     private int _titlesRead;
 
-    public ProcessesViewModel(DebugService debugger, Action<string> run)
+    private readonly Func<int, bool, Task>? _endProcess;
+
+    /// <param name="endProcess">Terminate Process (false) or Detach Process (true) on a row's program, by its index (#547).</param>
+    public ProcessesViewModel(DebugService debugger, Action<string> run, Func<int, bool, Task>? endProcess = null)
     {
         _debugger = debugger;
         _run = run;
+        _endProcess = endProcess;
         _refresh = new ShownRefresh(Refresh);
         debugger.StateChanged += (_, _) => Ui.Post(OnChanged);
         debugger.ProcessesChanged += (_, _) => Ui.Post(OnChanged);
@@ -70,6 +83,13 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
     /// <summary>Runs one of the window's commands (attach, detach all, terminate all).</summary>
     public void Run(string commandId) => _run(commandId);
 
+    /// <summary>
+    /// Terminate Process or Detach Process on one row (#547): that program alone ends, or goes on without the debugger,
+    /// and the session goes on with the others.
+    /// </summary>
+    public Task EndAsync(ProcessRow row, bool detach) =>
+        (detach ? row.CanDetach : row.CanTerminate) && _endProcess is { } end ? end(row.Index, detach) : Task.CompletedTask;
+
     private void OnChanged()
     {
         if (_debugger.State == DebugState.Idle)
@@ -97,12 +117,16 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
         if (_debugger.State != DebugState.Idle)
         {
             var state = _debugger.State == DebugState.Stopped ? "Break" : "Running";
-            foreach (var process in _debugger.Processes)
+            var processes = _debugger.Processes;
+            for (var index = 0; index < processes.Count; index++)
             {
+                var process = processes[index];
                 if (process.Id is not { } pid)
                 {
                     continue;
                 }
+
+                var count = rows.Count;
 
                 var kind = process.Kind switch
                 {
@@ -124,6 +148,8 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
                     // Until it's described: what the session calls it.
                     rows.Add(new ProcessRow(pid, process.Name, string.Empty, string.Empty, process.Ended ? "Exited" : state, kind));
                 }
+
+                rows[count] = rows[count] with { Index = index, CanTerminate = !process.Ended, CanDetach = !process.Ended && process.CanDetach };
             }
         }
 

@@ -262,8 +262,11 @@ internal static partial class BuiltIns
         };
 
         Add("debug.start", "Start Debugging", shell.StartDebuggingAsync, "!debugRunning && !buildRunning");
+        // Solution Explorer's Debug ▸ (#547): the selected project, in the running session when there is one.
+        Add("debug.startNewInstance", "Start New Instance", p => shell.StartNewInstanceAsync(p, stopAtEntry: false), "solutionOpen && !buildRunning");
+        Add("debug.stepIntoNewInstance", "Step Into New Instance", p => shell.StartNewInstanceAsync(p, stopAtEntry: true), "solutionOpen && !buildRunning");
         Add("debug.continue", "Continue", _ => shell.Debugger.ContinueAsync(), "debugStopped");
-        Add("debug.stop", "Stop Debugging", _ => shell.Debugger.StopAsync(), "debugActive");
+        Add("debug.stop", "Stop Debugging", _ => shell.StopDebuggingAsync(), "debugActive");
         Add("debug.restart", "Restart", _ => shell.RestartDebuggingAsync(), "debugActive");
         Add("debug.stepOver", "Step Over", _ => shell.Debugger.StepOverAsync(), "debugStopped");
         Add("debug.stepInto", "Step Into", _ => shell.Debugger.StepIntoAsync(), "debugStopped");

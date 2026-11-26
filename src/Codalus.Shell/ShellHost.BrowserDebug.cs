@@ -37,6 +37,10 @@ public sealed partial class ShellHost
     private static readonly TimeSpan s_listeningWait = TimeSpan.FromSeconds(10);
 
     private RunningProgram? _browserDebugServer;
+
+    /// <summary>The dev servers of Blazor WebAssembly apps Start New Instance added to the session (#547): stopped with it.</summary>
+    private readonly List<RunningProgram> _joinedDevServers = [];
+
     private TaskCompletionSource<string>? _serverListening;
     private string? _lastWebPage;
 
@@ -54,6 +58,18 @@ public sealed partial class ShellHost
             if (Interlocked.Exchange(ref _browserDebugServer, null) is { } server)
             {
                 _ = Task.Run(server.Stop);
+            }
+
+            List<RunningProgram> joined;
+            lock (_joinedDevServers)
+            {
+                joined = [.. _joinedDevServers];
+                _joinedDevServers.Clear();
+            }
+
+            foreach (var devServer in joined)
+            {
+                _ = Task.Run(devServer.Stop);
             }
 
             // A Blazor Web App's server under dotnet watch (#75): a Stop ends dotnet watch too; another end follows the
@@ -137,16 +153,27 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ Blazor WebAssembly (ADR 0026)
 
-    private async Task StartBrowserDebuggingAsync(string project, (string Url, string InspectUri) target)
+    /// <param name="joining">
+    /// Start New Instance adds the app to the running session (#547): its page is one more program, its dev server runs
+    /// without <c>dotnet watch</c> (the session's Hot Reload is its first program's), and its end ends only its page.
+    /// </param>
+    /// <returns>The page's index in the session's programs, or null when it didn't start.</returns>
+    private async Task<int?> StartBrowserDebuggingAsync(string project, (string Url, string InspectUri) target, bool joining = false)
     {
         if (await PrepareBrowserAsync(message => Workbench.Notifications.Error(message)).ConfigureAwait(true) is not { } browser)
         {
-            return;
+            return null;
         }
 
         // Hot Reload while debugging (ADR 0040, 2026-10-20): the components run in the browser's runtime, which takes
         // dotnet watch's updates with the debugging proxy attached, unlike a program netcoredbg runs.
-        var hotReload = Workbench.Settings.GetBoolean(DebugHotReloadSetting, true) && HotReloadUnsupportedReason(project) is null;
+        var hotReload = !joining && Workbench.Settings.GetBoolean(DebugHotReloadSetting, true) && HotReloadUnsupportedReason(project) is null;
+        if (joining && Workbench.Settings.GetBoolean(DebugHotReloadSetting, true))
+        {
+            // TODO(issue): Hot Reload for a WebAssembly app that joined the session (#547's later steps).
+            DebugLog.AppendLine(Localizer.Format("msg.browserDebug.joinedWithoutHotReload", "{0} joined the session without Hot Reload: edits to it take effect after a restart.", Path.GetFileNameWithoutExtension(project)));
+        }
+
         var server = await Runs.StartAsync(project, externalConsole: false, CancellationToken.None, hotReload: hotReload, openBrowser: false).ConfigureAwait(true);
         if (hotReload)
         {
@@ -163,8 +190,38 @@ public sealed partial class ShellHost
             throw new InvalidOperationException($"The dev server didn't start listening (see Output → Run: {server.Name}).", ex);
         }
 
-        _browserDebugServer = server;
         DebugLog.AppendLine($"> {browser.Display} {target.Url}");
+        if (joining)
+        {
+            lock (_joinedDevServers)
+            {
+                _joinedDevServers.Add(server);
+            }
+
+            int page;
+            try
+            {
+                page = await Debugger.LaunchBrowserAsync(StartJsDebug(browser), BrowserArguments(browser, target.Url, WebRoot(project), target.InspectUri), CancellationToken.None).ConfigureAwait(true);
+            }
+            catch
+            {
+                server.Stop();
+                throw;
+            }
+
+            // The dev server stopped on its own: its page has nothing left to debug; the page closed: its server stops.
+            var done = EndWithProgram(page, server);
+            _ = server.Exited.ContinueWith(_ => Ui.Post(() =>
+            {
+                if (!Volatile.Read(ref done.Value))
+                {
+                    _ = EndDebuggedProcessAsync(page, detach: false);
+                }
+            }), TaskScheduler.Default);
+            return page;
+        }
+
+        _browserDebugServer = server;
         await Debugger.LaunchBrowserAsync(StartJsDebug(browser), BrowserArguments(browser, target.Url, WebRoot(project), target.InspectUri), CancellationToken.None).ConfigureAwait(true);
 
         // The dev server stopped on its own: the page has nothing left to debug.
@@ -175,6 +232,34 @@ public sealed partial class ShellHost
                 _ = Debugger.StopAsync();
             }
         }), TaskScheduler.Default);
+        return 0;
+    }
+
+    /// <summary>
+    /// Stops <paramref name="server"/> once the session's program at <paramref name="index"/> has ended (a joined page
+    /// closed, #547), or the session did; the box says when it has, so the index is no longer the page's.
+    /// </summary>
+    private System.Runtime.CompilerServices.StrongBox<bool> EndWithProgram(int index, RunningProgram server)
+    {
+        var done = new System.Runtime.CompilerServices.StrongBox<bool>();
+        void Check(object? sender, EventArgs e)
+        {
+            var processes = Debugger.Processes;
+            if (Debugger.State == DebugState.Idle || (index < processes.Count && processes[index].Ended))
+            {
+                Debugger.ProcessesChanged -= Check;
+                Debugger.StateChanged -= Check;
+                Volatile.Write(ref done.Value, true);
+                if (!server.HasExited)
+                {
+                    _ = Task.Run(server.Stop);
+                }
+            }
+        }
+
+        Debugger.ProcessesChanged += Check;
+        Debugger.StateChanged += Check;
+        return done;
     }
 
     // ------------------------------------------------------------------ server and page together (ADR 0027)
@@ -184,7 +269,13 @@ public sealed partial class ShellHost
     /// the browser in the same session. Without a browser the server debugs alone (and the profile's browser opens as
     /// usual); a WebAssembly app says why its components won't stop.
     /// </summary>
-    private async Task StartCompoundDebuggingAsync(string project, LaunchPlan plan, (string Url, string? InspectUri) page)
+    /// <param name="joining">
+    /// Start New Instance adds the app to the running session (#547): the server and its page are one program of it,
+    /// and the page opens once the server's address answers (the session's other programs write to the Debug Console too).
+    /// </param>
+    /// <param name="stopAtEntry">Step Into New Instance: the server stops at its entry point.</param>
+    /// <returns>The app's index in the session's programs.</returns>
+    private async Task<int> StartCompoundDebuggingAsync(string project, LaunchPlan plan, (string Url, string? InspectUri) page, bool joining = false, bool stopAtEntry = false)
     {
         var browser = await PrepareBrowserAsync(message =>
         {
@@ -196,10 +287,35 @@ public sealed partial class ShellHost
         }).ConfigureAwait(true);
         if (browser is null)
         {
+            if (joining)
+            {
+                var (alone, _) = Debugger.AddLaunch(new DebugLaunch(Path.GetFileNameWithoutExtension(project), plan) { StopAtEntry = stopAtEntry }, CancellationToken.None);
+                OpenJoinedBrowserLater(plan.BrowserUrl);
+                return alone;
+            }
+
             _pendingBrowserUrl = plan.BrowserUrl;
             await Debugger.LaunchAsync(plan, CancellationToken.None).ConfigureAwait(true);
             OpenBrowserLater();
-            return;
+            return 0;
+        }
+
+        if (joining)
+        {
+            var group = await Debugger.LaunchCompoundAsync(plan, CancellationToken.None, stopAtEntry).ConfigureAwait(true);
+            if (Uri.TryCreate(page.Url, UriKind.Absolute, out var address)
+                && !await ServerProbe.WaitUntilListeningAsync(address, s_devServerTimeout, () => Debugger.IsActive && !Debugger.Processes[group].Ended, CancellationToken.None).ConfigureAwait(true))
+            {
+                if (!Debugger.IsActive || Debugger.Processes[group].Ended)
+                {
+                    return group; // it ended meanwhile
+                }
+
+                DebugLog.AppendLine($"The server didn't answer at {page.Url}; opening it anyway.");
+            }
+
+            await AddPageAsync(project, browser, page, group).ConfigureAwait(true);
+            return group;
         }
 
         var listening = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -216,7 +332,7 @@ public sealed partial class ShellHost
         }
         catch (OperationCanceledException)
         {
-            return; // the session ended
+            return 0; // the session ended
         }
         finally
         {
@@ -225,10 +341,11 @@ public sealed partial class ShellHost
 
         if (!Debugger.IsCompound)
         {
-            return; // the session ended meanwhile
+            return 0; // the session ended meanwhile
         }
 
         await AddPageAsync(project, browser, page).ConfigureAwait(true);
+        return 0;
     }
 
     /// <summary>"Now listening on: http://localhost:5000" in the server's output: the browser can open.</summary>
