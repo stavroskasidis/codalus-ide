@@ -258,6 +258,29 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         new[] { hostsRoot }.Concat(InstallerFolders()).Where(r => r.Length > 0)
             .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The .NET folders worth listing (the SDK manager, ADR 0113): the one the IDE uses, the hosts', then where the
+    /// installers put .NET on this OS. Some may not exist.
+    /// </summary>
+    public IReadOnlyList<string> KnownRoots() =>
+        [.. new[] { FindSdkRoot() ?? string.Empty, HostsRoot() ?? string.Empty }.Concat(InstallerFolders()).Where(r => r.Length > 0)
+            .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(platform == PlatformKind.Linux ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>
+    /// Whether the IDE's hosts would still find their runtime in <paramref name="root"/> without <paramref name="removed"/>
+    /// (the SDK manager's guard, ADR 0113): always true for a root the hosts don't use.
+    /// </summary>
+    public bool HostsStillRunWithout(string root, IReadOnlyCollection<(string Framework, string Version)> removed)
+    {
+        if (HostsRoot() is not { } hostsRoot || !SameRoot(hostsRoot, root))
+        {
+            return true;
+        }
+
+        return Frameworks.All(f => FrameworkResolver.Resolve(f, InstalledFrameworks(root, f.Name)
+            .Where(v => !removed.Any(r => r.Framework == f.Name && string.Equals(r.Version, v.Text, StringComparison.OrdinalIgnoreCase)))) is not null);
+    }
+
     /// <summary>Where the installers put .NET on this OS.</summary>
     private string[] InstallerFolders()
     {

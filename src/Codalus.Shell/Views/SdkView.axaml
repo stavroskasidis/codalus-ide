@@ -25,6 +25,7 @@
           <ComboBox MinWidth="130" ItemsSource="{x:Static vm:SdkViewModel.RollForwardOptions}" SelectedItem="{Binding RollForward}" AutomationProperties.Name="{l:T sdk.rollForward2}" />
           <Button Content="{l:T sdk.removePin}" Command="{Binding UnpinCommand}" />
           <Button Classes="link" Content="{l:T sdk.refresh}" Command="{Binding RefreshCommand}" />
+          <Button Classes="link" Content="{l:T sdk.manageSdks}" Command="{Binding ManageCommand}" ToolTip.Tip="{l:T sdk.manageSdksTip}" />
         </WrapPanel>
         <ListBox ItemsSource="{Binding Sdks}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T sdk.installedSdks}">
           <ListBox.ItemTemplate>

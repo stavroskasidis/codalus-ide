@@ -165,7 +165,7 @@ Progress, declarative views and custom editors ([plugins.md](plugins.md#progress
 | `customEditor/close` | shell → host | notification | `{viewId}` |
 | `customEditor/setText` | host → shell | notification | `{pluginId, viewId, text}`: the document's new text (it shows as modified) |
 
-A view node is `{kind, id?, text?, style?, value?, placeholder?, checked?, disabled, options?, columns?, rows?: string[][], children?, orientation?}`, `kind` one of `stack`, `text`, `button`, `textbox`, `checkbox`, `dropdown`, `table`, `toolbar` and `separator`.
+A view node is `{kind, id?, text?, style?, value?, placeholder?, checked?, disabled, options?, columns?, rows?: string[][], children?, orientation?}`, `kind` one of `stack`, `text`, `button`, `textbox`, `checkbox`, `dropdown`, `table`, `toolbar` and `separator`. A `table`'s `value` is the index of its selected row (since 1.1), so a view set again keeps its selection.
 
 File system providers:
 

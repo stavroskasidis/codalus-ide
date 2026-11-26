@@ -27,8 +27,11 @@
             <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Top" Margin="0,2,8,0" />
             <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" />
             <TextBlock Grid.Column="2" Text="{Binding State}" />
-            <Button Grid.Column="3" Grid.RowSpan="2" Content="{Binding FixTitle}" Command="{Binding FixCommand}" IsVisible="{Binding CanFix}"
-                    ToolTip.Tip="{Binding Command}" VerticalAlignment="Top" />
+            <StackPanel Grid.Column="3" Grid.RowSpan="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+              <Button Content="{Binding FixTitle}" Command="{Binding FixCommand}" IsVisible="{Binding CanFix}" ToolTip.Tip="{Binding Command}" />
+              <Button Content="{l:T environment.manage}" Command="{Binding ManageCommand}" IsVisible="{Binding CanManage}"
+                      ToolTip.Tip="{l:T environment.manageTip}" />
+            </StackPanel>
             <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Classes="muted" Text="{Binding NeededFor}" TextWrapping="Wrap" />
             <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Classes="muted" Text="{Binding Details}" IsVisible="{Binding HasDetails}"
                        FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" />

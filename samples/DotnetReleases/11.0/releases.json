@@ -1,0 +1,31 @@
+{
+  "channel-version": "11.0",
+  "latest-release": "11.0.0",
+  "latest-runtime": "11.0.0",
+  "latest-sdk": "11.0.100",
+  "support-phase": "active",
+  "release-type": "sts",
+  "eol-date": "2028-11-14",
+  "releases": [
+    {
+      "release-date": "2026-11-10",
+      "release-version": "11.0.0",
+      "security": false,
+      "runtime": { "version": "11.0.0" },
+      "sdk": { "version": "11.0.100", "runtime-version": "11.0.0" },
+      "sdks": [ { "version": "11.0.100", "runtime-version": "11.0.0" } ],
+      "aspnetcore-runtime": { "version": "11.0.0" },
+      "windowsdesktop": { "version": "11.0.0" }
+    },
+    {
+      "release-date": "2026-10-13",
+      "release-version": "11.0.0-rc.2.26504.105",
+      "security": false,
+      "runtime": { "version": "11.0.0-rc.2.26504.105" },
+      "sdk": { "version": "11.0.100-rc.2.26504.105" },
+      "sdks": [ { "version": "11.0.100-rc.2.26504.105" } ],
+      "aspnetcore-runtime": { "version": "11.0.0-rc.2.26504.105" },
+      "windowsdesktop": { "version": "11.0.0-rc.2.26504.105" }
+    }
+  ]
+}
