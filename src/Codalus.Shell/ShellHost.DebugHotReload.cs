@@ -91,6 +91,12 @@ public sealed partial class ShellHost
         UpdateHotReloadStatus();
         var outcome = await DebugEdits.ApplyAsync(cancellationToken).ConfigureAwait(true);
         var time = DateTime.Now.ToString("T", CultureInfo.CurrentCulture);
+        if (outcome.NotRunning.Count > 0)
+        {
+            // A program that joined the session, or a project nothing runs: no restart is asked for (ADR 0109).
+            DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.notRunningLog", "Hot Reload: changes to code the debugged program doesn't run take effect when it's built again: {0}", Described(outcome.NotRunning)));
+        }
+
         switch (outcome.Kind)
         {
             case HotReloadOutcome.Applied:
@@ -118,8 +124,7 @@ public sealed partial class ShellHost
                 var first = outcome.Diagnostics is [var rude, ..] ? rude.Message : string.Empty;
                 // Each with where it is: a rude edit came with no edit made, and nothing said which file Roslyn saw changed
                 // (macOS CI, the packaged app's smoke test, blazor.compoundDebug, develop's dry run 44955780797).
-                DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.rudeLog", "Hot Reload: the code changes need a restart: {0}",
-                    string.Join("; ", outcome.Diagnostics.Select(d => $"{d.Id} {d.Message}{Where(d)}"))));
+                DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.rudeLog", "Hot Reload: the code changes need a restart: {0}", Described(outcome.Diagnostics)));
                 if (!ask)
                 {
                     break;
@@ -207,6 +212,10 @@ public sealed partial class ShellHost
             }
         }, TaskScheduler.Default);
     }
+
+    /// <summary>Each diagnostic with where it is, and for one in generated code what changed (<see cref="HotReloadDiagnostic.Detail"/>).</summary>
+    private static string Described(IReadOnlyList<HotReloadDiagnostic> diagnostics) =>
+        string.Join("; ", diagnostics.Select(d => $"{d.Id} {d.Message}{Where(d)}{(d.Detail is { } detail ? " [" + detail + "]" : string.Empty)}"));
 
     /// <summary>" (file, line n)" for a diagnostic with a location, else nothing.</summary>
     private static string Where(HotReloadDiagnostic diagnostic) =>

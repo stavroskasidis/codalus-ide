@@ -857,6 +857,12 @@ public sealed class DebugService : IAsyncDisposable
 
     private LaunchPart Part(DebugLaunch launch, int index, CancellationToken cancellationToken)
     {
+        var part = CreatePart(launch, index, cancellationToken);
+        return launch.Project is null ? part : part with { Process = part.Process with { Project = launch.Project } };
+    }
+
+    private LaunchPart CreatePart(DebugLaunch launch, int index, CancellationToken cancellationToken)
+    {
         if (launch.Remote is null && IsDesktopClrProgram(launch.Plan.FileName))
         {
             // A .NET Framework program (M43b, ADR 0076): the desktop-CLR adapter starts it, in a console window of its
@@ -1075,7 +1081,8 @@ public sealed class DebugService : IAsyncDisposable
     /// of independent programs, which it began (0) or joined; its page joins the group by it (<see cref="AddBrowserAsync"/>).
     /// </returns>
     /// <param name="stopAtEntry">Step Into New Instance (#547): the server stops at its entry point.</param>
-    public Task<int> LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken, bool stopAtEntry = false)
+    /// <param name="project">The server's project (<see cref="DebugProcess.Project"/>), when known.</param>
+    public Task<int> LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken, bool stopAtEntry = false, string? project = null)
     {
         var codalus = UseCodalusAdapter(plan);
         var name = ProgramName(plan);
@@ -1086,7 +1093,7 @@ public sealed class DebugService : IAsyncDisposable
                 ? ((DebugAdapter)adapter.Primary).LaunchAsync(CoreClrArguments(plan) with { StopAtEntry = stopAtEntry }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                 : ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan) with { StopAtEntry = stopAtEntry }, cancellationToken),
             attached: false,
-            new DebugProcess(name, null, DebugProcess.Launched, null),
+            new DebugProcess(name, null, DebugProcess.Launched, null) { Project = project },
             cancellationToken);
     }
 

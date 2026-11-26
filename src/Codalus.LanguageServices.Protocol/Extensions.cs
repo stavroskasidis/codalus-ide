@@ -748,11 +748,18 @@ public sealed record HotReloadActiveStatementUpdate(int MethodToken, int MethodV
 
 /// <summary>
 /// The edits since the session's start or its last commit. <see cref="Status"/>: <c>none</c> (nothing to apply),
-/// <c>ready</c> (<see cref="Updates"/> to apply, or rude edits that need <see cref="ProjectsToRestart"/> restarted), or
-/// <c>blocked</c> (<see cref="Errors"/>: the code doesn't compile).
+/// <c>ready</c> (<see cref="Updates"/> to apply, rude edits that need <see cref="ProjectsToRestart"/> restarted, or only
+/// <see cref="NotRunning"/>), or <c>blocked</c> (<see cref="Errors"/>: the code doesn't compile). <see cref="RudeEdits"/>
+/// are those in the session's running projects and the projects they reference.
 /// </summary>
 public sealed record HotReloadUpdateResult(string Status, HotReloadModuleUpdate[] Updates, HotReloadDiagnostic[] RudeEdits, HotReloadDiagnostic[] Errors, string[] ProjectsToRestart)
 {
+    /// <summary>
+    /// Rude edits in projects no running project references: Roslyn restarts nothing for them, and a commit takes them as
+    /// the next build's (it rebuilds those projects in dotnet watch's terms).
+    /// </summary>
+    public HotReloadDiagnostic[] NotRunning { get; init; } = [];
+
     public const string None = "none";
     public const string Ready = "ready";
     public const string Blocked = "blocked";
@@ -766,4 +773,11 @@ public sealed record HotReloadModuleUpdate(Guid ModuleId, string Project, byte[]
 }
 
 /// <summary>A rude edit or an error: Roslyn's id (<c>ENC0004</c>, <c>CS1002</c>), its message, and where.</summary>
-public sealed record HotReloadDiagnostic(string Id, string Message, Location? Location);
+public sealed record HotReloadDiagnostic(string Id, string Message, Location? Location)
+{
+    /// <summary>
+    /// For a rude edit in a source generator's document, which nobody edits: its lines around the edit in the session's
+    /// baseline and now, and how the project's inputs changed since (a rude edit no edit made, macOS CI, run 45872232919).
+    /// </summary>
+    public string? Detail { get; init; }
+}

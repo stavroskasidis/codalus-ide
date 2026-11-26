@@ -289,7 +289,7 @@ public sealed partial class ShellHost
         {
             if (joining)
             {
-                var (alone, _) = Debugger.AddLaunch(new DebugLaunch(Path.GetFileNameWithoutExtension(project), plan) { StopAtEntry = stopAtEntry }, CancellationToken.None);
+                var (alone, _) = Debugger.AddLaunch(new DebugLaunch(Path.GetFileNameWithoutExtension(project), plan) { StopAtEntry = stopAtEntry, Project = project }, CancellationToken.None);
                 OpenJoinedBrowserLater(plan.BrowserUrl);
                 return alone;
             }
@@ -302,7 +302,7 @@ public sealed partial class ShellHost
 
         if (joining)
         {
-            var group = await Debugger.LaunchCompoundAsync(plan, CancellationToken.None, stopAtEntry).ConfigureAwait(true);
+            var group = await Debugger.LaunchCompoundAsync(plan, CancellationToken.None, stopAtEntry, project).ConfigureAwait(true);
             if (Uri.TryCreate(page.Url, UriKind.Absolute, out var address)
                 && !await ServerProbe.WaitUntilListeningAsync(address, s_devServerTimeout, () => Debugger.IsActive && !Debugger.Processes[group].Ended, CancellationToken.None).ConfigureAwait(true))
             {
@@ -320,7 +320,7 @@ public sealed partial class ShellHost
 
         var listening = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         _serverListening = listening;
-        await Debugger.LaunchCompoundAsync(plan, CancellationToken.None).ConfigureAwait(true);
+        await Debugger.LaunchCompoundAsync(plan, CancellationToken.None, project: project).ConfigureAwait(true);
         try
         {
             await listening.Task.WaitAsync(s_listeningWait).ConfigureAwait(true);

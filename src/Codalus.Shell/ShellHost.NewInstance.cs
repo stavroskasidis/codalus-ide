@@ -208,7 +208,7 @@ public sealed partial class ShellHost
                 return;
             }
 
-            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry };
+            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry, Project = project };
             DebugLog.AppendLine($"[{name}] > {plan.FileName} {plan.Arguments}".TrimEnd());
             browserUrl = plan.BrowserUrl;
         }

@@ -323,7 +323,7 @@ The status bar's Hot Reload item says when the edits last applied, and the Debug
 
 An edit applied **while the program runs** is Hot Reload's: a changed method runs its new code from its next call, and a method already running finishes in its old version.
 
-Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too.
+Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too. Such an edit in a project the program doesn't use (another app of the solution, or one you started into the session with **Start New Instance**) asks nothing: the Debug Console says it takes effect when that project is built again.
 
 Edits apply to programs started in the Debug Console, the integrated terminal or a console window, to tests you debug, and to a library the program hasn't loaded yet (they apply as it loads). After each one, the program's `[MetadataUpdateHandler]`s run, as under `dotnet watch`: Blazor components re-render with the new code, and other frameworks that refresh on Hot Reload do too.
 
