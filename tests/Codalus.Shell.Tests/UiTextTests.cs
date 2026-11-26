@@ -76,26 +76,39 @@ public sealed class UiTextTests
     }
 
     [AvaloniaFact]
-    public void An_installed_variable_family_gives_each_weight_its_own_widths_and_no_synthetic()
+    public void An_installed_variable_family_is_laid_out_at_the_widths_each_weight_is_drawn_at()
     {
         // The collection's path, with the platform's own variable family when there is one (Bahnschrift or Segoe UI
-        // Variable on Windows, the system font on macOS, Noto Sans or Cantarell on many Linux desktops).
+        // Variable on Windows, the system font on macOS, Noto Sans or Cantarell on many Linux desktops). Skia draws the
+        // instance the platform matched; HarfBuzz must lay each glyph out at that instance's advance, not the default
+        // one's. Not "bold is wider": some families keep their widths across weights (Windows CI, run 45847369745,
+        // Bahnschrift).
         using var fonts = ShellSystemFonts.Create();
         var family = fonts.Select(f => f.Name).FirstOrDefault(name =>
             fonts.TryGetGlyphTypeface(name, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out var face)
             && ShellSystemFonts.IsVariable(face.PlatformTypeface)
-            && face.CharacterToGlyphMap.ContainsGlyph('P'));
+            && "AIPorvidest".All(c => face.CharacterToGlyphMap.ContainsGlyph(c)));
         Assert.SkipWhen(family is null, "No installed font family is a variable font (CI's Linux runners have none; Windows has Bahnschrift).");
 
         // Bold before Regular, then SemiBold: neither the nearest instance already looked up nor a synthetic of the file.
         Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.Bold, FontStretch.Normal, out var bold));
         Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out var regular));
         Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.SemiBold, FontStretch.Normal, out var semibold));
-
         Assert.All(new[] { bold, regular, semibold }, f => Assert.Equal(FontSimulations.None, f.FontSimulations));
         Assert.NotSame(bold, regular);
         Assert.NotSame(semibold, bold);
-        Assert.True(Advance(bold, "Provider") > Advance(regular, "Provider"), $"{family}: Bold is laid out wider than Regular");
+
+        foreach (var (name, face) in new[] { ("Regular", regular), ("SemiBold", semibold), ("Bold", bold) })
+        {
+            foreach (var c in "AIPorvidest")
+            {
+                // One character a run: its advance alone, no kerning.
+                var glyph = Assert.Single(TextShaper.Current.ShapeText(c.ToString(), new TextShaperOptions(face, 64)));
+                var drawn = ShellSystemFonts.DrawnAdvances(face, [glyph.GlyphIndex], 64);
+                Assert.SkipWhen(drawn is null, "The platform's typefaces aren't Skia's.");
+                Assert.True(Math.Abs(glyph.GlyphAdvance - drawn![0]) < 0.1, $"{family} {name} '{c}': laid out at {glyph.GlyphAdvance:F2} px, drawn at {drawn[0]:F2} px");
+            }
+        }
     }
 
     [Theory]

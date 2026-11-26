@@ -74,6 +74,23 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             ? Create(platformTypeface, FontSimulations.None)
             : null;
 
+    /// <summary>
+    /// The advances Skia draws <paramref name="glyphs"/> with at <paramref name="size"/>, unhinted, from the typeface the
+    /// platform matched (for a variable font, the instance's), or null for another platform's typeface (tests).
+    /// </summary>
+    internal static float[]? DrawnAdvances(GlyphTypeface face, ushort[] glyphs, float size)
+    {
+        try
+        {
+            using var font = new SKFont(SkiaTypeface(face.PlatformTypeface), size) { Subpixel = true, Hinting = SKFontHinting.None, LinearMetrics = true };
+            return font.GetGlyphWidths(glyphs);
+        }
+        catch (InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>A collection on the platform's font manager, with nothing looked up yet (tests).</summary>
     internal static ShellSystemFonts Create() => new(PlatformImpl(FontManager.Current));
 
