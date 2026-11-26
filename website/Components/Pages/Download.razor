@@ -82,7 +82,7 @@
                         <h2 id="apt">Debian, Ubuntu and Linux Mint: the apt repository <span class="badge">Recommended</span></h2>
                         <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. <code>sudo apt upgrade</code> updates it with everything else.</p>
                         <Commands Text="@Apt" />
-                        <p>Needs apt 1.6 or later (Debian 10, Ubuntu 18.04). Added the repository before 0.4.0? Run the second command again.</p>
+                        <p>Needs apt 1.6 or later (Debian 10, Ubuntu 18.04). Added the repository before 0.4.0? Run the second command again. For nightly builds, see <a href="download/#nightly">Stable and nightly</a>.</p>
                     </div>
                     <DownloadFile Kind="The .deb on its own" Suffix="linux-x64.deb" Arm64Suffix="linux-arm64.deb">
                         <code>sudo apt install ./</code> the file. Without the repository it doesn't update.
@@ -93,7 +93,7 @@
                         <h2 id="dnf">Fedora, RHEL and their relatives: the dnf repository <span class="badge">Recommended</span></h2>
                         <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. <code>sudo dnf upgrade</code> updates it with everything else.</p>
                         <Commands Text="@Dnf" />
-                        <p>Use <code>nightly</code> in place of <code>stable</code> for nightly builds.</p>
+                        <p>For nightly builds, see <a href="download/#nightly">Stable and nightly</a>.</p>
                     </div>
                     <DownloadFile Kind="The .rpm on its own" Suffix="linux-x64.rpm" Arm64Suffix="linux-arm64.rpm">
                         <code>sudo dnf install ./</code> the file. Without the repository it doesn't update.
@@ -104,7 +104,7 @@
                         <h2 id="zypper">openSUSE: the rpm repository, with zypper <span class="badge">Recommended</span></h2>
                         <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. <code>sudo zypper update</code> updates it with everything else.</p>
                         <Commands Text="@Zypper" />
-                        <p>Added it before 0.4.0? Remove it with <code>sudo zypper removerepo codalus-stable</code> and add it again.</p>
+                        <p>Added it before 0.4.0? Remove it with <code>sudo zypper removerepo codalus-stable</code> and add it again. For nightly builds, see <a href="download/#nightly">Stable and nightly</a>.</p>
                     </div>
                     <DownloadFile Kind="The .rpm on its own" Suffix="linux-x64.rpm" Arm64Suffix="linux-arm64.rpm">
                         <code>sudo zypper install ./</code> the file. Without the repository it doesn't update.
@@ -116,7 +116,7 @@
                         <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. Run it again to update.</p>
                         <Commands Text="@ArchInstall" />
                         <p>Run it as yourself: pacman asks before it installs, and sudo for your password. It builds the newest release's package, <code>codalus-bin</code>, with makepkg, which checks the download's SHA-256, and installs it with pacman. <code>sudo pacman -R codalus-bin</code> removes it. <a href="install-arch.sh">Read the script</a>.</p>
-                        <p>Or by hand: unzip the release's <a href="@Releases.ArchPackageUrl">PKGBUILD</a>, and run <code>makepkg -si</code> in its folder. The package isn't on the AUR yet, while the AUR's registrations are closed.</p>
+                        <p>Or by hand: unzip the release's <a href="@Releases.ArchPackageUrl">PKGBUILD</a>, and run <code>makepkg -si</code> in its folder. The package isn't on the AUR yet, while the AUR's registrations are closed. It's for stable releases: for nightly builds, see <a href="download/#nightly">Stable and nightly</a>.</p>
                     </div>
                 </div>
                 <div class="distro" role="tabpanel" id="other-panel" aria-labelledby="tab-other">
@@ -151,7 +151,7 @@
     <section class="section" aria-label="Channels and verification">
         <div class="grid grid-wide">
             <div class="card card-outline lift reveal">
-                <h2>Stable and nightly</h2>
+                <h2 id="nightly">Stable and nightly</h2>
                 <p>
                     Stable releases come from master. Nightly builds come from develop once a night, when it changed and passes the tests on every platform, and are marked as prereleases.
                     @if (Releases.Stable is not null && Releases.Nightly is { } nightly)
@@ -159,6 +159,7 @@
                         @("The newest is ")<a href="@Releases.ReleaseUrl(nightly)">@nightly</a>@(".")
                     }
                 </p>
+                <p>The installers and the AppImage switch channels in Options → Environment → Updates (<code>update.channel</code>). For the Linux packages that setting only chooses which releases the IDE tells you about: keep the apt, dnf or zypper repository on <code>stable</code>, and install a nightly build's own .deb or .rpm from its release page; the IDE's notice has the command. The repositories' own <code>nightly</code> channel changes only with each stable release. The stable repository updates a nightly build to the next stable release. Arch Linux: use a nightly build's AppImage.</p>
                 <a class="link-arrow" href="@Releases.ReleasesUrl">All releases <Icon Name="arrow" Size="16" /></a>
             </div>
             <div class="card card-outline lift reveal">

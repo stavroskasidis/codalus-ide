@@ -142,6 +142,9 @@ public sealed class WebsiteTests : IDisposable
 
         // Each package says what it adds; the AppImage is recommended only among the files for the other distributions.
         Assert.Equal(4, Regex.Count(linux, "Adds Codalus IDE to the applications menu"));
+        // Each says where nightly builds come from: the repositories' own nightly channel lags behind the stable one.
+        Assert.Equal(4, Regex.Count(linux, "<a href=\"download/#nightly\">Stable and nightly</a>"));
+        Assert.Contains("<h2 id=\"nightly\">Stable and nightly</h2>", linux, StringComparison.Ordinal);
         var otherAt = linux.IndexOf("id=\"other-panel\"", StringComparison.Ordinal);
         Assert.DoesNotContain("AppImage", linux[..otherAt], StringComparison.Ordinal);
         var other = WebUtility.HtmlDecode(linux[otherAt..]); // commands are encoded ("chmod &#x2B;x")

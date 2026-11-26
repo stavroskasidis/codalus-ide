@@ -408,7 +408,7 @@ internal static partial class BuiltIns
         {
             Title = "Update Channel",
             Category = "Updates",
-            Description = "Stable releases, or nightly builds of the next version. Empty: the channel the installed build came from. Moving from nightly builds to stable releases installs the newest stable release, even when it is older, after a confirmation.",
+            Description = "Stable releases, or nightly builds of the next version. Empty: the channel the installed build came from. Moving from nightly builds to stable releases installs the newest stable release, even when it is older, after a confirmation. The .deb, .rpm and Arch packages are told about the channel's releases but don't update themselves: apt, dnf and zypper install what their own repository has, and the notice gives the command for the rest.",
             Enum = ["", "stable", "nightly"],
             EnumDescriptions = ["The installed build's channel", "Stable releases", "Nightly builds"],
         },

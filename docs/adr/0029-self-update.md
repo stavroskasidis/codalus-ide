@@ -26,8 +26,14 @@ Velopack checks each package it downloads against the size and SHA-256 that the 
 |---|---|---|
 | Development | the version ends with `-dev` (`dotnet run`, local builds) | never checks |
 | Self-updating | Velopack's locator says it installed the app (Setup.exe, .pkg, AppImage, winget) | checks, downloads in the background, applies at the next restart |
-| System package | Linux, running from `/opt/daedalus-studio` (the .deb and .rpm) | says a release is out: "update it with apt or dnf" |
+| System package | Linux, running from `/opt/daedalus-studio` (the .deb and .rpm) | says a release is out, and the command that gets it (below) |
 | Portable | anything else (the zip, the .app zip, the tar.gz) | says a release is out, with a link to its page |
+
+**System packages** (*update 2026-11-25*). `update.channel` is the IDE's; apt, dnf and zypper install what their repository has, and the two don't have to agree. The notice said "update it with your package manager (apt upgrade or dnf upgrade)" for every offer, which does nothing for a nightly build when the repository is stable, never named zypper, and on Arch gave the install command for a nightly build, which installs the newest stable release. `SystemPackageUpdates` now decides when the notice is shown:
+- **Who installed it:** `dpkg-query`, then `rpm -q` (zypper when `/etc/os-release` says SUSE, else dnf). A copy in `/opt/codalus` that neither knows gets the release's page.
+- **A stable release the stable repository has:** the package manager's own upgrade of `codalus`, its lists read again first. The repository is `apt-get indextargets` (Origin "Codalus IDE", suite `stable`), or an enabled `[codalus-stable]` in dnf's or zypper's `.repo` files (dnf 5's overrides included).
+- **A nightly build, or no stable repository:** the command that downloads the release's `.deb` or `.rpm` and installs it. It's used for a nightly build even when the repository follows `nightly`, since that channel is rebuilt with stable releases only (ADR 0028, "Only `master` deploys") and can be older than the stable one. An older release (nightly → stable) gets the same with a downgrade (`--allow-downgrades`, `rpm -U --oldpackage`).
+- **Arch:** the install command for a stable release; for a nightly build, its AppImage, since there's no Arch package of nightlies.
 
 **Behaviour** (D16).
 - **The first check** runs once the window is interactive, off the UI thread. Later checks follow every four hours, and Help → Check for Updates checks right away.
