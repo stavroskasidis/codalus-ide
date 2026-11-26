@@ -149,12 +149,13 @@ public sealed class UiStallMonitorTests
     [AvaloniaFact]
     public void A_stall_at_the_end_of_a_flow_counts()
     {
-        // The probe on its way while the flow's last step holds the UI thread measures that step.
+        // The probe on its way while the flow's last step holds the UI thread measures that step. The step holds it until
+        // a probe has waited 300 ms: a sleep of 30 ms for the probe to be posted, then 300, measured under the budget when
+        // the monitor's thread posted it late into the sleep (Windows CI, run 45877959665: no failure to throw).
         using var monitor = new UiStallMonitor();
         ShellFixture.Pump();
         monitor.Reset();
-        Thread.Sleep(30); // the monitor's next probe is posted
-        Thread.Sleep(300); // and waits for the UI thread, which the flow's last step holds
+        monitor.HoldUntilAProbeWaited(300);
 
         var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => monitor.AssertResponsive("a flow ending in a stall", 100));
         Assert.Contains("didn't answer input", failure.Message, StringComparison.Ordinal);
@@ -165,11 +166,13 @@ public sealed class UiStallMonitorTests
     {
         // A wait in no posted job: the UI thread runnable and not run, waiting in the kernel, or stopped (Linux CI, run
         // 44073138183, 2428 ms in no posted job). Here it sleeps, so the kernel has it asleep (S) for most of the wait.
+        // It holds the UI thread until a probe has waited 300 ms, whenever the monitor's thread posted it: past the first 50
+        // ms of a wait, where the kernel's state is sampled (a probe posted late into a fixed sleep, as in Windows CI's run
+        // 45877959665 of A_stall_at_the_end_of_a_flow_counts, waits less).
         using var monitor = new UiStallMonitor();
         ShellFixture.Pump();
         monitor.Reset();
-        Thread.Sleep(30); // the monitor's next probe is posted
-        Thread.Sleep(300); // and waits for the UI thread, asleep in the kernel
+        monitor.HoldUntilAProbeWaited(300); // asleep in the kernel, but for its 1 ms wakes
         await ShellFixture.PumpUntil(() => monitor.Report().LongestMilliseconds > 0);
 
         var report = monitor.Report();
