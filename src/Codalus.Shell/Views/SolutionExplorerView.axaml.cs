@@ -223,6 +223,11 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         if (RowAt(e.Source) is { } row)
         {
             vm.Selected = row;
+
+            // A right-click takes the focus too, as the classic IDE's does: the menu's commands act on the focused view's
+            // item, and with the focus left in an editor they took its project instead (Start New Instance started the
+            // startup project).
+            (List.ContainerFromItem(row) ?? List).Focus(NavigationMethod.Pointer);
         }
 
         if (MenuBuilder.Context(shell, ContextMenuLocation) is not { } menu)
