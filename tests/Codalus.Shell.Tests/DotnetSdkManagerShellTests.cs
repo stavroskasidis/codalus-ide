@@ -1,5 +1,6 @@
 using System.Reflection;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Codalus.Platform;
 using Codalus.Plugins.Protocol;
 using Codalus.Shell.ViewModels;
@@ -191,6 +192,50 @@ public sealed class DotnetSdkManagerShellTests
         f.Shell.Dialogs.Cancel();
         await prompt;
         Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text?.StartsWith("Microsoft's release information couldn't be read", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// The window as it renders: the list, a global.json prompt's SDK selected, and a removal's confirmation over it,
+    /// saved to <c>CODALUS_UI_SNAPSHOTS</c> when it's set (a visual check; the website's picture comes from the smoke step).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task The_window_renders_its_list_a_prompts_selection_and_a_removals_confirmation()
+    {
+        await using var machine = new Machine();
+        await using var f = await OpenAsync(machine);
+        var view = new ShellHost.DotnetSdksView(f.Shell);
+        var dialog = new Codalus.Shell.Views.DialogView { DataContext = f.Shell.Dialogs, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        var window = new Avalonia.Controls.Window { Width = 1100, Height = 900, Content = new Avalonia.Controls.Panel { Children = { view, dialog } } };
+        window.Show();
+        var snapshots = Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS");
+        void Snap(string name)
+        {
+            dialog.IsVisible = f.Shell.Dialogs.IsOpen; // the shell's overlay shows the dialog layer only while one is open
+            ShellFixture.Pump();
+            ShellFixture.Pump();
+            if (snapshots is { Length: > 0 })
+            {
+                Directory.CreateDirectory(snapshots);
+                using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
+                frame!.Save(Path.Combine(snapshots, name), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+            }
+        }
+
+        await f.Shell.OnDotnetSdksEventAsync("sdks", "select", null, 1);
+        Snap("dotnet-sdks-list.png");
+
+        await f.Shell.InstallFromPromptAsync(new ToolStatus("dotnet", ".NET SDK", true, ToolState.Mismatch, "builds") { WantedVersion = "10.0.111", Version = "11.0.100" });
+        Snap("dotnet-sdks-prompt.png");
+        Assert.Equal(0, view.View.GetVisualDescendants().OfType<Avalonia.Controls.ListBox>().Single(l => Avalonia.Automation.AutomationProperties.GetName(l) == "available").SelectedIndex);
+        Assert.Equal(".NET SDK 10.0.111", Find(f.Shell.DotnetSdksRoot(), "available")!.Rows![0][0]);
+
+        await f.Shell.OnDotnetSdksEventAsync("sdks", "select", null, 1);
+        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove", "click", null, null);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Snap("dotnet-sdks-remove.png");
+        f.Shell.Dialogs.Cancel();
+        await removing;
+        window.Close();
     }
 
     [AvaloniaFact]

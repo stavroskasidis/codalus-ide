@@ -47,7 +47,8 @@ public sealed class DotnetSdkPlannerTests
         Assert.Equal(("10.0.112", true), (rows["10.0.110"].Update, rows["10.0.110"].SecurityUpdate));
         Assert.Equal(("10.0.401", true), (rows["10.0.400"].Update, rows["10.0.400"].SecurityUpdate));
         Assert.Null(rows["11.0.100"].Update);
-        Assert.Contains("Supported until 2028-11-14", rows["10.0.110"].Support, StringComparison.Ordinal);
+        Assert.Equal("Until 2028-11-14 (LTS)", rows["10.0.110"].Support);
+        Assert.Equal("Until 2028-11-14 (STS)", rows["11.0.100"].Support);
         var runtime = DotnetSdkPlanner.InstalledRuntimes(Facts(machine)).Single(r => r.Runtime.Version == "10.0.11");
         Assert.Equal(("10.0.12", true), (runtime.Update, runtime.SecurityUpdate));
     }

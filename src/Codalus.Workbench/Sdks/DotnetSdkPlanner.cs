@@ -198,19 +198,20 @@ public static class DotnetSdkPlanner
             return DotnetSupport.Status(preview ? channel + ".0-preview" : channel + ".0", facts.Today);
         }
 
-        var kind = info.ReleaseType?.ToUpperInvariant() ?? string.Empty;
+        var kind = info.ReleaseType?.ToUpperInvariant() is { Length: > 0 } type ? $" ({type})" : string.Empty;
         var date = info.EndOfLife?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (preview || info.IsPreview)
         {
-            return ($"Preview of .NET {channel}{(kind.Length > 0 ? $" ({kind})" : string.Empty)}", false);
+            return ($"Preview{kind}", false);
         }
 
         if (info.IsOutOfSupport(facts.Today))
         {
-            return (date is null ? $"Out of support (.NET {channel})" : $"Out of support since {date} (.NET {channel})", true);
+            return (date is null ? "Out of support" : $"Out of support since {date}", true);
         }
 
-        return (date is null ? $".NET {channel} {kind}".TrimEnd() : $"Supported until {date} (.NET {channel} {kind})".Replace(" )", ")", StringComparison.Ordinal), false);
+        // Short enough for a table's column: the channel is in the version beside it.
+        return (date is null ? $"Supported{kind}" : $"Until {date}{kind}", false);
     }
 
     /// <summary>

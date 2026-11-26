@@ -277,7 +277,7 @@ public sealed partial class ShellHost
 
     private static string Owner(DotnetRootOwner owner) => owner switch
     {
-        DotnetRootOwner.User => Localizer.Get("msg.sdks.ownerUser", "yours"),
+        DotnetRootOwner.User => Localizer.Get("msg.sdks.ownerUser", "you"),
         DotnetRootOwner.LinuxPackage => Localizer.Get("msg.sdks.ownerPackage", "the distribution's packages"),
         DotnetRootOwner.Snap => Localizer.Get("msg.sdks.ownerSnap", "the dotnet-sdk snap"),
         DotnetRootOwner.MacPackage => Localizer.Get("msg.sdks.ownerPkg", "Microsoft's installer"),
@@ -339,7 +339,8 @@ public sealed partial class ShellHost
         children.Add(new ViewNodeDto("table")
         {
             Id = "sdks",
-            Columns = [Localizer.Get("msg.sdks.colSdk", "SDK"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support"), Localizer.Get("msg.sdks.colFolder", "Folder"), Localizer.Get("msg.sdks.colOwner", "Changed by")],
+            Value = _selectedSdk >= 0 ? _selectedSdk.ToString(CultureInfo.InvariantCulture) : null,
+            Columns = [Localizer.Get("msg.sdks.colSdk", "SDK"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support"), Localizer.Get("msg.sdks.colFolder", "Folder"), Localizer.Get("msg.sdks.colOwner", "Managed by")],
             Rows = [.. _sdkRows.Select(r => new[] { r.Version, UpdateText(r.Update, r.SecurityUpdate, r.UsedBySolution), r.Support, Folder(r.Installation), Owner(r.Installation.Owner) })],
         });
         var sdk = _selectedSdk >= 0 && _selectedSdk < _sdkRows.Count ? _sdkRows[_selectedSdk] : null;
@@ -363,6 +364,7 @@ public sealed partial class ShellHost
         children.Add(new ViewNodeDto("table")
         {
             Id = "runtimes",
+            Value = _selectedRuntime >= 0 ? _selectedRuntime.ToString(CultureInfo.InvariantCulture) : null,
             Columns = [Localizer.Get("msg.sdks.colRuntime", "Runtime"), Localizer.Get("msg.sdks.colVersion", "Version"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support"), Localizer.Get("msg.sdks.colFolder", "Folder")],
             Rows = [.. _runtimeRows.Select(r => new[] { DotnetFrameworks.Title(r.Runtime.Framework), r.Runtime.Version, UpdateText(r.Update, r.SecurityUpdate, usedBySolution: false), r.Support, Folder(r.Installation) })],
         });
@@ -383,7 +385,7 @@ public sealed partial class ShellHost
         {
             Text = target is null
                 ? Localizer.Format("msg.sdks.installsIntoNew", "Installs go into {0}.", DotnetSdkPlanner.UserRoot(_sdkFacts))
-                : Localizer.Format("msg.sdks.installsInto", "Installs go into {0}, the .NET Codalus IDE uses, changed by {1}.", target.Root, Owner(target.Owner)),
+                : Localizer.Format("msg.sdks.installsInto", "Installs go into {0}, the .NET Codalus IDE uses (managed by {1}).", target.Root, Owner(target.Owner)),
             Style = "muted",
         });
         children.Add(new ViewNodeDto("stack")
@@ -398,6 +400,7 @@ public sealed partial class ShellHost
         children.Add(new ViewNodeDto("table")
         {
             Id = "available",
+            Value = _selectedAvailable >= 0 ? _selectedAvailable.ToString(CultureInfo.InvariantCulture) : null,
             Columns = [Localizer.Get("msg.sdks.colInstall", "Install"), Localizer.Get("msg.sdks.colChannel", "Channel"), Localizer.Get("msg.sdks.colSupport", "Support")],
             Rows = [.. _availableRows.Select(a => new[] { a.Title, a.Channel, a.Support })],
         });
