@@ -144,8 +144,7 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 ### Managing the installed SDKs
 
 **Tools → .NET SDKs…** (also **Manage…** on the .NET SDK row of Help → Check Environment) manages the .NET on this machine, with or without a solution open. It lists:
-- **Installed SDKs**, by .NET folder (`~/.dotnet`, `/usr/lib/dotnet`, `/usr/local/share/dotnet`, `%ProgramFiles%\dotnet`…), the folder Codalus IDE uses marked *(in use)*. Each row says whether a newer patch of its feature band exists (**Update: 10.0.112**, or **Security update** when a release since fixes security issues), its support, and who changes its folder.
-- **Installed runtimes**, the same way: .NET, ASP.NET Core and Windows Desktop.
+- **Each .NET folder** (`~/.dotnet`, `/usr/lib/dotnet`, `/usr/local/share/dotnet`, `%ProgramFiles%\dotnet`…) in a section of its own, the one Codalus IDE uses first, with who manages it. Its **SDKs** say whether a newer patch of their feature band exists (**Update: 10.0.112**, or **Security update** when a release since fixes security issues) and their support; its **runtimes** (.NET, ASP.NET Core and Windows Desktop) say the same. Each table has its own buttons.
 - **Available**: each channel's newest SDK, a newer feature band of a channel you have, and runtimes alone (for running projects that target an older .NET). **Show previews** and **Show out of support** add the rest.
 
 Updates and what's available come from Microsoft's release information, read when the window opens and on **Refresh**, and kept for a day. Nothing checks in the background. Offline, the window shows the last copy and says how old it is.

@@ -272,8 +272,18 @@ public sealed partial class ShellHost
         _sdksChanged?.Invoke();
     }
 
-    private static string Folder(DotnetInstallation installation) =>
-        installation.Root + (installation.InUse ? " " + Localizer.Get("msg.sdks.inUse", "(in use)") : string.Empty);
+    private static int IndexOfFirst<T>(IReadOnlyList<T> rows, Func<T, bool> match)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (match(rows[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     private static string Owner(DotnetRootOwner owner) => owner switch
     {
@@ -334,49 +344,75 @@ public sealed partial class ShellHost
             children.Add(new ViewNodeDto("text") { Text = Localizer.Get("msg.sdks.none", "No .NET is installed where Codalus IDE looks for it. Install an SDK from the list below.") });
         }
 
-        // Installed SDKs.
-        children.Add(new ViewNodeDto("text") { Text = Localizer.Get("msg.sdks.installedSdks", "Installed SDKs"), Style = "heading" });
-        children.Add(new ViewNodeDto("table")
+        // One section per .NET folder (the folder and its owner said once, so the columns have room): its SDKs and its
+        // runtimes, each table with its own buttons. A selection is in one table at a time.
+        for (var k = 0; k < _sdkFacts.Installations.Count; k++)
         {
-            Id = "sdks",
-            Value = _selectedSdk >= 0 ? _selectedSdk.ToString(CultureInfo.InvariantCulture) : null,
-            Columns = [Localizer.Get("msg.sdks.colSdk", "SDK"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support"), Localizer.Get("msg.sdks.colFolder", "Folder"), Localizer.Get("msg.sdks.colOwner", "Managed by")],
-            Rows = [.. _sdkRows.Select(r => new[] { r.Version, UpdateText(r.Update, r.SecurityUpdate, r.UsedBySolution), r.Support, Folder(r.Installation), Owner(r.Installation.Owner) })],
-        });
-        var sdk = _selectedSdk >= 0 && _selectedSdk < _sdkRows.Count ? _sdkRows[_selectedSdk] : null;
-        children.Add(new ViewNodeDto("toolbar")
-        {
-            Children =
-            [
-                new ViewNodeDto("button") { Id = "sdkUpdate", Text = sdk?.Update is { } to ? Localizer.Format("msg.sdks.updateTo", "Update to {0}…", to) : Localizer.Get("msg.sdks.updateButton", "Update…"), Disabled = _sdksBusy || sdk?.Update is null },
-                new ViewNodeDto("button") { Id = "sdkRemove", Text = Localizer.Get("msg.sdks.remove", "Remove…"), Disabled = _sdksBusy || sdk is null },
-                new ViewNodeDto("button")
-                {
-                    Id = "sdkOldPatches",
-                    Text = sdk is null ? Localizer.Get("msg.sdks.oldPatches", "Remove Old Patches…") : Localizer.Format("msg.sdks.oldPatchesOf", "Remove Old .NET {0} Patches…", sdk.Channel),
-                    Disabled = _sdksBusy || sdk is null || DotnetSdkPlanner.OldPatches(sdk.Installation, sdk.Channel).Count == 0,
-                },
-            ],
-        });
+            var installation = _sdkFacts.Installations[k];
+            children.Add(new ViewNodeDto("separator"));
+            children.Add(new ViewNodeDto("text") { Text = installation.Root, Style = "heading" });
+            children.Add(new ViewNodeDto("text")
+            {
+                Text = installation.InUse
+                    ? Localizer.Format("msg.sdks.folderInUse", "The .NET Codalus IDE uses. Managed by {0}.", Owner(installation.Owner))
+                    : Localizer.Format("msg.sdks.folderManaged", "Managed by {0}.", Owner(installation.Owner)),
+                Style = "muted",
+            });
 
-        // Runtimes.
-        children.Add(new ViewNodeDto("text") { Text = Localizer.Get("msg.sdks.runtimes", "Installed runtimes"), Style = "heading" });
-        children.Add(new ViewNodeDto("table")
-        {
-            Id = "runtimes",
-            Value = _selectedRuntime >= 0 ? _selectedRuntime.ToString(CultureInfo.InvariantCulture) : null,
-            Columns = [Localizer.Get("msg.sdks.colRuntime", "Runtime"), Localizer.Get("msg.sdks.colVersion", "Version"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support"), Localizer.Get("msg.sdks.colFolder", "Folder")],
-            Rows = [.. _runtimeRows.Select(r => new[] { DotnetFrameworks.Title(r.Runtime.Framework), r.Runtime.Version, UpdateText(r.Update, r.SecurityUpdate, usedBySolution: false), r.Support, Folder(r.Installation) })],
-        });
-        var runtime = _selectedRuntime >= 0 && _selectedRuntime < _runtimeRows.Count ? _runtimeRows[_selectedRuntime] : null;
-        children.Add(new ViewNodeDto("toolbar")
-        {
-            Children =
-            [
-                new ViewNodeDto("button") { Id = "runtimeUpdate", Text = runtime?.Update is { } runtimeTo ? Localizer.Format("msg.sdks.updateTo", "Update to {0}…", runtimeTo) : Localizer.Get("msg.sdks.updateButton", "Update…"), Disabled = _sdksBusy || runtime?.Update is null },
-                new ViewNodeDto("button") { Id = "runtimeRemove", Text = Localizer.Get("msg.sdks.remove", "Remove…"), Disabled = _sdksBusy || runtime is null },
-            ],
-        });
+            var sdkOffset = IndexOfFirst(_sdkRows, r => r.Installation == installation);
+            var sdks = _sdkRows.Where(r => r.Installation == installation).ToList();
+            if (sdks.Count > 0)
+            {
+                var selected = _selectedSdk - sdkOffset is var local && local >= 0 && local < sdks.Count ? local : -1;
+                children.Add(new ViewNodeDto("table")
+                {
+                    Id = $"sdks:{k}",
+                    Value = selected >= 0 ? selected.ToString(CultureInfo.InvariantCulture) : null,
+                    Columns = [Localizer.Get("msg.sdks.colSdk", "SDK"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support")],
+                    Rows = [.. sdks.Select(r => new[] { r.Version, UpdateText(r.Update, r.SecurityUpdate, r.UsedBySolution), r.Support })],
+                });
+                var sdk = selected >= 0 ? sdks[selected] : null;
+                children.Add(new ViewNodeDto("toolbar")
+                {
+                    Children =
+                    [
+                        new ViewNodeDto("button") { Id = $"sdkUpdate:{k}", Text = sdk?.Update is { } to ? Localizer.Format("msg.sdks.updateTo", "Update to {0}…", to) : Localizer.Get("msg.sdks.updateButton", "Update…"), Disabled = _sdksBusy || sdk?.Update is null },
+                        new ViewNodeDto("button") { Id = $"sdkRemove:{k}", Text = Localizer.Get("msg.sdks.remove", "Remove…"), Disabled = _sdksBusy || sdk is null },
+                        new ViewNodeDto("button")
+                        {
+                            Id = $"sdkOldPatches:{k}",
+                            Text = sdk is null ? Localizer.Get("msg.sdks.oldPatches", "Remove Old Patches…") : Localizer.Format("msg.sdks.oldPatchesOf", "Remove Old .NET {0} Patches…", sdk.Channel),
+                            Disabled = _sdksBusy || sdk is null || DotnetSdkPlanner.OldPatches(sdk.Installation, sdk.Channel).Count == 0,
+                        },
+                    ],
+                });
+            }
+
+            var runtimeOffset = IndexOfFirst(_runtimeRows, r => r.Installation == installation);
+            var runtimes = _runtimeRows.Where(r => r.Installation == installation).ToList();
+            if (runtimes.Count > 0)
+            {
+                var selected = _selectedRuntime - runtimeOffset is var local && local >= 0 && local < runtimes.Count ? local : -1;
+                children.Add(new ViewNodeDto("table")
+                {
+                    Id = $"runtimes:{k}",
+                    Value = selected >= 0 ? selected.ToString(CultureInfo.InvariantCulture) : null,
+                    Columns = [Localizer.Get("msg.sdks.colRuntime", "Runtime"), Localizer.Get("msg.sdks.colVersion", "Version"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support")],
+                    Rows = [.. runtimes.Select(r => new[] { DotnetFrameworks.Title(r.Runtime.Framework), r.Runtime.Version, UpdateText(r.Update, r.SecurityUpdate, usedBySolution: false), r.Support })],
+                });
+                var runtime = selected >= 0 ? runtimes[selected] : null;
+                children.Add(new ViewNodeDto("toolbar")
+                {
+                    Children =
+                    [
+                        new ViewNodeDto("button") { Id = $"runtimeUpdate:{k}", Text = runtime?.Update is { } runtimeTo ? Localizer.Format("msg.sdks.updateTo", "Update to {0}…", runtimeTo) : Localizer.Get("msg.sdks.updateButton", "Update…"), Disabled = _sdksBusy || runtime?.Update is null },
+                        new ViewNodeDto("button") { Id = $"runtimeRemove:{k}", Text = Localizer.Get("msg.sdks.remove", "Remove…"), Disabled = _sdksBusy || runtime is null },
+                    ],
+                });
+            }
+        }
+
+        children.Add(new ViewNodeDto("separator"));
 
         // Available.
         var target = _sdkFacts.Target;
@@ -423,13 +459,24 @@ public sealed partial class ShellHost
     /// <summary>What the user did in the window.</summary>
     internal async Task OnDotnetSdksEventAsync(string id, string kind, string? value, int? row)
     {
+        // A folder's tables and buttons are "<id>:<folder>": a row is the folder's, mapped to the whole list's.
+        var folder = -1;
+        if (id.IndexOf(':', StringComparison.Ordinal) is var colon and > 0 && int.TryParse(id.AsSpan(colon + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var index))
+        {
+            folder = index;
+            id = id[..colon];
+        }
+
+        var installation = _sdkFacts is { } facts && folder >= 0 && folder < facts.Installations.Count ? facts.Installations[folder] : null;
         switch (id, kind)
         {
-            case ("sdks", "select" or "activate"):
-                _selectedSdk = row ?? -1;
+            case ("sdks", "select" or "activate") when installation is not null:
+                _selectedSdk = row is { } sdkRow ? IndexOfFirst(_sdkRows, r => r.Installation == installation) + sdkRow : -1;
+                _selectedRuntime = -1;
                 break;
-            case ("runtimes", "select" or "activate"):
-                _selectedRuntime = row ?? -1;
+            case ("runtimes", "select" or "activate") when installation is not null:
+                _selectedRuntime = row is { } runtimeRow ? IndexOfFirst(_runtimeRows, r => r.Installation == installation) + runtimeRow : -1;
+                _selectedSdk = -1;
                 break;
             case ("available", "select"):
                 _selectedAvailable = row ?? -1;

@@ -65,12 +65,14 @@ public sealed class DotnetSdkManagerShellTests
         await using var f = await OpenAsync(machine);
 
         var root = f.Shell.DotnetSdksRoot();
-        var sdks = Find(root, "sdks")!.Rows!;
+        var sdks = Find(root, "sdks:0")!.Rows!;
         Assert.Equal(["11.0.100", "10.0.110"], sdks.Select(r => r[0]));
         Assert.Equal("Up to date", sdks[0][1]);
         Assert.Equal("Security update: 10.0.112", sdks[1][1]);
-        Assert.EndsWith("(in use)", sdks[1][3], StringComparison.Ordinal);
-        Assert.Contains(Find(root, "runtimes")!.Rows!, r => r[0] == ".NET Runtime" && r[1] == "10.0.10" && r[2] == "Security update: 10.0.12");
+        Assert.Equal(3, sdks[1].Length); // the folder and its owner are its section's, not every row's
+        Assert.Contains(root.Children!, c => c is { Style: "heading" } && c.Text == machine.Root);
+        Assert.Contains(root.Children!, c => c.Text == "The .NET Codalus IDE uses. Managed by you.");
+        Assert.Contains(Find(root, "runtimes:0")!.Rows!, r => r[0] == ".NET Runtime" && r[1] == "10.0.10" && r[2] == "Security update: 10.0.12");
         Assert.Contains(Find(root, "available")!.Rows!, r => r[0] == ".NET SDK 10.0.401");
         Assert.DoesNotContain(Find(root, "available")!.Rows!, r => r[1] == "9.0");
 
@@ -83,9 +85,9 @@ public sealed class DotnetSdkManagerShellTests
     {
         await using var machine = new Machine();
         await using var f = await OpenAsync(machine);
-        await f.Shell.OnDotnetSdksEventAsync("sdks", "select", null, 1); // 10.0.110
+        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 1); // 10.0.110
 
-        var cancelled = f.Shell.OnDotnetSdksEventAsync("sdkRemove", "click", null, null);
+        var cancelled = f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Assert.Contains(Path.Combine(machine.Root, "sdk", "10.0.110"), f.Shell.Dialogs.Message, StringComparison.Ordinal);
         Assert.Contains(".NET Runtime 10.0.10 stays: it's the newest .NET 10.0 runtime here", f.Shell.Dialogs.Message, StringComparison.Ordinal);
@@ -94,14 +96,14 @@ public sealed class DotnetSdkManagerShellTests
         Assert.True(Directory.Exists(Path.Combine(machine.Root, "sdk", "10.0.110")));
 
         // 11.0.100 stays, so 10.0.110 isn't the last SDK; its runtime isn't the newest of .NET 10 but the only one: it stays.
-        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove", "click", null, null);
+        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.Accept();
         await removing;
 
         Assert.False(Directory.Exists(Path.Combine(machine.Root, "sdk", "10.0.110")));
         Assert.True(Directory.Exists(Path.Combine(machine.Root, "shared", "Microsoft.NETCore.App", "10.0.10")));
-        Assert.Equal(["11.0.100"], Find(f.Shell.DotnetSdksRoot(), "sdks")!.Rows!.Select(r => r[0]));
+        Assert.Equal(["11.0.100"], Find(f.Shell.DotnetSdksRoot(), "sdks:0")!.Rows!.Select(r => r[0]));
         Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text == ".NET SDK 10.0.110 is removed.");
     }
 
@@ -111,9 +113,9 @@ public sealed class DotnetSdkManagerShellTests
         await using var machine = new Machine();
         Directory.Delete(Path.Combine(machine.Root, "sdk", "10.0.110"));
         await using var f = await OpenAsync(machine);
-        await f.Shell.OnDotnetSdksEventAsync("sdks", "select", null, 0);
+        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 0);
 
-        await f.Shell.OnDotnetSdksEventAsync("sdkRemove", "click", null, null);
+        await f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
 
         Assert.False(f.Shell.Dialogs.IsOpen);
         Assert.True(Directory.Exists(Path.Combine(machine.Root, "sdk", "11.0.100")));
@@ -143,7 +145,7 @@ public sealed class DotnetSdkManagerShellTests
         await installing;
 
         Assert.Contains(expected, Assert.Single(ran), StringComparison.Ordinal);
-        Assert.Contains("10.0.401", Find(f.Shell.DotnetSdksRoot(), "sdks")!.Rows!.Select(r => r[0]));
+        Assert.Contains("10.0.401", Find(f.Shell.DotnetSdksRoot(), "sdks:0")!.Rows!.Select(r => r[0]));
         Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text == ".NET SDK 10.0.401 is installed.");
     }
 
@@ -221,7 +223,7 @@ public sealed class DotnetSdkManagerShellTests
             }
         }
 
-        await f.Shell.OnDotnetSdksEventAsync("sdks", "select", null, 1);
+        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 1);
         Snap("dotnet-sdks-list.png");
 
         await f.Shell.InstallFromPromptAsync(new ToolStatus("dotnet", ".NET SDK", true, ToolState.Mismatch, "builds") { WantedVersion = "10.0.111", Version = "11.0.100" });
@@ -229,8 +231,8 @@ public sealed class DotnetSdkManagerShellTests
         Assert.Equal(0, view.View.GetVisualDescendants().OfType<Avalonia.Controls.ListBox>().Single(l => Avalonia.Automation.AutomationProperties.GetName(l) == "available").SelectedIndex);
         Assert.Equal(".NET SDK 10.0.111", Find(f.Shell.DotnetSdksRoot(), "available")!.Rows![0][0]);
 
-        await f.Shell.OnDotnetSdksEventAsync("sdks", "select", null, 1);
-        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove", "click", null, null);
+        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 1);
+        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Snap("dotnet-sdks-remove.png");
         f.Shell.Dialogs.Cancel();
