@@ -5,7 +5,7 @@ using Codalus.Workbench.Setup;
 namespace Codalus.Workbench.Sdks;
 
 /// <summary>
-/// A .NET channel (<c>10.0</c>) as Microsoft's <c>releases-index.json</c> describes it (ADR 0111): its newest release,
+/// A .NET channel (<c>10.0</c>) as Microsoft's <c>releases-index.json</c> describes it (ADR 0112): its newest release,
 /// runtime and SDK, its support phase (<c>preview</c>, <c>go-live</c>, <c>active</c>, <c>maintenance</c>, <c>eol</c>),
 /// LTS or STS, and its end of support.
 /// </summary>
@@ -36,7 +36,7 @@ public sealed record DotnetChannel(string Version, string SupportPhase)
 }
 
 /// <summary>
-/// One release of a channel, from its <c>releases.json</c> (ADR 0111): the runtime, ASP.NET Core and Windows Desktop
+/// One release of a channel, from its <c>releases.json</c> (ADR 0112): the runtime, ASP.NET Core and Windows Desktop
 /// versions it brings, its SDKs (one per feature band), and whether it fixes security issues.
 /// </summary>
 public sealed record DotnetRelease(string Version)
@@ -108,7 +108,7 @@ public static class DotnetFrameworks
     };
 }
 
-/// <summary>Reads Microsoft's release metadata (ADR 0111). Unknown properties are ignored; a missing one is null.</summary>
+/// <summary>Reads Microsoft's release metadata (ADR 0112). Unknown properties are ignored; a missing one is null.</summary>
 public static class DotnetReleaseParser
 {
     private static readonly JsonDocumentOptions s_options = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };

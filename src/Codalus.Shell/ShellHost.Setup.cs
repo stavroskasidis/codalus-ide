@@ -327,7 +327,7 @@ public sealed partial class ShellHost
         var choice = await Workbench.Notifications.Warning(message, install, details).Result.ConfigureAwait(true);
         if (choice == install)
         {
-            await InstallFromPromptAsync(tool).ConfigureAwait(true); // .NET: the SDK manager, with it selected (ADR 0111)
+            await InstallFromPromptAsync(tool).ConfigureAwait(true); // .NET: the SDK manager, with it selected (ADR 0112)
         }
         else if (choice == details)
         {
@@ -407,7 +407,7 @@ public sealed partial class ShellHost
     {
         if (choice == install)
         {
-            _ = InstallFromPromptAsync(tool); // the SDK manager, with the SDK needed selected (ADR 0111)
+            _ = InstallFromPromptAsync(tool); // the SDK manager, with the SDK needed selected (ADR 0112)
         }
         else if (choice == details)
         {

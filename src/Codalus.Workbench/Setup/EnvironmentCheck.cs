@@ -259,7 +259,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
             .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(StringComparer.Ordinal);
 
     /// <summary>
-    /// The .NET folders worth listing (the SDK manager, ADR 0111): the one the IDE uses, the hosts', then where the
+    /// The .NET folders worth listing (the SDK manager, ADR 0112): the one the IDE uses, the hosts', then where the
     /// installers put .NET on this OS. Some may not exist.
     /// </summary>
     public IReadOnlyList<string> KnownRoots() =>
@@ -268,7 +268,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
 
     /// <summary>
     /// Whether the IDE's hosts would still find their runtime in <paramref name="root"/> without <paramref name="removed"/>
-    /// (the SDK manager's guard, ADR 0111): always true for a root the hosts don't use.
+    /// (the SDK manager's guard, ADR 0112): always true for a root the hosts don't use.
     /// </summary>
     public bool HostsStillRunWithout(string root, IReadOnlyCollection<(string Framework, string Version)> removed)
     {

@@ -4,7 +4,7 @@ using Codalus.Workbench.Sdks;
 namespace Codalus.Workbench.Tests.Sdks;
 
 /// <summary>
-/// Microsoft's release metadata (ADR 0111), read from the samples' trimmed copy (<c>samples/DotnetReleases</c>): the
+/// Microsoft's release metadata (ADR 0112), read from the samples' trimmed copy (<c>samples/DotnetReleases</c>): the
 /// index and a channel's releases, and the cache: a day's reuse, Refresh, and the stale copy when a fetch fails.
 /// Nothing reaches the network: the fetch is a stand-in or a folder.
 /// </summary>

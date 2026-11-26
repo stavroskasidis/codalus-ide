@@ -764,7 +764,7 @@ public sealed class SdkViewModel : ObservableObject, ILoadable
 
     public ICommand RefreshCommand { get; }
 
-    /// <summary>Opens Tools → .NET SDKs (ADR 0111): install, update and remove SDKs for the whole machine.</summary>
+    /// <summary>Opens Tools → .NET SDKs (ADR 0112): install, update and remove SDKs for the whole machine.</summary>
     public ICommand ManageCommand { get; }
 
     public string ResolvedText => _info?.ResolvedVersion is { } version ? $"In use: .NET SDK {version} ({_info.ResolvedSdk})" : "In use: unknown";

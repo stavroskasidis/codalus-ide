@@ -15,6 +15,7 @@
         <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="color" IsChecked="{Binding ForAllThemes}" Content="{l:T fontsAndColors.forEveryTheme}" AutomationProperties.Name="{l:T fontsAndColors.forEveryTheme}"
                   ToolTip.Tip="{l:T fontsAndColors.offColorsSetHereApplyTo}" />
         <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="gear" Content="{l:T fontsAndColors.fonts}" Command="{Binding OpenFontSettingsCommand}" ToolTip.Tip="{l:T fontsAndColors.theEditorSFontFamilyAnd}" />
+        <Button x:Name="UiFontButton" Classes="toolbar iconText" controls:ButtonIcon.Kind="gear" Content="{l:T fontsAndColors.uiFont}" Command="{Binding OpenUiFontSettingsCommand}" ToolTip.Tip="{l:T fontsAndColors.theUiSFontFamilyAnd}" />
       </controls:ToolbarPanel>
       <TextBlock Classes="muted">
         <Run Text="{l:T fontsAndColors.theme}" /> <Run Text="{Binding ThemeTitle}" />

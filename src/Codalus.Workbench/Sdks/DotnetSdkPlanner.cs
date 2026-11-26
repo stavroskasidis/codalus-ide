@@ -5,7 +5,7 @@ using Codalus.Workbench.Setup;
 
 namespace Codalus.Workbench.Sdks;
 
-/// <summary>What the SDK manager's lists and plans are made from (ADR 0111). Nothing in it runs anything.</summary>
+/// <summary>What the SDK manager's lists and plans are made from (ADR 0112). Nothing in it runs anything.</summary>
 public sealed record DotnetSdkFacts(IDotnetMachine Machine, IReadOnlyList<DotnetInstallation> Installations, DateOnly Today)
 {
     /// <summary>The channels of <c>releases-index.json</c>; empty when it couldn't be read (the lists say less, nothing breaks).</summary>
@@ -90,7 +90,7 @@ public sealed record AvailableDotnet(string Channel, string Framework, string Ve
 }
 
 /// <summary>
-/// What removing an SDK or a runtime does (ADR 0111): the folders deleted (a folder of the user's), or the command that
+/// What removing an SDK or a runtime does (ADR 0112): the folders deleted (a folder of the user's), or the command that
 /// removes it (a package manager's); what stays, and why; or why it's refused.
 /// </summary>
 public sealed record DotnetRemoval(string What)
@@ -112,7 +112,7 @@ public sealed record DotnetRemoval(string What)
 }
 
 /// <summary>
-/// The SDK manager's logic (ADR 0111): the installed SDKs and runtimes with their updates, what's available, and the
+/// The SDK manager's logic (ADR 0112): the installed SDKs and runtimes with their updates, what's available, and the
 /// plans that install, update and remove. Pure: the shell shows a plan, asks, and runs it.
 /// </summary>
 public static class DotnetSdkPlanner
@@ -379,7 +379,7 @@ public static class DotnetSdkPlanner
     }
 
     /// <summary>
-    /// Removing an SDK (ADR 0111): <c>sdk/&lt;version&gt;</c>, and the runtimes only it brought with their packs and
+    /// Removing an SDK (ADR 0112): <c>sdk/&lt;version&gt;</c>, and the runtimes only it brought with their packs and
     /// templates. A runtime stays when another SDK left here brought it, when it's the newest of its channel here, or when
     /// the IDE's hosts would lose their runtime. Refused for the open solution's SDK and the last SDK of the IDE's folder.
     /// </summary>
@@ -391,7 +391,7 @@ public static class DotnetSdkPlanner
     }
 
     /// <summary>
-    /// Remove Old Patches (ADR 0111): several SDKs of one folder at once, under the same guards, as one removal: one list
+    /// Remove Old Patches (ADR 0112): several SDKs of one folder at once, under the same guards, as one removal: one list
     /// of folders, or one command. The ones refused are named in <see cref="DotnetRemoval.Kept"/>; all refused, it's refused.
     /// </summary>
     public static DotnetRemoval RemoveSdks(DotnetSdkFacts facts, DotnetInstallation installation, IReadOnlyList<string> sdks)
@@ -531,7 +531,7 @@ public static class DotnetSdkPlanner
         [.. installation.Sdks.Where(s => ChannelOf(s) == channel && installation.Sdks.Any(o => BandOf(o) == BandOf(s) && s_versions.Compare(o, s) > 0)).Order(s_versions)];
 
     /// <summary>
-    /// The workloads to offer for a newly installed SDK's band (ADR 0111): none when its band has some already; else those
+    /// The workloads to offer for a newly installed SDK's band (ADR 0112): none when its band has some already; else those
     /// of the newest older band of the same channel that has any (<c>metadata/workloads/&lt;band&gt;/InstalledWorkloads</c>).
     /// </summary>
     public static IReadOnlyList<string> WorkloadsToCarry(IDotnetMachine machine, DotnetInstallation installation, string newSdk)

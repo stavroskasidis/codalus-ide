@@ -4,7 +4,7 @@ using Codalus.Workbench.Setup;
 namespace Codalus.Workbench.Sdks;
 
 /// <summary>
-/// The machine whose .NET the SDK manager reads and changes (ADR 0111): this one, and later WSL and a remote machine
+/// The machine whose .NET the SDK manager reads and changes (ADR 0112): this one, and later WSL and a remote machine
 /// over the remote server's <c>fs/*</c> messages (<c>TODO(issue)</c>: WSL and remote machines in the SDK manager). Paths
 /// are the machine's own.
 /// </summary>
@@ -89,7 +89,7 @@ public sealed class LocalDotnetMachine(PlatformKind platform) : IDotnetMachine
     public void DeleteDirectory(string path) => Directory.Delete(path, recursive: true);
 }
 
-/// <summary>Who changes a .NET folder (ADR 0111), which decides how the manager installs, updates and removes there.</summary>
+/// <summary>Who changes a .NET folder (ADR 0112), which decides how the manager installs, updates and removes there.</summary>
 public enum DotnetRootOwner
 {
     /// <summary>The user's (<c>~/.dotnet</c>, <c>%LOCALAPPDATA%\Microsoft\dotnet</c>, a folder they can write): changed directly.</summary>
@@ -126,7 +126,7 @@ public sealed record DotnetInstallation(string Root, DotnetRootOwner Owner, bool
 }
 
 /// <summary>
-/// The .NET folders of a machine and what's in them (ADR 0111), from the folders themselves: <c>dotnet</c> isn't run,
+/// The .NET folders of a machine and what's in them (ADR 0112), from the folders themselves: <c>dotnet</c> isn't run,
 /// so a folder whose <c>dotnet</c> is broken still lists, and nothing waits on a process.
 /// </summary>
 public static class DotnetInstallations

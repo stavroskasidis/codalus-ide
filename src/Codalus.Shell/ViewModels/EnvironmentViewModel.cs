@@ -65,7 +65,7 @@ public sealed class ToolRowViewModel(ToolStatus tool, InstallPlan? plan, Func<To
 
     public ICommand FixCommand => new RelayCommand(() => _ = install(Tool));
 
-    /// <summary>The .NET SDK's row opens the SDK manager (ADR 0111): Manage….</summary>
+    /// <summary>The .NET SDK's row opens the SDK manager (ADR 0112): Manage….</summary>
     public bool CanManage => manage is not null;
 
     public ICommand ManageCommand => new RelayCommand(() => manage?.Invoke());

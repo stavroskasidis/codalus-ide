@@ -121,7 +121,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         shell.Dialogs.Opened += OnDialogOpened;
 
-        // ADR 0111: the SDK manager reads a local copy of Microsoft's release metadata, so no step (the sweep's included) reaches the network.
+        // ADR 0112: the SDK manager reads a local copy of Microsoft's release metadata, so no step (the sweep's included) reaches the network.
         shell.DotnetReleases = new Codalus.Workbench.Sdks.DotnetReleaseSource(Path.Combine(Work, "dotnet-releases-cache"), Path.Combine(samples, "DotnetReleases"));
         var exitCode = 1;
         try
@@ -308,8 +308,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
         await StepAsync("shell.setup", "M46", "The first-run setup: the welcome page's origin preselects the keys, a theme family previewed live, VS Code's settings imported, the tools checked, the AI step's three ways compared and left as they were; the summary's Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
-        // ADR 0111: Tools → .NET SDKs on this machine's own .NET, against the local copy of the release metadata (the website's picture).
-        await StepAsync("setup.dotnetSdks", "ADR 0111", "Tools → .NET SDKs lists this machine's SDKs and runtimes by folder, the folder in use marked, with their updates and what's available; nothing is installed or removed", DotnetSdksStepAsync).ConfigureAwait(true);
+        // ADR 0112: Tools → .NET SDKs on this machine's own .NET, against the local copy of the release metadata (the website's picture).
+        await StepAsync("setup.dotnetSdks", "ADR 0112", "Tools → .NET SDKs lists this machine's SDKs and runtimes by folder, the folder in use marked, with their updates and what's available; nothing is installed or removed", DotnetSdksStepAsync).ConfigureAwait(true);
 
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
@@ -349,6 +349,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.DeleteProfileAsync("Smoke", confirm: false).ConfigureAwait(true);
             Check(shell.Profiles.Active == Workbench.Settings.ProfileStore.DefaultName && !shell.Profiles.Exists("Smoke"), "back on Default, the profile deleted");
             Check(shell.Workbench.Settings.GetValue("editor.fontSize").GetRawText() == fontSize, "Default's settings came back");
+        }).ConfigureAwait(true);
+
+        // #556 (ADR 0111): the UI's text in the shipped app, whose HarfBuzz and fontconfig calls are Native AOT's.
+        await StepAsync("shell.uiText", "1.1.0", "The UI's text: a variable font laid out at its instance's weight, the windows smoothing text the setting's way, and the UI's font size applied at once", async () =>
+        {
+            {
+                // The platform keeps (and disposes) the stream it reads a face from: one each.
+                var font = await File.ReadAllBytesAsync(Path.Combine(samples, "Fonts", "InterVariable-ascii.ttf")).ConfigureAwait(true);
+                var regular = ShellSystemFonts.FromFile(new MemoryStream(font, writable: false));
+                Check(regular is not null && ShellSystemFonts.IsVariable(regular.PlatformTypeface), "the variable font fixture reads as variable");
+                var bold = ShellSystemFonts.FromFile(new MemoryStream(font, writable: false))!;
+                Check(VariableFonts.Apply(bold, Avalonia.Media.FontWeight.Bold), "HarfBuzz takes the variable font's weight");
+                static double Advance(Avalonia.Media.GlyphTypeface face) =>
+                    Avalonia.Media.TextFormatting.TextShaper.Current.ShapeText("AI: Provider", new Avalonia.Media.TextFormatting.TextShaperOptions(face, 14)).Sum(g => g.GlyphAdvance);
+                Check(Advance(bold) > Advance(regular!), $"bold is laid out wider than regular ({Advance(bold):F1} against {Advance(regular!):F1})");
+            }
+
+            Check(Avalonia.Media.TextOptions.GetTextOptions(window) == shell.TextRendering.Current, $"the main window smooths text the setting's way ({shell.TextRendering.Current.TextRenderingMode}, {shell.TextRendering.Current.TextHintingMode})");
+            var settings = shell.Workbench.Settings;
+            await settings.SetAsync(Theming.UiFont.SizeSetting, 14, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.FontSize == 14, "the UI font size applies at once").ConfigureAwait(true);
+            await settings.SetAsync(Theming.UiFont.SizeSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.FontSize == Theming.UiFont.DefaultSize, "and goes back to 12").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.

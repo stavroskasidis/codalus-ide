@@ -3,7 +3,7 @@ using Codalus.Workbench.Sdks;
 
 namespace Codalus.Workbench.Tests.Sdks;
 
-/// <summary>The .NET folders of described machines (ADR 0111): what's in each, read from its folders, and who owns it.</summary>
+/// <summary>The .NET folders of described machines (ADR 0112): what's in each, read from its folders, and who owns it.</summary>
 public sealed class DotnetInstallationsTests
 {
     [Fact]
