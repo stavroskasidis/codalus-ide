@@ -162,7 +162,7 @@ public static class AcpAgentTemplates
     public static IReadOnlyList<string> ClaudeProviderVariables { get; } = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"];
 
     /// <summary>pi's own CLI, pinned (pi-acp needs 0.81 or later; this version needs Node.js 22.19).</summary>
-    public const string PiCliPackage = "@earendil-works/pi-coding-agent@1.6.0";
+    public const string PiCliPackage = "@earendil-works/pi-coding-agent@1.6.1";
 
     /// <summary>OpenCode's CLI from npm, pinned to the version the registry lists.</summary>
     public const string OpenCodeCliPackage = "opencode-ai@1.19.6";
