@@ -290,7 +290,8 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
     private bool _consent;
     private bool _consentShown;
     private bool _persistent = true;
-    private bool _useCodalusNode;
+    /// <summary>The Node.js chosen in the dialog (<see cref="AcpConnectRequest.Node"/>): Codalus's own, a version manager's, or null for the PATH's.</summary>
+    private string? _node;
     private AcpRequirements? _requirements;
     private AcpTestResult? _result;
     private bool _saved;
@@ -634,7 +635,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
         _saved = false;
         _apiKey = string.Empty;
         _consent = false;
-        _useCodalusNode = false;
+        _node = null;
         _consentShown = !_host.Ai.IsEnabled && !_host.Ai.IsOffForWorkspace;
         Title = Localizer.Format("msg.acp.connect.title", "Connect to {0}", template.Name);
         Context = template.Agent.UsesNpx
@@ -740,7 +741,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
                 return;
             }
 
-            var requirements = await Task.Run(() => _host.Connector.CheckAsync(template, _useCodalusNode, Token)).ConfigureAwait(true);
+            var requirements = await Task.Run(() => _host.Connector.CheckAsync(template, _node, Token)).ConfigureAwait(true);
             if (!ReferenceEquals(_template, template))
             {
                 return;
@@ -771,9 +772,10 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
         {
             var choice = new ConnectChoice(option.Id, option.Name, option.Description, option)
             {
-                Command = option.Kind == InstallKind.OpenPage || option.IsCodalusNode ? null : option.Command,
+                Command = option.Kind == InstallKind.OpenPage || option.IsCodalusNode || option.NodeManager is not null ? null : option.Command,
                 Meta = option switch
                 {
+                    { NodeManager: not null } => Localizer.Get("msg.acp.connect.metaManagedNode", "Nothing to install: it's on this computer already."),
                     { IsCodalusNode: true } => Localizer.Format("msg.acp.connect.metaCodalusNode", "Downloads Node.js {0} from nodejs.org once (about 50 MB), checked against its SHA-256.", Workbench.Node.NodeRuntime.Version),
                     { Kind: InstallKind.OpenPage } => Localizer.Format("msg.acp.connect.metaPage", "Opens {0} in your browser.", new Uri(option.Command).Host),
                     { Kind: InstallKind.Terminal } => Localizer.Get("msg.acp.connect.metaTerminal", "Runs in the Terminal: it asks for your password."),
@@ -782,6 +784,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
                 },
                 MetaIcon = option switch
                 {
+                    { NodeManager: not null } => "check",
                     { IsCodalusNode: true } => "cloud-download",
                     { Kind: InstallKind.OpenPage } => "link-external",
                     { Kind: InstallKind.Terminal } => "terminal",
@@ -828,6 +831,13 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
             return;
         }
 
+        if (option.NodeManager is { } manager)
+        {
+            _node = manager; // already installed: the check finds it in its folder
+            await CheckAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (option.Kind == InstallKind.OpenPage)
         {
             _host.OpenUrl(option.Command);
@@ -848,7 +858,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
         {
             if (option.IsCodalusNode)
             {
-                _useCodalusNode = true;
+                _node = "builtIn";
             }
 
             await Task.Run(() => _host.Connector.InstallAsync(template.Id, option, this, line => Ui.Post(() => InstallStatus = line), Token)).ConfigureAwait(true);
@@ -953,7 +963,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
             return;
         }
 
-        var request = new AcpConnectRequest(template, option) { ApiKey = option.TakesKey ? ApiKey : null, Consent = _consentShown && Consent, UseCodalusNode = _useCodalusNode };
+        var request = new AcpConnectRequest(template, option) { ApiKey = option.TakesKey ? ApiKey : null, Consent = _consentShown && Consent, Node = _node };
         Mode = ConnectAgentMode.Testing;
         Steps.Clear();
         Steps.Add(new ConnectStep(AcpTestStep.Requirements, Localizer.Get("msg.acp.connect.stepRequirements", "Requirements"), null));
@@ -1216,6 +1226,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
                 var label = option switch
                 {
                     { IsCodalusNode: true } => Localizer.Get("msg.acp.connect.downloadNode", "Download Node.js"),
+                    { NodeManager: not null } => Localizer.Get("msg.acp.connect.useNode", "Use It"),
                     { Kind: InstallKind.OpenPage } => Localizer.Get("msg.acp.connect.openPage", "Open Page"),
                     { Kind: InstallKind.Terminal } => Localizer.Get("msg.acp.connect.installInTerminal", "Install in Terminal"),
                     _ => Localizer.Get("msg.acp.connect.install", "Install"),
