@@ -68,6 +68,23 @@ public sealed partial class ShellHost
     {
         session.Connected += (_, _) => Ui.Post(() => _ = SyncXamlBreakpointsAsync(session));
         session.XamlBreakpointsChanged += (_, _) => Ui.Post(() => _ = SyncXamlBreakpointsAsync(session));
+        session.XamlBreakpointsTold += (_, states) => Ui.Post(() => _ = ShowToldXamlBreakpointsAsync(session, states));
+    }
+
+    /// <summary>
+    /// The states the agent told as it stopped the app: its answer to a sync can't come while the app is stopped, so a
+    /// breakpoint it names shows its state now; one it doesn't (a list it hasn't read yet) keeps its own (UI thread).
+    /// </summary>
+    private async Task ShowToldXamlBreakpointsAsync(LiveSession session, IReadOnlyList<LiveBreakpointState> states)
+    {
+        if (!ReferenceEquals(Live, session) || !Debugger.IsActive)
+        {
+            return;
+        }
+
+        var (_, targets) = await Task.Run(XamlBreakpointList).ConfigureAwait(true);
+        var told = states.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        ShowXamlBreakpointStates([.. targets.Where(t => told.Contains(BreakpointId(t.Spec)))], states);
     }
 
     /// <summary>The XAML breakpoints as the agent takes them, and each one's target (any thread: the files are read from disk, as the app was built).</summary>
@@ -126,19 +143,25 @@ public sealed partial class ShellHost
                 return; // run without the debugger: nothing can stop, and a glyph shows no state then
             }
 
-            var byId = states.ToDictionary(s => s.Id, StringComparer.Ordinal);
-            foreach (var file in targets.GroupBy(t => t.Spec.Path, SolutionService.PathComparer))
-            {
-                Debugger.Breakpoints.SetExternalStates(file.Key, [.. file.Select(t => (t.Spec.Line, t.Target.Kind == XamlBreakpointKind.None
-                    ? new BreakpointState(false, t.Target.Problem)
-                    : byId.TryGetValue(BreakpointId(t.Spec), out var state)
-                        ? new BreakpointState(state.Bound, state.Bound ? null : state.Message)
-                        : new BreakpointState(false, Localizer.Get("msg.xamlBreakpoints.notBound", "The app's live agent didn't take this XAML breakpoint."))))]);
-            }
+            ShowXamlBreakpointStates(targets, states);
         }
         catch (PreviewerException ex)
         {
             PreviewerLog.AppendLine("XAML breakpoints: " + ex.Message);
+        }
+    }
+
+    /// <summary>What the agent said of each breakpoint, on its glyph (UI thread).</summary>
+    private void ShowXamlBreakpointStates(List<(BreakpointSpec Spec, XamlBreakpointTarget Target)> targets, IReadOnlyList<LiveBreakpointState> states)
+    {
+        var byId = states.GroupBy(s => s.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        foreach (var file in targets.GroupBy(t => t.Spec.Path, SolutionService.PathComparer))
+        {
+            Debugger.Breakpoints.SetExternalStates(file.Key, [.. file.Select(t => (t.Spec.Line, t.Target.Kind == XamlBreakpointKind.None
+                ? new BreakpointState(false, t.Target.Problem)
+                : byId.TryGetValue(BreakpointId(t.Spec), out var state)
+                    ? new BreakpointState(state.Bound, state.Bound ? null : state.Message)
+                    : new BreakpointState(false, Localizer.Get("msg.xamlBreakpoints.notBound", "The app's live agent didn't take this XAML breakpoint."))))]);
         }
     }
 

@@ -102,6 +102,12 @@ internal static class WpfBreak
             Configure(Encoding.UTF8.GetString(Convert.FromBase64String(base64)));
         }
 
+        return States();
+    }
+
+    /// <summary>Each breakpoint's state, as <see cref="Set"/> answers.</summary>
+    private static string States()
+    {
         return Join(Breakpoints().Select(b =>
         {
             var problem = s_unsupported
@@ -245,6 +251,9 @@ internal static class WpfBreak
 
         try
         {
+            // The states first: the break suspends the app, this agent's reader too, so the IDE's own question waits
+            // until it goes on (as the Avalonia agent's LiveBreak.Stop).
+            send?.Invoke("event\txbreaks\t" + States());
             send?.Invoke("event\txstop\t" + string.Join(Field.ToString(), stop.Select(Clean)));
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)

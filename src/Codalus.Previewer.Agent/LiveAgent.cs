@@ -31,7 +31,7 @@ namespace Codalus.Previewer.Agent;
 /// <c>applied count</c>, <c>failed line column message</c> or <c>none</c></item>
 /// <item><c>xbreaks [base64]</c> → XAML breakpoints (M64b, <see cref="LiveBreak"/>): the IDE's list replaces the last;
 /// id, 1 or 0, why not per breakpoint (without a list: the states again); <c>event xbreaks</c> says they changed,
-/// <c>event xstop …</c> comes just before a stop</item>
+/// and <c>event xbreaks states</c> then <c>event xstop …</c> come just before a stop (stopped, the app can't answer)</item>
 /// <item><c>watch id property on|off</c> → <c>ok</c>: Break When Value Changes on the element's property</item>
 /// <item><c>styles id</c> → why each style applies to the element or doesn't (M64b, <see cref="LiveStyles"/>)</item>
 /// </list>
