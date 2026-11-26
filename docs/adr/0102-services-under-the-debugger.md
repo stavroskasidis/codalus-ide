@@ -41,7 +41,7 @@ A solution of services needs every .NET service debugged at once, each one resta
   - *Stop*: its program leaves the session (`DebugService.EndProgramAsync`, `CompoundDebugAdapter.EndPartAsync`: its adapter disconnected with its program and disposed; the session goes on while another program runs), then `compose stop`.
   - *Debug*: a fast-mode service run without the debugger is recreated idle (`up -d --no-deps`) and joins the session (`AddLaunch`), or starts one.
   - *Detach*: its program leaves the session, and the service is recreated running its build without the debugger. A program the debugger started can't outlive its debugger in the container (its output goes through it), so detaching is a restart without it.
-- **A session holds 64 programs** (`CompoundDebugAdapter.MaxParts`, ids keep the program's index in their low bits): the adapters' ids are small counters, and thread ids at most 2^22 on Linux, so 64 times them stays an `int`. An ended program keeps its place, so restarts count.
+- **A session holds 64 programs** (`CompoundDebugAdapter.MaxParts`, ids keep the program's index in their low bits): the adapters' ids are small counters, and thread ids at most 2^22 on Linux, so 64 times them stays an `int`. (Since 2026-11-26 a thread's id is its number in its adapter, not the OS's: a macOS thread id passes 2^24 after days of uptime, ADR 0109.) An ended program keeps its place, so restarts count.
 
 ### Hot Reload in containers
 
