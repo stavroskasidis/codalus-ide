@@ -113,7 +113,9 @@ public class SolutionExplorerFolderViewTests
         var listings = explorer.FolderListings;
         change();
         await SettledAsync(explorer);
-        Assert.Equal(listings + folders, explorer.FolderListings);
+        var listed = explorer.FolderListings - listings;
+        Assert.True(listed == folders, $"{listed} folder listing(s), not {folders}: "
+            + string.Join(", ", explorer.RecentFolderListings.TakeLast(Math.Clamp(listed, 0, 32))));
     }
 
     private static ExplorerNode? Find(ExplorerNode node, string id)
@@ -408,6 +410,11 @@ public class SolutionExplorerFolderViewTests
             await ExpandAsync(explorer, expand);
         }
 
+        // The project's load (its restore and design-time build) writes in src/App/obj after OpenAsync's fence, and FSEvents
+        // can report those writes once the count below has begun: src/App, expanded, is listed again (macOS CI, run
+        // 45785561846: 2 listings, not 1). A fence of its own, after them.
+        await FenceAsync(f, folder);
+        await SettledAsync(explorer);
         var listings = explorer.Listings;
         await ListedAsync(explorer, () => explorer.SetExpanded(Row(explorer, "d:" + modules)!, true), folders: 1);
         Assert.Equal(listings, explorer.Listings);

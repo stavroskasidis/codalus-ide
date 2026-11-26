@@ -803,6 +803,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         foreach (var (folder, listing, error) in listings)
         {
             FolderListings++;
+            RecentFolderListings.Enqueue(folder);
+            if (RecentFolderListings.Count > 32)
+            {
+                RecentFolderListings.Dequeue();
+            }
+
             if (error is not null)
             {
                 // The build host restarting, its two minutes up: the folder keeps its last listing, or counts as listed with
@@ -887,6 +893,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     /// <summary>The folder view's listings taken so far, failed ones too (tests).</summary>
     internal int FolderListings { get; private set; }
+
+    /// <summary>The folders of the last 32 of <see cref="FolderListings"/>, oldest first (tests: which folder a count more was).</summary>
+    internal Queue<string> RecentFolderListings { get; } = new();
 
     /// <summary>The folder view's last batch's listings, which end on the thread pool before the batch takes them (tests).</summary>
     internal Task? FolderListingsOnTheirWay { get; private set; }
