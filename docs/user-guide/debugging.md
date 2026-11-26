@@ -31,6 +31,15 @@ Debug → **Configure Startup Projects** (or right-click the solution) opens the
 - **Single startup project**: the project F5 and Ctrl+F5 start, as Set as Startup Project chooses.
 - **Multiple startup projects**: give each project an action (**Start**, **Start without debugging** or **None**) and a launch profile, and order them with Move Up and Move Down. Press **Apply**.
 
+#### Launch profiles of several projects
+
+You can keep several such sets, each with a name, and switch between them in the toolbar, as in the classic IDE's multi-project launch profiles:
+- On the Startup Projects page, under **Multiple startup projects**, **Launch profile** lists `<Multiple Startup Projects>` (the set the page has always kept, saved only for you) and your named sets. **New** makes a set from the rows shown, named "Profile 1": give it a **Name**, set its projects and press **Apply**. **Delete** removes the chosen one.
+- **Share profile** saves the set in the solution's launch file next to it, `Contoso.slnLaunch` (for `Contoso.slnx`, `Contoso.slnxLaunch`, or a `Contoso.slnLaunch` it already has), for you to commit; otherwise it goes in that file's `.user` file, which stays yours (the `.gitignore` Codalus IDE writes ignores `*.user`). These are the classic IDE's files: the sets it saved show up here, and the ones you save show up there. A change to the files on disk, from a checkout or the classic IDE, shows up as it happens.
+- Each project of a set starts with the set's own launch profile, so a project can use one profile on its own and another with its partners.
+
+The toolbar's startup project box lists the executable projects, then `<Multiple Startup Projects>` and the named sets. Choosing a set makes F5 and Ctrl+F5 start it: the Start button says its name, and its drop-down offers **Configure Startup Projects…**. Choosing a project goes back to one startup project. Debug → Startup and Launch → **Select Startup Project…** lists the same choices. The choice is kept with the solution.
+
 F5 then builds the solution once and starts the projects in that order. Those set to Start are debugged in **one session**:
 - the Call Stack, Threads and Debug Location toolbar name each thread after its program (`Partner: Main Thread`);
 - the Processes window lists every program;

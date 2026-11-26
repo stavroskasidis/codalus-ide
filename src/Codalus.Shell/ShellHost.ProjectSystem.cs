@@ -40,7 +40,11 @@ public sealed partial class ShellHost
         InitializeNewProject();
         PropertiesWindow = new PropertiesWindowViewModel(this);
         InitializeBuildDepth();
-        Solutions.FilesChanged += (_, changes) => Ui.Post(() => Explorer.OnFilesChanged(changes.Directories, changes.Rescan));
+        Solutions.FilesChanged += (_, changes) =>
+        {
+            Ui.Post(() => Explorer.OnFilesChanged(changes.Directories, changes.Rescan));
+            OnLaunchFilesMayHaveChanged(changes);
+        };
         Builds.Finished += (_, build) => Ui.Post(() => Explorer.OnBuildFinished(build.Request.Project));
         Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
         {
