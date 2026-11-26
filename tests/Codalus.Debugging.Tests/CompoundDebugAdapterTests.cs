@@ -327,15 +327,17 @@ public sealed class CompoundDebugAdapterTests
         gate.TrySetResult();
     }
 
+    /// <summary>A macOS thread id: system-wide, it rises with uptime (24.2 million on a Mac up for 13 days), past an int once times 256.</summary>
+    private const int MacTid = 24_211_502;
+
     [Fact]
     public async Task A_web_apps_group_nests_in_a_session_of_programs_with_ids_that_stay_within_an_int()
     {
         // #547: a web app's server and its page join a session of programs as one of them, a group of GroupSlots. Its
-        // ids are multiplied by both sessions; a Linux thread id (up to 2^22) still fits an int, and every request
-        // reaches the adapter it came from.
-        const int Tid = (1 << 22) - 1;
-        var api = new FakeAdapter([new DapThread(Tid, "Main Thread")]);
-        var server = new FakeAdapter([new DapThread(Tid, "Main Thread")]);
+        // ids are multiplied by both sessions, so a thread's id is its number in its adapter, not the OS's (a macOS
+        // thread id times 256 passed an int: #553's regression), and every request reaches the adapter it came from.
+        var api = new FakeAdapter([new DapThread(MacTid, "Main Thread")]);
+        var server = new FakeAdapter([new DapThread(MacTid + 1, "Main Thread")]);
         var page = new FakeAdapter([new DapThread(3, "localhost:5000/counter")]);
         var session = new CompoundDebugAdapter(api, "Api", independent: true) { NamesSoleProgram = false };
         var group = new CompoundDebugAdapter(server, "Server", slots: CompoundDebugAdapter.GroupSlots);
@@ -345,24 +347,59 @@ public sealed class CompoundDebugAdapterTests
         Assert.Same(group, session.AdapterOf(1));
         Assert.Null(session.AdapterOf(2));
 
-        const int G = CompoundDebugAdapter.GroupSlots;
         var threads = await session.ThreadsAsync(Ct);
-        Assert.Equal(
-            [
-                new DapThread(Tid * M, "Api: Main Thread"),
-                new DapThread(((Tid * G) + 0) * M + 1, "Web: Main Thread"),
-                new DapThread(((3 * G) + 1) * M + 1, "Web: Browser: localhost:5000/counter"),
-            ],
-            threads);
+        Assert.Equal(["Api: Main Thread", "Web: Main Thread", "Web: Browser: localhost:5000/counter"], threads.Select(t => t.Name));
         Assert.All(threads, t => Assert.True(t.Id > 0));
+        Assert.Equal([MacTid, MacTid + 1, 3], threads.Select(t => session.DisplayThreadId(t.Id)));
+        Assert.Equal(threads, await session.ThreadsAsync(Ct)); // the same ids each time
 
         await session.ContinueAsync(threads[1].Id, Ct);
-        Assert.Contains($"continue {Tid}", server.Requests);
-        Assert.DoesNotContain($"continue {Tid}", api.Requests);
+        Assert.Contains($"continue {MacTid + 1}", server.Requests);
+        Assert.DoesNotContain(server.Requests, r => r.StartsWith("continue", StringComparison.Ordinal) && r != $"continue {MacTid + 1}");
+        Assert.DoesNotContain(api.Requests, r => r.StartsWith("continue", StringComparison.Ordinal));
+        await session.ContinueAsync(threads[0].Id, Ct);
+        Assert.Contains($"continue {MacTid}", api.Requests);
         var frames = (await session.StackTraceAsync(threads[2].Id, 20, Ct)).StackFrames;
         Assert.Contains("stackTrace 3", page.Requests);
         await session.ScopesAsync(frames[0].Id, Ct);
         Assert.Contains("scopes 7", page.Requests);
+        await Assert.ThrowsAsync<DapException>(() => session.StackTraceAsync((50 * CompoundDebugAdapter.MaxParts) + 1, 20, Ct)); // no such thread
+    }
+
+    [Fact]
+    public async Task A_stop_on_a_macOS_thread_in_a_web_apps_server_reaches_its_thread()
+    {
+        // #553's regression: F5 of a web app debugged with its page is a group in a session of programs, and a stop on
+        // a macOS thread (id 24 million) came out as tid × 256 wrapped to an int: "There's no thread N", N the thread
+        // less 2^24, and the session never stopped (CompoundDebugTests, BlazorWebAppHotReloadDebugTests on macOS).
+        var server = new FakeAdapter([new DapThread(MacTid, "Main Thread")]);
+        var page = new FakeAdapter([new DapThread(1, "localhost:5000")]);
+        var group = new CompoundDebugAdapter(server, "Server", slots: CompoundDebugAdapter.GroupSlots);
+        var session = new CompoundDebugAdapter(group, "Web", independent: true);
+        var events = new List<DapEvent>();
+        session.EventReceived += e =>
+        {
+            lock (events)
+            {
+                events.Add(e);
+            }
+
+            return Task.CompletedTask;
+        };
+        await group.AddAsync(page, "Browser", _ => Task.CompletedTask, Ct);
+
+        await server.RaiseAsync(DapEvents.Thread, new ThreadEvent("started", MacTid), DapJsonContext.Default.ThreadEvent);
+        await server.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: MacTid), DapJsonContext.Default.StoppedEvent);
+        var thread = Assert.Single(Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent)).ThreadId!.Value;
+        Assert.True(thread > 0);
+        Assert.Equal(thread, Assert.Single(Events(events, DapEvents.Thread, DapJsonContext.Default.ThreadEvent)).ThreadId);
+        Assert.Equal(MacTid, session.DisplayThreadId(thread));
+        Assert.Equal(thread, Assert.Single(await session.ThreadsAsync(Ct), t => t.Name == "Web: Main Thread").Id);
+
+        await session.StackTraceAsync(thread, 20, Ct);
+        Assert.Contains($"stackTrace {MacTid}", server.Requests);
+        await session.ContinueAsync(thread, Ct);
+        Assert.Contains($"continue {MacTid}", server.Requests);
     }
 
     [Fact]
