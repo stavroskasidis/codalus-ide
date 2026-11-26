@@ -481,6 +481,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         _ = OfferRecoveryAsync();
         StartUpdates();
+        _ = RepairOsIntegrationAsync();
 
         // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here. Something
         // opened while the startup waited for the environment (M56): the setup waits for a start that opens nothing, as it

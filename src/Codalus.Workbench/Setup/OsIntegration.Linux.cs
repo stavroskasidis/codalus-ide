@@ -14,6 +14,9 @@ namespace Codalus.Workbench.Setup;
 /// application (<c>xdg-mime default</c>, or <c>mimeapps.list</c> directly without it). <c>update-mime-database</c> and
 /// <c>update-desktop-database</c> run when they're installed. These are the user's tools, one process per operation.</item>
 /// </list>
+/// Both show the logo by its theme name (<c>codalus</c>), which only the packages install: while either is registered, the
+/// logo is in the user's icon theme too (<c>icons/hicolor/scalable/apps/codalus.svg</c>), so the AppImage's and the
+/// tarball's entries (and a taskbar that matches the window to <c>codalus-solutions.desktop</c>) aren't left blank.
 /// The packaged desktop entry (<c>/usr/share/applications/codalus.desktop</c>) declares no new types, so nothing becomes
 /// the default without this opt-in.
 /// </summary>
@@ -57,6 +60,11 @@ public sealed class LinuxOsIntegration(OsLauncher launcher, string dataHome, str
 
     public string DesktopEntry => Path.Combine(DataHome, "applications", DesktopId);
 
+    /// <summary>The logo, as the <c>codalus</c> icon of the user's hicolor theme (shared by both features).</summary>
+    public string IconFile => Path.Combine(IconTheme, "scalable", "apps", "codalus.svg");
+
+    private string IconTheme => Path.Combine(DataHome, "icons", "hicolor");
+
     /// <summary>Where the default applications are (the XDG location <c>xdg-mime</c> writes).</summary>
     public string MimeAppsList => Path.Combine(ConfigHome, "mimeapps.list");
 
@@ -95,12 +103,75 @@ public sealed class LinuxOsIntegration(OsLauncher launcher, string dataHome, str
 
     protected override async Task AfterChangeAsync(OsIntegrationFeature feature, bool registered, CancellationToken cancellationToken)
     {
+        // The icon both features' entries name: there while either is, gone with the last.
+        if (registered)
+        {
+            await WriteIconAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else if (!AnyRegistered())
+        {
+            await RemoveIconAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         // Registering rebuilt the caches before it set the defaults (DefaultsEntry).
         if (feature == OsIntegrationFeature.FileTypes && !registered)
         {
             await UpdateDatabasesAsync(cancellationToken).ConfigureAwait(false);
         }
     }
+
+    /// <summary>The icon, for entries an earlier version registered without it (or with an older logo).</summary>
+    public override Task RepairAsync(CancellationToken cancellationToken) =>
+        AnyRegistered() ? WriteIconAsync(cancellationToken) : Task.CompletedTask;
+
+    private bool AnyRegistered() =>
+        Enum.GetValues<OsIntegrationFeature>().Any(f => GetStatus(f).State is not (OsIntegrationState.NotRegistered or OsIntegrationState.Unavailable));
+
+    // ------------------------------------------------------------------ icon
+
+    /// <summary>Current only when it's this version's logo: a newer one replaces it.</summary>
+    private OsEntry IconEntry() => FileEntry(IconFile, IconSvg, () => [(string.Empty, IconSvg)], stopAt: DataHome);
+
+    private async Task WriteIconAsync(CancellationToken cancellationToken)
+    {
+        var icon = IconEntry();
+        if (icon.Read().State is OsEntryState.Missing or OsEntryState.OtherCopy)
+        {
+            await icon.Write(cancellationToken).ConfigureAwait(false);
+            await UpdateIconCacheAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RemoveIconAsync(CancellationToken cancellationToken)
+    {
+        var icon = IconEntry();
+        if (icon.Read().State is OsEntryState.Current or OsEntryState.OtherCopy)
+        {
+            icon.Remove();
+            await UpdateIconCacheAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// GTK reads a theme folder's icons from its cache when it has one, so one there is rebuilt; none is created (a cache
+    /// nothing keeps up to date would hide the icons other apps add later).
+    /// </summary>
+    private Task UpdateIconCacheAsync(CancellationToken cancellationToken) =>
+        File.Exists(Path.Combine(IconTheme, "icon-theme.cache"))
+            ? RunIfPresentAsync(_run, _findTool("gtk-update-icon-cache"), ["--force", "--ignore-theme-index", IconTheme], cancellationToken)
+            : Task.CompletedTask;
+
+    /// <summary>The logo (<c>assets/logo/codalus.svg</c>) with the marker that makes it Codalus IDE's to replace and remove.</summary>
+    internal static string IconSvg => s_iconSvg.Value;
+
+    private static readonly Lazy<string> s_iconSvg = new(() =>
+    {
+        using var stream = typeof(LinuxOsIntegration).Assembly.GetManifestResourceStream("Codalus.Workbench.Setup.codalus.svg")
+            ?? throw new InvalidOperationException("The logo isn't embedded.");
+        using var reader = new StreamReader(stream);
+        return $"<!-- {Marker}: Codalus IDE wrote this file (Tools > Options > Environment > System Integration); turning both choices off removes it. -->\n"
+            + reader.ReadToEnd().Replace("\r\n", "\n", StringComparison.Ordinal);
+    });
 
     private async Task UpdateDatabasesAsync(CancellationToken cancellationToken)
     {
