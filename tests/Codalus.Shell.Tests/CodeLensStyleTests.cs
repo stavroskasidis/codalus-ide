@@ -82,7 +82,7 @@ public class CodeLensStyleTests
         f.Window.Height = 1600;
         var shapes = await OpenShapesAsync(f);
         var describeLine = LineOf(shapes, "public virtual string Describe");
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(describeLine) is { } row && row.Contains("1 implementation", StringComparison.Ordinal), seconds: 60,
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(describeLine) is { } row && row.Contains("1 implementation", StringComparison.Ordinal) && row.Contains(" reference", StringComparison.Ordinal), seconds: 60,
             describe: () => $"row '{shapes.Insights.LensRowAbove(describeLine)}'");
 
         // Go to Implementation lists the virtual member itself too: the lens leaves it out, so its one override opens.
@@ -118,7 +118,7 @@ public class CodeLensStyleTests
         var shapes = await OpenShapesAsync(f);
         var describeLine = LineOf(shapes, "public virtual string Describe");
         var overrideLine = LineOf(shapes, "public override string Describe");
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(describeLine) is { } row && row.Contains("1 implementation", StringComparison.Ordinal), seconds: 60,
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(describeLine) is { } row && row.Contains("1 implementation", StringComparison.Ordinal) && row.Contains(" usage", StringComparison.Ordinal), seconds: 60,
             describe: () => $"row '{shapes.Insights.LensRowAbove(describeLine)}'");
 
         var view = f.Shell.ActiveEditor!.View!;
@@ -143,7 +143,11 @@ public class CodeLensStyleTests
     private static int LineOf(CodeEditorController editor, string text) =>
         editor.Model.Text.GetLineByOffset(editor.Model.Text.Text.IndexOf(text, StringComparison.Ordinal)).LineNumber;
 
-    /// <summary>Clicks the first title that contains <paramref name="title"/> on the CodeLens row above <paramref name="line"/>.</summary>
+    /// <summary>
+    /// Clicks the first title that contains <paramref name="title"/> on the CodeLens row above <paramref name="line"/>.
+    /// The row must have all its counts first: lenses resolve four at a time (M66), and one that lands before the title
+    /// moves it from under the point (a click on "1 implementation" ran the usages count).
+    /// </summary>
     private static async Task ClickTitleAsync(ShellFixture f, CodeEditorController editor, int line, string title)
     {
         Avalonia.Point? at = null;
@@ -162,7 +166,7 @@ public class CodeLensStyleTests
         f.Window.Height = 1600;
         var shapes = await OpenShapesAsync(f);
         var shapeLine = LineOf(shapes, "public abstract class Shape");
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(shapeLine) is { } row && row.Contains("2 implementations", StringComparison.Ordinal), seconds: 60);
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(shapeLine) is { } row && row.Contains("2 implementations", StringComparison.Ordinal) && row.Contains(" references", StringComparison.Ordinal), seconds: 60);
 
         // The second title, not the row's first (the references): the click runs the lens under the pointer.
         var references = 0;
@@ -191,10 +195,10 @@ public class CodeLensStyleTests
         var shapes = await OpenShapesAsync(f);
         var shapeLine = LineOf(shapes, "public abstract class Shape");
         var interfaceLine = LineOf(shapes, "public interface IShape");
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(shapeLine) is { } row && row.Contains("2 inheritors", StringComparison.Ordinal), seconds: 60,
+        // Lenses resolve four at a time (M66): the usages count can land after the inheritors'.
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(shapeLine) is { } row && row.Contains("2 inheritors", StringComparison.Ordinal) && row.Contains("usages", StringComparison.Ordinal), seconds: 60,
             describe: () => $"row '{shapes.Insights.LensRowAbove(shapeLine)}'");
-        Assert.Contains("usages", shapes.Insights.LensRowAbove(shapeLine), StringComparison.Ordinal);
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(interfaceLine) is { } row && row.Contains("3 implementations", StringComparison.Ordinal), seconds: 60);
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(interfaceLine) is { } row && row.Contains("3 implementations", StringComparison.Ordinal) && row.Contains("2 usages", StringComparison.Ordinal), seconds: 60);
 
         // Inheritors: Shape's derived types, with their namespace and project.
         var view = f.Shell.ActiveEditor!.View!;
