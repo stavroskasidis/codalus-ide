@@ -10,13 +10,30 @@ namespace Codalus.Shell.Editor;
 /// memory stays proportional to the viewport even for 100k-line files. While an edit is in flight, tokens of the edited
 /// lines are dropped and later lines shift, so colors stay roughly aligned until fresh tokens arrive.
 /// </summary>
-public sealed class SemanticColorizer : DocumentColorizingTransformer
+public sealed class SemanticColorizer : DocumentColorizingTransformer, IMinimapColors
 {
     private Dictionary<int, LineToken[]> _lines = [];
     private (int Start, int End) _covered = (0, 0);
     private HashSet<int> _pinned = [];
+    private EditorTheme _theme = EditorTheme.Dark;
 
-    public EditorTheme Theme { get; set; } = EditorTheme.Dark;
+    /// <summary>The colors the tokens are drawn in; another theme is another <see cref="Version"/> (the minimap's words keep their brushes).</summary>
+    public EditorTheme Theme
+    {
+        get => _theme;
+        set
+        {
+            if (!ReferenceEquals(_theme, value))
+            {
+                _theme = value;
+                Version++;
+            }
+        }
+    }
+
+    IBrush? IMinimapColors.WordBrush(int line, int character) => TokenAt(line, character) is >= 0 and var type ? Theme.Token(type) : null;
+
+    MinimapMark IMinimapColors.MarkOf(int line) => MinimapMark.None;
 
     /// <summary>True if every line in the zero-based, end-exclusive range has tokens.</summary>
     public bool Covers((int First, int Last) range) => range.First >= _covered.Start && range.Last <= _covered.End;
