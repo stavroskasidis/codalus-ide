@@ -68,7 +68,7 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
             {
                 var name = match.Groups[1].Value;
                 var value = match.Groups[2].Value.Trim();
-                var allowed = name is "TargetFramework" or "RuntimeIdentifier" ? [] : MsBuildKnowledge.ValuesFor(name);
+                var allowed = name is "TargetFramework" or "RuntimeIdentifier" || MsBuildKnowledge.IsList(name) ? [] : MsBuildKnowledge.ValuesFor(name);
                 if (allowed.Length > 0 && value.Length > 0 && !value.Contains("$(", StringComparison.Ordinal)
                     && !allowed.Contains(value, StringComparer.OrdinalIgnoreCase))
                 {
@@ -82,6 +82,21 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
                     var start = match.Groups[2].Index;
                     diagnostics.Add(new Diagnostic(document.RangeOf(start, start + match.Groups[2].Length), DiagnosticSeverity.Warning, "msbuild.tfm", "msbuild",
                         $"'{value}' doesn't look like a target framework (e.g. net10.0, netstandard2.0, net48)."));
+                }
+
+                // TargetFrameworks is a ';'-separated list (#573): each framework in it is checked on its own.
+                if (name == "TargetFrameworks")
+                {
+                    foreach (Match entry in ListEntry().Matches(match.Groups[2].Value))
+                    {
+                        var framework = entry.Value.Trim();
+                        if (framework.Length > 0 && !framework.Contains("$(", StringComparison.Ordinal) && !Tfm().IsMatch(framework))
+                        {
+                            var start = match.Groups[2].Index + entry.Index + (entry.Value.Length - entry.Value.TrimStart().Length);
+                            diagnostics.Add(new Diagnostic(document.RangeOf(start, start + framework.Length), DiagnosticSeverity.Warning, "msbuild.tfm", "msbuild",
+                                $"'{framework}' doesn't look like a target framework (e.g. net10.0, netstandard2.0, net48)."));
+                        }
+                    }
                 }
             }
         }
@@ -138,6 +153,33 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
                 var values = grandparent == "PropertyGroup" || context.Elements.Contains("PropertyGroup")
                     ? MsBuildKnowledge.ValuesFor(parent)
                     : MsBuildKnowledge.MetadataValues.GetValueOrDefault(parent) ?? [];
+                if (MsBuildKnowledge.IsList(parent))
+                {
+                    // A list property: the value replaces the entry at the caret, not the others (#573).
+                    var entryStart = context.ReplaceStart;
+                    for (var i = offset - 1; i >= context.ReplaceStart; i--)
+                    {
+                        if (document.Text[i] == ';')
+                        {
+                            entryStart = i + 1;
+                            break;
+                        }
+                    }
+
+                    var entryEnd = document.Text.IndexOf(';', offset, context.ReplaceEnd - offset) is var semicolon and >= 0 ? semicolon : context.ReplaceEnd;
+                    while (entryStart < offset && char.IsWhiteSpace(document.Text[entryStart]))
+                    {
+                        entryStart++;
+                    }
+
+                    while (entryEnd > offset && char.IsWhiteSpace(document.Text[entryEnd - 1]))
+                    {
+                        entryEnd--;
+                    }
+
+                    range = document.RangeOf(entryStart, entryEnd);
+                }
+
                 items.AddRange(values.Select(v => Item(v, CompletionItemKind.EnumMember, null, range)));
                 break;
         }
@@ -373,6 +415,9 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
 
     [GeneratedRegex(@"<([A-Za-z_][\w.]*)(?:\s[^>]*)?>([^<]*)</\1>")]
     private static partial Regex PropertyElement();
+
+    [GeneratedRegex(@"[^;]+")]
+    private static partial Regex ListEntry();
 
     [GeneratedRegex(@"^(net\d+\.\d+(-[a-z]+(\d+(\.\d+)*)?)?|netstandard\d\.\d|netcoreapp\d\.\d|net\d{2,3})$")]
     private static partial Regex Tfm();
