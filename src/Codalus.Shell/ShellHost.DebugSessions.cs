@@ -185,7 +185,7 @@ public sealed partial class ShellHost
                         _pendingBrowserUrls.Enqueue(url);
                     }
 
-                    launches.Add(launch);
+                    launches.Add(launch with { Project = target.Project });
                 }
                 else
                 {

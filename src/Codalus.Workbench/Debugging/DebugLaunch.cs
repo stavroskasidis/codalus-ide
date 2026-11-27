@@ -39,6 +39,13 @@ public sealed record DebugLaunch(string Name, LaunchPlan Plan)
     /// <c>entry</c>.
     /// </summary>
     public bool StopAtEntry { get; init; }
+
+    /// <summary>
+    /// The project the program is built from, when the IDE knows it (F5 of a project, multiple startup projects, Start
+    /// New Instance): the debug session's Hot Reload counts the projects of the programs it began with as running
+    /// (<see cref="DebugProcess.Project"/>). Null for a program from elsewhere (an AppHost's, a container's).
+    /// </summary>
+    public string? Project { get; init; }
 }
 
 /// <summary>
@@ -68,6 +75,9 @@ public sealed record DebugProcess(string Name, int? Id, string Kind, string? Tar
     public const string Attached = "Attached";
     public const string Terminal = "Terminal";
     public const string ConsoleWindow = "ConsoleWindow";
+
+    /// <summary>The project it's built from, when known (<see cref="DebugLaunch.Project"/>).</summary>
+    public string? Project { get; init; }
 
     /// <summary>Detach All can leave it running: it was attached to, or it has a console of its own.</summary>
     public bool CanDetach => Kind is Attached or Terminal or ConsoleWindow;

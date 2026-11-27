@@ -42,7 +42,8 @@ public sealed class LiveBreakTests
         + "  </StackPanel>\n"
         + "</UserControl>";
 
-    private sealed record Stop(XamlStop What, object? Element, string? TextAtStop);
+    /// <summary>A recorded stop; <see cref="Told"/>: the agent's last two lines to the IDE before it.</summary>
+    private sealed record Stop(XamlStop What, object? Element, string? TextAtStop, string[] Told);
 
     /// <summary>The agent as under a debugger, its stops recorded; put back when disposed.</summary>
     private sealed class Recorder : IDisposable
@@ -50,6 +51,7 @@ public sealed class LiveBreakTests
         private readonly Action<XamlStop, object?> _breaker = LiveBreak.Breaker;
         private readonly Func<bool> _attached = LiveBreak.Attached;
         private readonly List<Stop> _stops = [];
+        private readonly List<string> _sent = [];
 
         public Recorder()
         {
@@ -58,11 +60,17 @@ public sealed class LiveBreakTests
             {
                 lock (_stops)
                 {
-                    _stops.Add(new Stop(stop, element, (element as TextBlock)?.Text));
+                    _stops.Add(new Stop(stop, element, (element as TextBlock)?.Text, [.. _sent.TakeLast(2)]));
                 }
             };
             LiveBreak.Install();
-            LiveBreak.Connect(_ => { });
+            LiveBreak.Connect(line =>
+            {
+                lock (_stops)
+                {
+                    _sent.Add(line);
+                }
+            });
         }
 
         public List<Stop> Stops
@@ -137,6 +145,13 @@ public sealed class LiveBreakTests
         // Created, not yet set by its XAML: no text, no name.
         Assert.IsType<TextBlock>(created.Element);
         Assert.True(string.IsNullOrEmpty(created.TextAtStop), created.TextAtStop);
+
+        // The stop tells the breakpoints' states first, then itself: stopped, the app can't answer the IDE's question
+        // for them (macOS CI, run 45898000805: "The app didn't answer 'xbreaks' within 10 s" at the first stop).
+        Assert.StartsWith("event\txbreaks\t", created.Told[0], StringComparison.Ordinal);
+        Assert.StartsWith("event\txstop\t", created.Told[1], StringComparison.Ordinal);
+        var told = created.Told[0]["event\txbreaks\t".Length..].Split(LiveAgent.Record).Select(r => r.Split(LiveAgent.Field)).ToDictionary(r => r[0], r => r[1]);
+        Assert.Equal("1", told["bp3"]);
 
         var set = Assert.Single(stops, s => s.What is { Kind: "attribute", Property: "Text" });
         Assert.Equal(("bp4", "Hello"), (set.What.BreakpointId, set.What.NewValue));

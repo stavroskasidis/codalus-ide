@@ -402,7 +402,7 @@ public sealed partial class ShellHost
                 return;
             }
 
-            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry }; // Step Into New Instance (#547)
+            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry, Project = project }; // Step Into New Instance (#547)
             if (launch.IsCanceled)
             {
                 return;

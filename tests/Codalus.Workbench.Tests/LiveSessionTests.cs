@@ -77,6 +77,18 @@ public sealed class LiveSessionTests
         await session.PickAsync(on: true, Timeout());
         Assert.Equal((7, 2), await picked.Task.WaitAsync(Timeout()));
 
+        // The XAML breakpoints' states as the agent tells them before it stops the app (the stopped app can't answer
+        // for them: macOS CI, run 45898000805); without states, the event says only that they changed.
+        var told = new TaskCompletionSource<IReadOnlyList<LiveBreakpointState>>();
+        var changed = new TaskCompletionSource();
+        session.XamlBreakpointsTold += (_, states) => told.TrySetResult(states);
+        session.XamlBreakpointsChanged += (_, _) => changed.TrySetResult();
+        await writer.WriteLineAsync("event\txbreaks\tA.axaml:3\u001f1\u001f\u001eA.axaml:7\u001f0\u001fAn event isn't a property.".AsMemory(), Timeout());
+        Assert.Equal([new LiveBreakpointState("A.axaml:3", true, ""), new LiveBreakpointState("A.axaml:7", false, "An event isn't a property.")], await told.Task.WaitAsync(Timeout()));
+        Assert.False(changed.Task.IsCompleted);
+        await writer.WriteLineAsync("event\txbreaks".AsMemory(), Timeout());
+        await changed.Task.WaitAsync(Timeout());
+
         // The app's exit ends the connection; requests then say so.
         var disconnected = new TaskCompletionSource();
         session.Disconnected += (_, _) => disconnected.TrySetResult();

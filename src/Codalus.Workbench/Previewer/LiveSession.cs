@@ -153,6 +153,12 @@ public sealed class LiveSession : IAsyncDisposable
     /// <summary>The agent's XAML breakpoints' states changed: ask them again (M64b; any thread).</summary>
     public event EventHandler? XamlBreakpointsChanged;
 
+    /// <summary>
+    /// The agent's XAML breakpoints' states, told just before it stops the app (any thread): while it's stopped, the agent
+    /// can't answer <see cref="SetXamlBreakpointsAsync"/>.
+    /// </summary>
+    public event EventHandler<IReadOnlyList<LiveBreakpointState>>? XamlBreakpointsTold;
+
     /// <summary>The agent is about to break into the debugger, and says why (M64b; any thread).</summary>
     public event EventHandler<LiveXamlStop>? XamlStopping;
 
@@ -247,6 +253,10 @@ public sealed class LiveSession : IAsyncDisposable
                     else if (parts.Length >= 2 && parts[1] == "bindings")
                     {
                         BindingsFailed?.Invoke(this, EventArgs.Empty);
+                    }
+                    else if (parts.Length >= 3 && parts[1] == "xbreaks")
+                    {
+                        XamlBreakpointsTold?.Invoke(this, BreakpointStates(line.Split('\t', 3)[2]));
                     }
                     else if (parts.Length >= 2 && parts[1] == "xbreaks")
                     {
@@ -471,8 +481,10 @@ public sealed class LiveSession : IAsyncDisposable
 
     /// <summary>The XAML breakpoints (<see cref="XamlBreakpoints.Encode"/>'s text), replacing the agent's; what it says of each.</summary>
     public async Task<IReadOnlyList<LiveBreakpointState>> SetXamlBreakpointsAsync(string encoded, CancellationToken cancellationToken) =>
-        [.. Records(await RequestAsync(cancellationToken, "xbreaks", encoded).ConfigureAwait(false))
-            .Where(r => r.Length >= 3).Select(r => new LiveBreakpointState(r[0], r[1] == "1", r[2]))];
+        BreakpointStates(await RequestAsync(cancellationToken, "xbreaks", encoded).ConfigureAwait(false));
+
+    private static LiveBreakpointState[] BreakpointStates(string reply) =>
+        [.. Records(reply).Where(r => r.Length >= 3).Select(r => new LiveBreakpointState(r[0], r[1] == "1", r[2]))];
 
     /// <summary>Break When Value Changes (M64b) on the element's property, or off.</summary>
     public Task WatchAsync(int element, string property, bool on, CancellationToken cancellationToken) =>

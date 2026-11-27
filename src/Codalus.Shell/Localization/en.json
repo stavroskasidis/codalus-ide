@@ -2753,6 +2753,7 @@
   "msg.debugHotReload.handlerFailed": "Hot Reload: the program's update handlers failed: {0}",
   "msg.debugHotReload.language": "Hot Reload while debugging applies C#, Visual Basic and Razor edits; F# and XAML edits run after a restart.",
   "msg.debugHotReload.notEnabled": "The code changes can't be applied to this program: it wasn't started to take them. Start it with DOTNET_MODIFIABLE_ASSEMBLIES=debug before attaching, or start it from Codalus IDE.",
+  "msg.debugHotReload.notRunningLog": "Hot Reload: changes to code the debugged program doesn't run take effect when it's built again: {0}",
   "msg.debugHotReload.offer": "This edit doesn't reach the program: netcoredbg can't apply edits while it debugs. The Codalus debugger, the default, applies them as you save, continue or press Alt+F10. Debug with it from the next start?",
   "msg.debugHotReload.rude": "An edit can't be applied while the program runs: {0} Restart to run it, or go on with the code it started with.",
   "msg.debugHotReload.rudeLog": "Hot Reload: the code changes need a restart: {0}",
