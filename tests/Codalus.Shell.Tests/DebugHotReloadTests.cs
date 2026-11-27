@@ -32,7 +32,8 @@ public sealed class DebugHotReloadTests
     private static async Task<Editor.CodeEditorDocument> EditAsync(ShellFixture f, string path, string oldText, string newText)
     {
         var editor = await f.Shell.OpenFileAsync(path, preview: false, null);
-        await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+        // The view, and its controller, exist only while the tab is shown.
+        await ShellFixture.PumpUntil(() => editor?.Controller is not null, describe: () => $"{path} has no view; the tab shown is {f.Shell.ActiveEditor?.Model.Path ?? "none"}");
         var offset = editor!.Model.Text.Text.IndexOf(oldText, StringComparison.Ordinal);
         Assert.True(offset >= 0, $"'{oldText}' not found");
         editor.Model.Text.Replace(offset, oldText.Length, newText);
@@ -167,6 +168,9 @@ public sealed class DebugHotReloadTests
         await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 180, describe: () => Diagnostics(f));
         await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive, seconds: 60, describe: () => Diagnostics(f));
+        // The stop opens Program.vb after it checks the source exists: a tab opened before that is hidden by it and gets
+        // no view (macOS CI, run 45960730514).
+        await ShellFixture.PumpUntil(() => Path.GetFileName(f.Shell.ActiveEditor?.Model.Path) == "Program.vb", seconds: 60, describe: () => Diagnostics(f));
 
         // A rude edit in the C# program, and an edit to the Visual Basic one: Continue applies the second, asking nothing.
         await EditAsync(f, csharp, "static class Greeter", "class Greeter : Exception");
