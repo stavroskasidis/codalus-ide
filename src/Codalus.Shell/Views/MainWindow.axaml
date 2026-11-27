@@ -86,7 +86,7 @@
         <TextBlock Grid.Column="1"
                    Classes="statusMessage"
                    Text="{Binding StatusBar.DisplayMessage}"
-                   FontSize="12"
+                   FontSize="{DynamicResource Shell.FontSize.Body}"
                    Margin="12,0"
                    VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis"

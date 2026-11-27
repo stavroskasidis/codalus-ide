@@ -9,8 +9,10 @@ namespace Codalus.Debugging;
 /// the others join later (<see cref="AddAsync"/>, once the server listens) and get the session's breakpoints and
 /// exception settings replayed.
 /// <list type="bullet">
-/// <item>Thread and frame ids and variable references are the adapters' own times <see cref="MaxParts"/> plus the
-/// adapter's index, so a request goes to the adapter its id came from. Breakpoint ids are this class's own; a breakpoint is bound when any
+/// <item>Frame ids and variable references are the adapters' own times <see cref="MaxParts"/> plus the adapter's
+/// index, so a request goes to the adapter its id came from. A thread's id is its number in its adapter (the order the
+/// session first saw it in, from 1) times that plus the index: an adapter's thread ids are the OS's, which on macOS are
+/// system-wide and pass 2^24 after days of uptime, too big to multiply (#553's regression). Breakpoint ids are this class's own; a breakpoint is bound when any
 /// adapter bound it.</item>
 /// <item>One stop shows at a time. A stop in another adapter while one shows waits, and shows once the shown one
 /// resumes. Pause pauses every adapter but one still joining, and Continue from a pause continues every paused one.</item>
@@ -31,9 +33,19 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// <summary>
     /// The most adapters one session holds (ids keep the index in their low bits). 64 since M63 (ADR 0102): every .NET
     /// service of a compose file, every project of an Aspire AppHost, and their restarts (an ended program keeps its
-    /// place). The adapters' ids are small counters and thread ids (Linux's at most 2^22), so 64 times them stays an int.
+    /// place). The adapters' frame ids and variable references are small counters, so 64 times them stays an int; their
+    /// thread ids are the OS's, which the session numbers instead (<see cref="ThreadId"/>).
     /// </summary>
     public const int MaxParts = 64;
+
+    /// <summary>The adapters of a web app's server and its page, nested in a session of independent programs (#547): room for both, and a restarted page.</summary>
+    public const int GroupSlots = 4;
+
+    /// <summary>How many adapters this session holds: the factor of its ids (<see cref="MaxParts"/>, or <see cref="GroupSlots"/> for a nested one).</summary>
+    private readonly int _slots;
+
+    /// <summary>How many adapters this session holds (<see cref="MaxParts"/>, or <see cref="GroupSlots"/>).</summary>
+    public int Slots => _slots;
 
     private readonly Lock _gate = new();
     private readonly List<Part> _parts = [];
@@ -44,6 +56,9 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private readonly SemaphoreSlim _raising = new(1, 1);
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private FunctionBreakpoint[]? _functions;
+
+    /// <summary>The session's ids of <see cref="_functions"/>, which each adapter's own map to (<see cref="Part.Ids"/>), as a file's breakpoints'.</summary>
+    private int[] _functionIds = [];
     private (string[] Filters, ExceptionFilterOptions[]? Options)? _exceptions;
     private Part? _shown;
     private string? _shownReason;
@@ -52,11 +67,24 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private int _reserved;
     private int _detaching;
 
-    public CompoundDebugAdapter(IDebugAdapter primary, string name, bool independent = false)
+    /// <param name="slots">
+    /// How many adapters it holds, and the factor its ids are the adapters' own times (<see cref="MaxParts"/> by default).
+    /// A web app's server and its page, which join a session of independent programs as one of them (#547, ADR 0109),
+    /// take <see cref="GroupSlots"/>: nested, the ids are multiplied by both, which stays an int for the adapters' small
+    /// counters (a thread's id is its number in the session, <see cref="ThreadId"/>).
+    /// </param>
+    /// <param name="attached">The primary's program was attached to: the session's Stop detaches from it (#547).</param>
+    public CompoundDebugAdapter(IDebugAdapter primary, string name, bool independent = false, int slots = MaxParts, bool attached = false)
     {
+        if (slots is < 2 or > MaxParts)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slots), slots, $"A session holds from 2 to {MaxParts} adapters.");
+        }
+
         Primary = primary;
         Independent = independent;
-        var part = new Part(primary, name, 0);
+        _slots = slots;
+        var part = new Part(primary, name, 0) { Attached = attached };
         Attach(part);
         _ = independent
             ? primary.Closed.ContinueWith(_ => EndAsync(part), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap()
@@ -148,8 +176,20 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
         public int Index { get; } = index;
 
+        /// <summary>Its program was attached to: the session's Stop detaches from it, and ends the launched ones (#547).</summary>
+        public bool Attached { get; init; }
+
+        /// <summary>1 once its adapter was disposed (<see cref="DisposePartAsync"/>): once, whether it ended alone or with the session.</summary>
+        public int Disposed;
+
         /// <summary>This adapter's breakpoint ids → the session's.</summary>
         public Dictionary<int, int> Ids { get; } = [];
+
+        /// <summary>This adapter's thread ids → their numbers in the session (from 1; <see cref="ThreadId"/>).</summary>
+        public Dictionary<int, int> ThreadNumbers { get; } = [];
+
+        /// <summary>This adapter's thread ids by their number in the session, less 1.</summary>
+        public List<int> Threads { get; } = [];
 
         public bool Stopped { get; set; }
 
@@ -195,10 +235,21 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// <summary>The adapters in the session.</summary>
     public int PartCount => Parts().Count;
 
+    /// <summary>The adapter of the program at <paramref name="index"/> while it's in the session (a web app's group, #547), or null.</summary>
+    public IDebugAdapter? AdapterOf(int index)
+    {
+        lock (_gate)
+        {
+            return _parts.Find(p => p.Index == index && !p.Ended)?.Adapter;
+        }
+    }
+
     public IReadOnlyList<IDebugAdapter> Adapters => [.. Parts().SelectMany(p => p.Adapter.Adapters)];
 
     /// <summary>Each part's adapter (<see cref="IDebugAdapter.Describe"/>).</summary>
     public string Describe() => string.Join(" | ", Parts().Select(p => $"{p.Name}{(p.Starting ? " (starting)" : string.Empty)}: {p.Adapter.Describe()}"));
+
+    public Task SettleAsync(TimeSpan wait) => Task.WhenAll(Parts().Select(p => p.Adapter.SettleAsync(wait)));
 
     private static DapJsonContext Json => DapJsonContext.Default;
 
@@ -226,8 +277,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// Adds <paramref name="adapter"/> to the running session: <paramref name="launch"/> starts its debuggee while the
     /// session's breakpoints and exception settings are replayed to it, then it is configured.
     /// </summary>
-    public Task AddAsync(IDebugAdapter adapter, string name, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken) =>
-        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), index: null, cancellationToken);
+    public Task AddAsync(IDebugAdapter adapter, string name, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken, bool attached = false) =>
+        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), index: null, cancellationToken, attached);
 
     /// <summary>
     /// <paramref name="index"/> when it's free, or the lowest free index when it's null (with the gate held). Throws when
@@ -235,9 +286,9 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// </summary>
     private int FreeIndex(int? index)
     {
-        if (_parts.Count >= MaxParts)
+        if (_parts.Count >= _slots)
         {
-            throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+            throw new InvalidOperationException($"A debug session holds at most {_slots} adapters.");
         }
 
         if (index is { } wanted)
@@ -253,7 +304,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             free++;
         }
 
-        return free < MaxParts ? free : throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+        return free < _slots ? free : throw new InvalidOperationException($"A debug session holds at most {_slots} adapters.");
     }
 
     /// <summary>
@@ -270,17 +321,19 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// own: programs added at once join in the order their adapters started, which needn't be the order they were
     /// added in, and a program whose adapter didn't start takes no index here.
     /// </param>
+    /// <param name="attached">Its program is attached to: the session's Stop detaches from it (#547).</param>
     public async Task AddAsync(
         string name,
         Func<CancellationToken, Task<IDebugAdapter>> create,
         Func<IDebugAdapter, Task> launch,
         Func<IDebugAdapter, Exception, int, Task<bool>> startAgain,
         int? index,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool attached = false)
     {
-        if (index is < 1 or >= MaxParts)
+        if (index < 1 || index >= _slots)
         {
-            throw new ArgumentOutOfRangeException(nameof(index), index, $"A program's index in a debug session is from 1 to {MaxParts - 1}.");
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"A program's index in a debug session is from 1 to {_slots - 1}.");
         }
 
         lock (_gate)
@@ -294,7 +347,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         {
             lock (_gate)
             {
-                part = new Part(adapter, name, FreeIndex(index)) { Starting = true };
+                part = new Part(adapter, name, FreeIndex(index)) { Starting = true, Attached = attached };
                 _parts.Add(part);
             }
         }
@@ -326,6 +379,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             var disposed = false;
             if (again)
             {
+                MarkDisposed(part, adapter); // not again with the session, should the next start not come
                 await adapter.DisposeAsync().ConfigureAwait(false);
                 disposed = true;
                 try
@@ -359,6 +413,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
                 if (!disposed)
                 {
+                    MarkDisposed(part, adapter);
                     await adapter.DisposeAsync().ConfigureAwait(false);
                 }
 
@@ -370,8 +425,11 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 // A fresh start: what the abandoned attempt bound, stopped on or showed is gone.
                 part.Adapter = adapter;
+                part.Disposed = 0;
                 part.Starting = true;
                 part.Ids.Clear();
+                part.ThreadNumbers.Clear();
+                part.Threads.Clear();
                 part.Stopped = false;
                 part.StoppedThread = 0;
                 Unqueue(part);
@@ -427,10 +485,12 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         List<(string Path, SourceBreakpoint[] Specs, int[] Ids)> files;
         FunctionBreakpoint[]? functions;
         (string[] Filters, ExceptionFilterOptions[]? Options)? exceptions;
+        int[] functionIds;
         lock (_gate)
         {
             files = [.. _breakpoints.Select(b => (b.Key, b.Value.Specs, b.Value.Ids))];
             functions = _functions;
+            functionIds = _functionIds;
             exceptions = _exceptions;
         }
 
@@ -445,7 +505,10 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
         if (functions is { Length: > 0 })
         {
-            await part.Adapter.SetFunctionBreakpointsAsync(functions, cancellationToken).ConfigureAwait(false);
+            foreach (var state in await SendFunctionBreakpointsAsync(part, functions, functionIds, cancellationToken).ConfigureAwait(false))
+            {
+                await RaiseAsync(DapEvents.Breakpoint, JsonSerializer.SerializeToElement(new BreakpointEvent("changed", state), Json.BreakpointEvent)).ConfigureAwait(false);
+            }
         }
 
         if (exceptions is { } settings)
@@ -456,17 +519,70 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     // ------------------------------------------------------------------ ids
 
-    private static int Id(int value, Part part) => value * MaxParts + part.Index;
+    private int Id(int value, Part part) => value * _slots + part.Index;
 
     /// <summary>A variables reference: 0 (none) stays 0.</summary>
-    private static int Reference(int value, Part part) => value == 0 ? 0 : Id(value, part);
+    private int Reference(int value, Part part) => value == 0 ? 0 : Id(value, part);
+
+    /// <summary>
+    /// The session's id of <paramref name="part"/>'s thread <paramref name="value"/>: its number in the part, not the
+    /// thread's own id, which is the OS's (netcoredbg's, the Codalus debugger's). A macOS thread id is system-wide and
+    /// rises with uptime (24 million after 13 days): times 64, or 256 in a web app's group nested in a session of
+    /// programs, it passed an int, the stop's thread wrapped, and the session never stopped (#553's regression, ADR 0109).
+    /// 0 (none, or every thread) stays the part's 0.
+    /// </summary>
+    private int ThreadId(int value, Part part)
+    {
+        if (value == 0)
+        {
+            return Id(0, part);
+        }
+
+        lock (_gate)
+        {
+            if (!part.ThreadNumbers.TryGetValue(value, out var number))
+            {
+                part.Threads.Add(value);
+                number = part.Threads.Count;
+                part.ThreadNumbers[value] = number;
+            }
+
+            return Id(number, part);
+        }
+    }
+
+    /// <summary>The part a thread id of the session's (<see cref="ThreadId"/>) belongs to, and the thread's id in it.</summary>
+    private (Part Part, int Thread) ThreadOwner(int id, string command)
+    {
+        lock (_gate)
+        {
+            var (part, number) = Owner(id, command);
+            return number == 0 ? (part, 0)
+                : number > 0 && number <= part.Threads.Count ? (part, part.Threads[number - 1])
+                : throw new DapException(command, "That thread isn't in the debug session.");
+        }
+    }
 
     private (Part Part, int Value) Owner(int id, string command)
     {
         lock (_gate)
         {
-            var index = id % MaxParts;
-            return _parts.Find(p => p.Index == index) is { } part ? (part, id / MaxParts) : throw new DapException(command, "That debug target has ended.");
+            var index = id % _slots;
+            return _parts.Find(p => p.Index == index) is { } part ? (part, id / _slots) : throw new DapException(command, "That debug target has ended.");
+        }
+    }
+
+    /// <summary>The program's own id of <paramref name="threadId"/> (a nested web app's too), or the id itself once its program has ended.</summary>
+    public int DisplayThreadId(int threadId)
+    {
+        try
+        {
+            var (part, thread) = ThreadOwner(threadId, "threads");
+            return part.Adapter.DisplayThreadId(thread);
+        }
+        catch (DapException)
+        {
+            return threadId;
         }
     }
 
@@ -519,7 +635,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                 {
                     var mapped = stopped with
                     {
-                        ThreadId = stopped.ThreadId is { } thread ? Id(thread, part) : null,
+                        ThreadId = stopped.ThreadId is { } thread ? ThreadId(thread, part) : null,
                         HitBreakpointIds = stopped.HitBreakpointIds?.Select(id => part.Ids.GetValueOrDefault(id)).Where(id => id != 0).ToArray(),
                     };
                     if (_shown is null || _shown == part)
@@ -557,13 +673,13 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
                 if (forward)
                 {
-                    await RaiseAsync(e.Name, JsonSerializer.SerializeToElement(continued with { ThreadId = Id(continued.ThreadId, part) }, Json.ContinuedEvent)).ConfigureAwait(false);
+                    await RaiseAsync(e.Name, JsonSerializer.SerializeToElement(continued with { ThreadId = ThreadId(continued.ThreadId, part) }, Json.ContinuedEvent)).ConfigureAwait(false);
                     ShowNext();
                 }
 
                 return;
             case DapEvents.Thread when DebugAdapter.Read(e.Body, Json.ThreadEvent) is { } thread:
-                await RaiseAsync(e.Name, JsonSerializer.SerializeToElement(thread with { ThreadId = Id(thread.ThreadId, part) }, Json.ThreadEvent)).ConfigureAwait(false);
+                await RaiseAsync(e.Name, JsonSerializer.SerializeToElement(thread with { ThreadId = ThreadId(thread.ThreadId, part) }, Json.ThreadEvent)).ConfigureAwait(false);
                 return;
             case DapEvents.Breakpoint when DebugAdapter.Read(e.Body, Json.BreakpointEvent) is { Breakpoint.Id: { } partId } changed:
                 Breakpoint? merged;
@@ -770,7 +886,31 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
         // Its end through Closed (EndWith) and this one are the same: whichever comes first ends it.
         await EndAsync(part).ConfigureAwait(false);
-        await adapter.DisposeAsync().ConfigureAwait(false);
+        await DisposePartAsync(part).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <paramref name="adapter"/>, disposed by its failed start, is <paramref name="part"/>'s: the session doesn't dispose
+    /// it again (a second dispose of a program's adapter never returned, and the session never ended: DebugStartAgainTests).
+    /// </summary>
+    private void MarkDisposed(Part part, IDebugAdapter adapter)
+    {
+        lock (_gate)
+        {
+            if (ReferenceEquals(part.Adapter, adapter))
+            {
+                part.Disposed = 1;
+            }
+        }
+    }
+
+    /// <summary>Disposes <paramref name="part"/>'s adapter, once.</summary>
+    private static async Task DisposePartAsync(Part part)
+    {
+        if (Interlocked.Exchange(ref part.Disposed, 1) == 0)
+        {
+            await part.Adapter.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -952,21 +1092,74 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         return result;
     }
 
+    /// <summary>
+    /// The function breakpoints, with the session's ids as a file's breakpoints have (#547): an adapter binds one later,
+    /// as the module with its method loads, and its event names the adapter's id, which the session maps to its own.
+    /// Without that map the event was dropped as one the adapter set itself, and a function breakpoint that bound once
+    /// the program ran stayed unverified in a session of programs (DebuggerDepthTests, once F5 was one).
+    /// </summary>
     public async Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken)
     {
+        int[] ids;
+        List<Part> parts;
         lock (_gate)
         {
+            foreach (var stale in _functionIds)
+            {
+                _states.Remove(stale);
+            }
+
+            foreach (var part in _parts)
+            {
+                foreach (var key in part.Ids.Where(p => _functionIds.Contains(p.Value)).Select(p => p.Key).ToList())
+                {
+                    part.Ids.Remove(key);
+                }
+            }
+
             _functions = breakpoints;
+            _functionIds = ids = [.. breakpoints.Select(_ => ++_nextId)];
+            parts = [.. _parts.Where(p => !p.Ended)];
         }
 
-        Breakpoint[]? result = null;
-        foreach (var part in Parts())
+        Breakpoint[] result = [];
+        foreach (var part in parts)
         {
-            var states = await part.Adapter.SetFunctionBreakpointsAsync(breakpoints, cancellationToken).ConfigureAwait(false);
-            result = result is null ? states : [.. result.Select((b, i) => !b.Verified && i < states.Length && states[i].Verified ? states[i] : b)];
+            result = await SendFunctionBreakpointsAsync(part, breakpoints, ids, cancellationToken).ConfigureAwait(false);
         }
 
-        return result ?? [];
+        return result;
+    }
+
+    /// <summary>Sends the function breakpoints to one adapter; returns the session's merged states.</summary>
+    private async Task<Breakpoint[]> SendFunctionBreakpointsAsync(Part part, FunctionBreakpoint[] breakpoints, int[] ids, CancellationToken cancellationToken)
+    {
+        Breakpoint[] response;
+        try
+        {
+            response = await part.Adapter.SetFunctionBreakpointsAsync(breakpoints, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DapException ex) when (part.Index != 0)
+        {
+            response = [.. breakpoints.Select(_ => new Breakpoint(Verified: false, Message: ex.Message))];
+        }
+
+        var result = new Breakpoint[ids.Length];
+        lock (_gate)
+        {
+            for (var i = 0; i < ids.Length; i++)
+            {
+                var state = i < response.Length ? response[i] : new Breakpoint(Verified: false);
+                if (state.Id is { } partId)
+                {
+                    part.Ids[partId] = ids[i];
+                }
+
+                result[i] = Merge(ids[i], part, state);
+            }
+        }
+
+        return result;
     }
 
     public async Task SetExceptionBreakpointsAsync(string[] filters, CancellationToken cancellationToken, ExceptionFilterOptions[]? options = null)
@@ -994,9 +1187,9 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     public Task StepOutAsync(int threadId, CancellationToken cancellationToken) =>
         ResumeAsync(threadId, "stepOut", (adapter, thread) => adapter.StepOutAsync(thread, cancellationToken), cancellationToken);
 
-    public bool AppliesBreakpointBehaviors(int threadId) => Owner(threadId, "stopped") is var (part, thread) && part.Adapter.AppliesBreakpointBehaviors(thread);
+    public bool AppliesBreakpointBehaviors(int threadId) => ThreadOwner(threadId, "stopped") is var (part, thread) && part.Adapter.AppliesBreakpointBehaviors(thread);
 
-    public Capabilities CapabilitiesOf(int threadId) => Owner(threadId, "capabilities") is var (part, thread) ? part.Adapter.CapabilitiesOf(thread) : Capabilities;
+    public Capabilities CapabilitiesOf(int threadId) => ThreadOwner(threadId, "capabilities") is var (part, thread) ? part.Adapter.CapabilitiesOf(thread) : Capabilities;
 
     public async Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken)
     {
@@ -1005,35 +1198,35 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     }
 
     public Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
-        ResumeAsync(threadId, "stepIn", (adapter, thread) => adapter.StepInAsync(thread, targetId / MaxParts, cancellationToken), cancellationToken);
+        ResumeAsync(threadId, "stepIn", (adapter, thread) => adapter.StepInAsync(thread, targetId / _slots, cancellationToken), cancellationToken);
 
     public async Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "gotoTargets");
+        var (part, thread) = ThreadOwner(threadId, "gotoTargets");
         return [.. (await part.Adapter.GotoTargetsAsync(thread, path, line, cancellationToken).ConfigureAwait(false)).Select(t => t with { Id = Id(t.Id, part) })];
     }
 
     public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "goto");
-        return part.Adapter.GotoAsync(thread, targetId / MaxParts, cancellationToken);
+        var (part, thread) = ThreadOwner(threadId, "goto");
+        return part.Adapter.GotoAsync(thread, targetId / _slots, cancellationToken);
     }
 
     public Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "readMemory");
+        var (part, thread) = ThreadOwner(threadId, "readMemory");
         return part.Adapter.ReadMemoryAsync(thread, memoryReference, offset, count, cancellationToken);
     }
 
     public Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "writeMemory");
+        var (part, thread) = ThreadOwner(threadId, "writeMemory");
         return part.Adapter.WriteMemoryAsync(thread, memoryReference, offset, data, cancellationToken);
     }
 
     public Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "disassemble");
+        var (part, thread) = ThreadOwner(threadId, "disassemble");
         return part.Adapter.DisassembleAsync(thread, memoryReference, instructionOffset, count, cancellationToken);
     }
 
@@ -1082,13 +1275,13 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "codalus/freezeThread");
+        var (part, thread) = ThreadOwner(threadId, "codalus/freezeThread");
         return part.Adapter.FreezeThreadAsync(thread, frozen, cancellationToken);
     }
 
     private async Task ResumeAsync(int threadId, string command, Func<IDebugAdapter, int, Task> resume, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, command);
+        var (part, thread) = ThreadOwner(threadId, command);
         List<Part> paused = [];
         lock (_gate)
         {
@@ -1155,7 +1348,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     {
         if (threadId != 0)
         {
-            var (part, thread) = Owner(threadId, "pause");
+            var (part, thread) = ThreadOwner(threadId, "pause");
             await part.Adapter.PauseAsync(thread, cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -1197,7 +1390,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 foreach (var thread in await part.Adapter.ThreadsAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    result.Add(new DapThread(Id(thread.Id, part), named || (part.Index != 0 && !Independent) ? $"{part.Name}: {thread.Name}" : thread.Name, thread.Frozen));
+                    result.Add(new DapThread(ThreadId(thread.Id, part), named || (part.Index != 0 && !Independent) ? $"{part.Name}: {thread.Name}" : thread.Name, thread.Frozen));
                 }
             }
             catch (DapException) when (part.Index != 0 || Independent)
@@ -1215,7 +1408,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     public async Task<StackTraceResponse> StackTraceAsync(int threadId, int levels, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "stackTrace");
+        var (part, thread) = ThreadOwner(threadId, "stackTrace");
         var response = await part.Adapter.StackTraceAsync(thread, levels, cancellationToken).ConfigureAwait(false);
         return response with { StackFrames = [.. response.StackFrames.Select(f => f with { Id = Id(f.Id, part) })] };
     }
@@ -1282,7 +1475,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     public Task<ExceptionInfoResponse> ExceptionInfoAsync(int threadId, CancellationToken cancellationToken)
     {
-        var (part, thread) = Owner(threadId, "exceptionInfo");
+        var (part, thread) = ThreadOwner(threadId, "exceptionInfo");
         return part.Adapter.ExceptionInfoAsync(thread, cancellationToken);
     }
 
@@ -1356,7 +1549,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
             _parts[0].EndReported.TrySetResult();
 
-            await Primary.DisposeAsync().ConfigureAwait(false);
+            await DisposePartAsync(_parts[0]).ConfigureAwait(false);
             disposed = watch.Elapsed;
             foreach (var part in Parts().Where(p => p.Index != 0).Reverse())
             {
@@ -1402,7 +1595,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         {
             try
             {
-                await part.Adapter.DisconnectAsync(terminateDebuggee, cancellationToken).ConfigureAwait(false);
+                await part.Adapter.DisconnectAsync(terminateDebuggee && !part.Attached, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
             {
@@ -1410,11 +1603,23 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
     }
 
+    /// <summary>Whether every program still in the session was attached to (a session of attaches: Stop detaches from them all).</summary>
+    public bool AllAttached => Parts().All(p => p.Attached);
+
     public async ValueTask DisposeAsync()
     {
-        foreach (var part in Parts().AsEnumerable().Reverse())
+        // Every program's adapter, those that ended before the session too: a program ends as its adapter closes (Stop's
+        // disconnect), and an adapter whose process outlives its session, js-debug's DAP server, stayed running once a
+        // page was one program of a session (#547; the web join test's leftover node process).
+        List<Part> parts;
+        lock (_gate)
         {
-            await part.Adapter.DisposeAsync().ConfigureAwait(false);
+            parts = [.. _parts];
+        }
+
+        foreach (var part in parts.AsEnumerable().Reverse())
+        {
+            await DisposePartAsync(part).ConfigureAwait(false);
         }
 
         // _raising stays: the session's end is raised under it, and the session disposes this adapter on that end, on

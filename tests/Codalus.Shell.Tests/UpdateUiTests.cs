@@ -63,6 +63,41 @@ public class UpdateUiTests
         Assert.Equal(0, development.Checks);
     }
 
+    /// <summary>A package install's notice gives what updates it here: the repository's own upgrade, or the release's package.</summary>
+    [AvaloniaFact]
+    public async Task A_package_install_is_told_how_its_package_manager_gets_the_release()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.PackageUpdates = new SystemPackageUpdates("https://example.com/releases/download", "linux-x64", (program, _, _, _) => Task.FromResult(program switch
+        {
+            "dpkg-query" => (0, "installed"),
+            "apt-get" => (0, "stable\n"),
+            _ => (1, string.Empty),
+        }));
+        Workbench.Notifications.Notification? Notice(string version) => f.Shell.Workbench.Notifications.Items.LastOrDefault(n => n.Message.Contains(version, StringComparison.Ordinal));
+
+        f.Shell.UseUpdates(new InstallInfo("9.8.0", InstallKind.SystemPackage), new FakeBackend(s_offer));
+        await f.Shell.CheckForUpdatesAsync();
+        await ShellFixture.PumpUntil(() => Notice("9.9.0") is not null);
+        Assert.Equal("Codalus IDE 9.9.0 is available. To update, run: sudo apt update && sudo apt install --only-upgrade codalus", Notice("9.9.0")!.Message);
+        Assert.Equal(["Copy Command", "Release Notes"], Notice("9.9.0")!.Actions);
+
+        // update.channel is nightly, and apt follows the stable suite: no "apt upgrade", which would do nothing.
+        f.Shell.UseUpdates(new InstallInfo("9.8.0", InstallKind.SystemPackage), new FakeBackend(s_offer with { Version = "9.10.0-nightly.20261123.1", Channel = "nightly" }));
+        await f.Shell.CheckForUpdatesAsync();
+        await ShellFixture.PumpUntil(() => Notice("9.10.0-nightly") is not null);
+        Assert.DoesNotContain("upgrade", Notice("9.10.0-nightly")!.Message, StringComparison.Ordinal);
+        Assert.Contains("Copy Command copies the command that downloads and installs its package", Notice("9.10.0-nightly")!.Message, StringComparison.Ordinal);
+        Assert.Equal(["Copy Command", "Release Notes"], Notice("9.10.0-nightly")!.Actions);
+
+        // Arch Linux has no package of nightly builds, and its install command would reinstall the stable release.
+        f.Shell.UseUpdates(new InstallInfo("9.8.0", InstallKind.SystemPackage) { UpdateCommand = InstallInfo.ArchInstallCommand }, new FakeBackend(s_offer with { Version = "9.11.0-nightly.20261124.1", Channel = "nightly" }));
+        await f.Shell.CheckForUpdatesAsync();
+        await ShellFixture.PumpUntil(() => Notice("9.11.0-nightly") is not null);
+        Assert.Contains("no Arch Linux package", Notice("9.11.0-nightly")!.Message, StringComparison.Ordinal);
+        Assert.Equal(["Download Page"], Notice("9.11.0-nightly")!.Actions);
+    }
+
     [AvaloniaFact]
     public async Task The_settings_are_in_Options_Environment_and_the_commands_in_the_Help_menu()
     {

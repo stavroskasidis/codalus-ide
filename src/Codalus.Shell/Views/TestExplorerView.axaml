@@ -117,9 +117,9 @@
                 <DataTemplate x:DataType="vm:StackFrameRow">
                   <Panel>
                     <Button Classes="link" IsVisible="{Binding HasLocation}" Click="OnOpenFrame" HorizontalAlignment="Left" AutomationProperties.Name="{Binding Text}">
-                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12" />
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource Shell.FontSize.Body}" />
                     </Button>
-                    <TextBlock Classes="muted" IsVisible="{Binding !HasLocation}" Text="{Binding Text}" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Classes="muted" IsVisible="{Binding !HasLocation}" Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource Shell.FontSize.Body}" />
                   </Panel>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -127,7 +127,7 @@
           </StackPanel>
           <StackPanel IsVisible="{Binding HasOutput}" Spacing="2">
             <TextBlock Classes="muted" Text="{l:T testExplorer.output}" />
-            <SelectableTextBlock Text="{Binding DetailsOutput}" TextWrapping="Wrap" FontSize="12" />
+            <SelectableTextBlock Text="{Binding DetailsOutput}" TextWrapping="Wrap" FontSize="{DynamicResource Shell.FontSize.Body}" />
           </StackPanel>
           <!-- M56: the pane shows the end of a long output and the start of a long message; the rest opens in an editor. -->
           <Button Classes="link" Content="{l:T testExplorer.showFullOutput}" IsVisible="{Binding IsDetailsCut}" Command="{Binding ShowFullOutputCommand}"

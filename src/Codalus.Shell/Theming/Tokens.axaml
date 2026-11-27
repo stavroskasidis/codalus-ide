@@ -4396,6 +4396,8 @@
   <!-- Each tree level's indent: 12 px, the classic IDE's (TreeMetrics.IndentPerLevel); Fluent's TreeViewItem reads it for the TreeViews (Options, Code Metrics, Syntax Visualizer). -->
   <x:Double x:Key="TreeViewItemIndent">12</x:Double>
   <x:Double x:Key="Shell.Size.ToolWindowMinWidth">280</x:Double>
+  <!-- The UI font and its sizes; workbench.fontFamily and workbench.fontSize set them, and the rows above with them (UiFont, #556). -->
+  <FontFamily x:Key="Shell.FontFamily">$Default</FontFamily>
   <x:Double x:Key="Shell.FontSize.Body">12</x:Double>
   <x:Double x:Key="Shell.FontSize.Small">11</x:Double>
   <x:Double x:Key="Shell.FontSize.Heading">14</x:Double>

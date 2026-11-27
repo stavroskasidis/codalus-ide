@@ -84,6 +84,9 @@ public sealed class SolutionService : IAsyncDisposable
 
     public bool IsOpen => _solution is not null;
 
+    /// <summary>Tests: a solution's structure as its host would send it, with no host.</summary>
+    internal void UseSolution(SolutionInfo? solution) => _solution = solution;
+
     public IReadOnlyDictionary<string, ProjectInfo> Projects => _projects;
 
     public EvaluationProgressParams? Progress { get; private set; }

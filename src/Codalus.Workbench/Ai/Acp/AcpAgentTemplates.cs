@@ -107,6 +107,12 @@ public sealed record AcpInstallOption(string Id, string Name, string Description
     /// <summary>Codalus's own Node.js, downloaded once and verified (D-node: an opt-in only where nothing else can install one).</summary>
     public bool IsCodalusNode { get; init; }
 
+    /// <summary>
+    /// A version manager's Node.js, already installed (<see cref="Node.NodeVersionManagers"/>): nothing runs; the agent's
+    /// entry names the manager. <see cref="Command"/> is its folder.
+    /// </summary>
+    public string? NodeManager { get; init; }
+
     /// <summary>On Windows, the PATH is read again from the registry when it ends (winget's installers change it there).</summary>
     public bool ReadsWindowsPath { get; init; }
 }
@@ -162,7 +168,7 @@ public static class AcpAgentTemplates
     public static IReadOnlyList<string> ClaudeProviderVariables { get; } = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"];
 
     /// <summary>pi's own CLI, pinned (pi-acp needs 0.81 or later; this version needs Node.js 22.19).</summary>
-    public const string PiCliPackage = "@earendil-works/pi-coding-agent@1.6.0";
+    public const string PiCliPackage = "@earendil-works/pi-coding-agent@1.6.1";
 
     /// <summary>OpenCode's CLI from npm, pinned to the version the registry lists.</summary>
     public const string OpenCodeCliPackage = "opencode-ai@1.19.6";
@@ -293,10 +299,10 @@ public static class AcpAgentTemplates
     /// </summary>
     public static IReadOnlyList<(string Agent, string Windows, string MacOS, string Linux)> Coverage { get; } =
     [
-        ("Claude", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt or dnf with Node.js 22, or Codalus's Node.js"),
-        ("Codex", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt or dnf, or Codalus's Node.js"),
-        ("Gemini CLI", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt or dnf with Node.js 20, or Codalus's Node.js"),
-        ("GitHub Copilot", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt or dnf, or Codalus's Node.js"),
+        ("Claude", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt, dnf, pacman, zypper or apk with Node.js 22, or Codalus's Node.js"),
+        ("Codex", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt, dnf, pacman, zypper or apk, or Codalus's Node.js"),
+        ("Gemini CLI", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt, dnf, pacman, zypper or apk with Node.js 20, or Codalus's Node.js"),
+        ("GitHub Copilot", "winget", "Homebrew, or Codalus's Node.js", "snap (Ubuntu), apt, dnf, pacman, zypper or apk, or Codalus's Node.js"),
         ("pi", "winget, then npm", "Homebrew or Codalus's Node.js, then npm", "Node.js as for Claude, then npm"),
         ("OpenCode", "winget, then npm", "Homebrew or Codalus's Node.js, then npm", "Node.js as for Codex, then npm"),
         ("goose", "manual (its install page)", "Homebrew", "manual (its install page)"),
@@ -312,7 +318,17 @@ public static class AcpAgentTemplates
 /// <param name="AptCandidate">The major version apt would install (<c>apt-cache policy nodejs</c>), or null.</param>
 /// <param name="DnfCandidate">The major version dnf would install, or null.</param>
 /// <param name="CodalusNodeAvailable">Codalus's own Node.js has a build for this OS and CPU.</param>
-public sealed record AcpNodeFacts(PlatformKind Platform, string? Distribution, bool HasWinget, bool HasBrew, bool HasSnap, int? AptCandidate, int? DnfCandidate, bool CodalusNodeAvailable);
+public sealed record AcpNodeFacts(PlatformKind Platform, string? Distribution, bool HasWinget, bool HasBrew, bool HasSnap, int? AptCandidate, int? DnfCandidate, bool CodalusNodeAvailable)
+{
+    /// <summary>The major version pacman would install (<c>pacman -Si nodejs</c>, Arch and its derivatives), or null.</summary>
+    public int? PacmanCandidate { get; init; }
+
+    /// <summary>The newest <c>nodejs&lt;major&gt;</c> package zypper has (openSUSE), or null.</summary>
+    public int? ZypperCandidate { get; init; }
+
+    /// <summary>The major version apk would install (<c>apk policy nodejs</c>, Alpine), or null.</summary>
+    public int? ApkCandidate { get; init; }
+}
 
 /// <summary>
 /// How Node.js is installed for an agent (ADR 0083), through the user's own package managers only, each with its exact
@@ -356,34 +372,31 @@ public static class AcpNodeInstall
                 break;
             case PlatformKind.Linux:
                 var ids = (facts.Distribution ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var debian = ids.Any(i => i is "debian" or "ubuntu");
-                var fedora = ids.Any(i => i is "fedora" or "rhel" or "centos");
                 if (ids.Contains("ubuntu") && facts.HasSnap)
                 {
                     var snap = $"sudo snap install node --classic --channel={SnapChannel}";
                     options.Add(new("snap", "Snap", "Node.js 26 from the Snap Store.", InstallKind.Terminal, snap) { Program = "sudo", Arguments = ["snap", "install", "node", "--classic", "--channel=" + SnapChannel] });
                 }
 
-                if (debian && facts.AptCandidate >= needed)
+                // The distribution's own packages, with npm (a package of its own on each of them), when new enough.
+                var (manager, candidate, packages) = true switch
                 {
-                    options.Add(new("apt", "apt", $"Node.js {facts.AptCandidate} and npm from the distribution's packages.", InstallKind.Terminal, "sudo apt-get install -y nodejs npm") { Program = "sudo", Arguments = ["apt-get", "install", "-y", "nodejs", "npm"] });
+                    _ when ids.Any(i => i is "debian" or "ubuntu") => ("apt", facts.AptCandidate, "nodejs npm"),
+                    _ when ids.Any(i => i is "fedora" or "rhel" or "centos") => ("dnf", facts.DnfCandidate, "nodejs npm"),
+                    _ when ids.Contains("arch") => ("pacman", facts.PacmanCandidate, "nodejs npm"),
+                    _ when ids.Any(IsSuse) => ("zypper", facts.ZypperCandidate, $"nodejs{facts.ZypperCandidate} npm{facts.ZypperCandidate}"),
+                    _ when ids.Contains("alpine") => ("apk", facts.ApkCandidate, "nodejs npm"),
+                    _ => ((string?)null, (int?)null, ""),
+                };
+                if (manager is not null && candidate >= needed && InstallPlans.Package(facts.Distribution, packages) is { } command)
+                {
+                    options.Add(Terminal(manager, $"Node.js {candidate} and npm from the distribution's packages.", command));
                 }
-                else if (debian)
+                else if (manager is not null)
                 {
-                    note = facts.AptCandidate is { } apt
-                        ? $"apt isn't offered: the distribution's nodejs package is {apt}, and {needed} or later is needed."
-                        : "apt isn't offered: the distribution has no nodejs package.";
-                }
-
-                if (fedora && facts.DnfCandidate >= needed)
-                {
-                    options.Add(new("dnf", "dnf", $"Node.js {facts.DnfCandidate} from the distribution's packages.", InstallKind.Terminal, "sudo dnf install -y nodejs npm") { Program = "sudo", Arguments = ["dnf", "install", "-y", "nodejs", "npm"] });
-                }
-                else if (fedora)
-                {
-                    note = facts.DnfCandidate is { } dnf
-                        ? $"dnf isn't offered: the distribution's nodejs package is {dnf}, and {needed} or later is needed."
-                        : "dnf isn't offered: the distribution has no nodejs package.";
+                    note = candidate is { } version
+                        ? $"{manager} isn't offered: the distribution's nodejs package is {version}, and {needed} or later is needed."
+                        : $"{manager} isn't offered: the distribution has no nodejs package.";
                 }
 
                 break;
@@ -399,6 +412,48 @@ public static class AcpNodeInstall
 
         return (options, note);
     }
+
+    /// <summary>
+    /// When the distribution's Node.js (<see cref="IsDistributionNode"/>, <paramref name="nodeVersion"/>) is there without
+    /// npx: its npm package, a package of its own on Debian, Ubuntu, Fedora, Arch, openSUSE (<c>npm&lt;major&gt;</c>, the
+    /// Node.js's) and Alpine; none elsewhere.
+    /// </summary>
+    public static IReadOnlyList<AcpInstallOption> NpmOptions(AcpNodeFacts facts, string nodeVersion)
+    {
+        var ids = (facts.Distribution ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var package = ids.Any(IsSuse) ? $"npm{Major(nodeVersion)}" : "npm";
+        return facts.Platform == PlatformKind.Linux && InstallPlans.Package(facts.Distribution, package) is { } command
+            ? [Terminal("npm-package", $"npm and npx for your Node.js {nodeVersion}, from the distribution's packages.", command)]
+            : [];
+    }
+
+    /// <summary>Whether <paramref name="node"/> is the distribution's (<c>/usr/bin/node</c>), whose npm the distribution packages apart.</summary>
+    public static bool IsDistributionNode(string? node) => node is "/usr/bin/node" or "/bin/node";
+
+    /// <summary>A command run in the Terminal (sudo asks for the password there), named after its package manager.</summary>
+    private static AcpInstallOption Terminal(string id, string description, string command)
+    {
+        var words = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var name = words[1] == "apt-get" ? "apt" : words[1];
+        return new(id == "npm-package" ? id : name, name, description, InstallKind.Terminal, command) { Program = words[0], Arguments = words[1..] };
+    }
+
+    private static bool IsSuse(string id) => id.Contains("suse", StringComparison.Ordinal);
+
+    /// <summary>The newest <c>nodejs&lt;major&gt;</c> in <c>zypper search nodejs*</c>'s table, or null.</summary>
+    public static int? ZypperCandidate(string search) =>
+        search.Split('\n')
+            .SelectMany(l => l.Split('|').Select(c => c.Trim()))
+            .Where(c => c.Length > "nodejs".Length && c.StartsWith("nodejs", StringComparison.Ordinal) && c["nodejs".Length..].All(char.IsAsciiDigit))
+            .Select(c => (int?)int.Parse(c["nodejs".Length..], System.Globalization.CultureInfo.InvariantCulture))
+            .Max();
+
+    /// <summary>The newest version in <c>apk policy nodejs</c>'s answer (<c>  22.11.0-r0:</c> lines), its major, or null.</summary>
+    public static int? ApkCandidate(string policy) =>
+        policy.Split('\n')
+            .Where(l => l.StartsWith("  ", StringComparison.Ordinal) && !l.StartsWith("   ", StringComparison.Ordinal) && l.TrimEnd().EndsWith(':'))
+            .Select(l => Major(l.Trim().TrimEnd(':')))
+            .Max();
 
     /// <summary>The major version in <c>apt-cache policy nodejs</c>'s <c>Candidate:</c> line (<c>18.19.1+dfsg-6ubuntu5</c> → 18), or null.</summary>
     public static int? AptCandidate(string policy) =>

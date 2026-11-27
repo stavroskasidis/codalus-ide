@@ -25,6 +25,9 @@ public sealed partial class ShellHost
 
     public UpdateService SelfUpdate { get; private set; } = null!;
 
+    /// <summary>How a package install gets a release (tests describe a machine).</summary>
+    internal SystemPackageUpdates PackageUpdates { get; set; } = new($"https://github.com/{Infrastructure.Updates.Repository}/releases/download", Infrastructure.Updates.Rid);
+
     private void InitializeUpdates()
     {
         var (install, backend) = Infrastructure.Updates.Create(_updateHttp, line => Workbench.Log.AppendLine(line));
@@ -182,22 +185,16 @@ public sealed partial class ShellHost
     {
         const string Download = "Download and Restart";
         const string Notes = "Release Notes";
-        var copy = Localizer.Get("msg.updates.copyCommand", "Copy Command");
-        var (message, actions) = SelfUpdate.Install switch
+        const string Page = "Download Page";
+        if (SelfUpdate.Install.Kind == InstallKind.SystemPackage)
         {
-            { Kind: InstallKind.SelfUpdating } => ($"Codalus IDE {offer.Version} is available.", new[] { Download, Notes }),
-            { Kind: InstallKind.SystemPackage, UpdateCommand: { } command } => (
-                Localizer.Format("msg.updates.runInstallCommand", "Codalus IDE {0} is available. To update, run the command that installed it again: {1}", offer.Version, command),
-                [copy, Notes]),
-            { Kind: InstallKind.SystemPackage } => ($"Codalus IDE {offer.Version} is available. Update it with your package manager (apt upgrade or dnf upgrade).", [Notes]),
-            _ => ($"Codalus IDE {offer.Version} is available.", ["Download Page"]),
-        };
-        var choice = await Workbench.Notifications.Info(message, actions).Result.ConfigureAwait(true);
-        if (choice == copy && SelfUpdate.Install.UpdateCommand is { } updateCommand && Window?.Clipboard is { } clipboard)
-        {
-            await SafeClipboard.TrySetTextAsync(clipboard, updateCommand).ConfigureAwait(true);
+            await OfferPackageUpdateAsync(offer, Notes, Page).ConfigureAwait(true);
+            return;
         }
-        else if (choice == Download)
+
+        var actions = SelfUpdate.Install.Kind == InstallKind.SelfUpdating ? new[] { Download, Notes } : [Page];
+        var choice = await Workbench.Notifications.Info($"Codalus IDE {offer.Version} is available.", actions).Result.ConfigureAwait(true);
+        if (choice == Download)
         {
             var state = await SelfUpdate.DownloadAsync(offer, CancellationToken.None).ConfigureAwait(true);
             if (state.Status == UpdateStatus.Ready)
@@ -205,7 +202,37 @@ public sealed partial class ShellHost
                 RestartToUpdate();
             }
         }
-        else if (choice is Notes or "Download Page" && offer.ReleasePage is { } page)
+        else if (choice is Notes or Page && offer.ReleasePage is { } page)
+        {
+            OpenExternalUrl(page);
+        }
+    }
+
+    /// <summary>
+    /// A .deb, .rpm or Arch package install: how it gets the release here (<see cref="SystemPackageUpdates"/>), with the
+    /// command to copy. The repository the system has may not have what <c>update.channel</c> offers.
+    /// </summary>
+    private async Task OfferPackageUpdateAsync(UpdateOffer offer, string notes, string downloadPage)
+    {
+        var update = await PackageUpdates.PlanAsync(SelfUpdate.Install, offer, CancellationToken.None).ConfigureAwait(true);
+        Workbench.Log.AppendLine($"[update] {offer.Version}: {update.Kind}{(update.Command is { } c ? $", {c}" : string.Empty)}");
+        var copy = Localizer.Get("msg.updates.copyCommand", "Copy Command");
+        var message = update.Kind switch
+        {
+            SystemPackageUpdateKind.Upgrade => Localizer.Format("msg.updates.runUpgrade", "Codalus IDE {0} is available. To update, run: {1}", offer.Version, update.Command),
+            SystemPackageUpdateKind.InstallCommand => Localizer.Format("msg.updates.runInstallCommand", "Codalus IDE {0} is available. To update, run the command that installed it again: {1}", offer.Version, update.Command),
+            SystemPackageUpdateKind.Nightly => Localizer.Format("msg.updates.nightlyPackage", "Codalus IDE {0} is available. Your package manager may not have it: the package repositories get a nightly build only with each stable release. Copy Command copies the command that downloads and installs its package.", offer.Version),
+            SystemPackageUpdateKind.NoRepository => Localizer.Format("msg.updates.noStableRepository", "Codalus IDE {0} is available. Your package manager doesn't have it: no Codalus repository of stable releases is set up here. Copy Command copies the command that downloads and installs its package.", offer.Version),
+            SystemPackageUpdateKind.Downgrade => Localizer.Format("msg.updates.olderPackage", "Codalus IDE {0} is older than this build, so your package manager doesn't upgrade to it. Copy Command copies the command that downloads and installs its package.", offer.Version),
+            SystemPackageUpdateKind.NoArchNightly => Localizer.Format("msg.updates.noArchNightly", "Codalus IDE {0} is available, but nightly builds have no Arch Linux package: the install command installs stable releases. The nightly's AppImage, on its download page, runs on Arch Linux and updates itself.", offer.Version),
+            _ => $"Codalus IDE {offer.Version} is available.",
+        };
+        var choice = await Workbench.Notifications.Info(message, update.Command is null ? [downloadPage] : [copy, notes]).Result.ConfigureAwait(true);
+        if (choice == copy && update.Command is { } command && Window?.Clipboard is { } clipboard)
+        {
+            await SafeClipboard.TrySetTextAsync(clipboard, command).ConfigureAwait(true);
+        }
+        else if ((choice == notes || choice == downloadPage) && offer.ReleasePage is { } page)
         {
             OpenExternalUrl(page);
         }

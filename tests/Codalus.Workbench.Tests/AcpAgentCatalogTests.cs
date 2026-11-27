@@ -117,11 +117,11 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
         var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
         Assert.Equal(["mine", "claude"], user.EnumerateObject().Select(p => p.Name));
         Assert.Equal(
-            """{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.110.0"]}""",
+            """{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.113.0"]}""",
             user.GetProperty("claude").GetRawText().Replace(" ", "", StringComparison.Ordinal).Replace("\n", "", StringComparison.Ordinal).Replace("\r", "", StringComparison.Ordinal));
         var configured = AcpAgents.Parse(user);
         Assert.Equal("npx", configured["claude"].Command);
-        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.110.0"], configured["claude"].Args);
+        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.113.0"], configured["claude"].Args);
         Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.Workspace));
         Assert.Equal("{}", File.ReadAllText(_workspaceFile));
 
@@ -201,9 +201,12 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
     [InlineData(PlatformKind.Linux)]
     public void Install_commands_are_pinned_and_use_only_the_users_package_managers(PlatformKind platform)
     {
-        string[] allowed = ["winget", "brew", "sudo apt-get", "sudo dnf", "sudo snap", "npm", "scoop", "choco"];
+        string[] allowed = ["winget", "brew", "sudo apt-get", "sudo dnf", "sudo snap", "sudo pacman", "sudo zypper", "sudo apk", "npm", "scoop", "choco"];
         var facts = new AcpNodeFacts(platform, "ubuntu debian", true, true, true, 22, 22, true);
-        var options = AcpAgentTemplates.All.SelectMany(t => t.CliInstall(platform)).Concat(AcpNodeInstall.Options(facts, 22).Options);
+        string[] distributions = ["ubuntu debian", "fedora", "cachyos arch", "opensuse-tumbleweed opensuse suse", "alpine"];
+        var distributed = distributions.SelectMany(d => AcpNodeInstall.Options(facts with { Distribution = d, PacmanCandidate = 26, ZypperCandidate = 24, ApkCandidate = 24 }, 22).Options
+            .Concat(AcpNodeInstall.NpmOptions(facts with { Distribution = d }, "22.1.0")));
+        var options = AcpAgentTemplates.All.SelectMany(t => t.CliInstall(platform)).Concat(AcpNodeInstall.Options(facts, 22).Options).Concat(platform == PlatformKind.Linux ? distributed : []);
         foreach (var option in options)
         {
             Assert.DoesNotContain("curl", option.Command, StringComparison.Ordinal);
@@ -243,6 +246,34 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
         Assert.Equal(["page", "codalus-node"], Ids(new(PlatformKind.Linux, "debian", false, false, false, 20, null, true), 22));
         Assert.Equal(["dnf", "page"], Ids(new(PlatformKind.Linux, "fedora", false, false, false, null, 22, true), 22));
         Assert.True(AcpNodeInstall.Options(new(PlatformKind.Windows, null, true, false, false, null, null, true), 22).Options[0].ReadsWindowsPath);
+
+        // Arch, openSUSE (the newest nodejs<major> it has) and Alpine, with npm, when new enough.
+        var arch = new AcpNodeFacts(PlatformKind.Linux, "cachyos arch", false, false, false, null, null, true);
+        Assert.Equal(["pacman", "page"], Ids(arch with { PacmanCandidate = 26 }, 22));
+        Assert.Equal("sudo pacman -S --noconfirm nodejs npm", AcpNodeInstall.Options(arch with { PacmanCandidate = 26 }, 22).Options[0].Command);
+        Assert.Equal(("sudo", "pacman -S --noconfirm nodejs npm"), AcpNodeInstall.Options(arch with { PacmanCandidate = 26 }, 22).Options[0] is var pacman ? (pacman.Program, string.Join(' ', pacman.Arguments)) : default);
+        Assert.Equal("pacman isn't offered: the distribution has no nodejs package.", AcpNodeInstall.Options(arch, 22).Note);
+        var suse = arch with { Distribution = "opensuse-leap suse opensuse", ZypperCandidate = 24 };
+        Assert.Equal("sudo zypper install -y nodejs24 npm24", AcpNodeInstall.Options(suse, 22).Options[0].Command);
+        Assert.Equal("zypper isn't offered: the distribution's nodejs package is 24, and 26 or later is needed.", AcpNodeInstall.Options(suse, 26).Note);
+        Assert.Equal("sudo apk add nodejs npm", AcpNodeInstall.Options(arch with { Distribution = "alpine", ApkCandidate = 24 }, 22).Options[0].Command);
+
+        // The distribution's Node.js without npx: its npm package (openSUSE's is the Node.js's major's).
+        Assert.True(AcpNodeInstall.IsDistributionNode("/usr/bin/node"));
+        Assert.False(AcpNodeInstall.IsDistributionNode("/usr/local/bin/node"));
+        Assert.Equal(("npm-package", "pacman", "sudo pacman -S --noconfirm npm"), AcpNodeInstall.NpmOptions(arch, "26.13.1").Single() is var npm ? (npm.Id, npm.Name, npm.Command) : default);
+        Assert.Equal("sudo apt-get install -y npm", AcpNodeInstall.NpmOptions(arch with { Distribution = "ubuntu debian" }, "18.19.1").Single().Command);
+        Assert.Equal("apt", AcpNodeInstall.NpmOptions(arch with { Distribution = "ubuntu debian" }, "18.19.1").Single().Name);
+        Assert.Equal("sudo dnf install -y npm", AcpNodeInstall.NpmOptions(arch with { Distribution = "fedora" }, "22.1.0").Single().Command);
+        Assert.Equal("sudo zypper install -y npm22", AcpNodeInstall.NpmOptions(suse, "22.14.0").Single().Command);
+        Assert.Equal("sudo apk add npm", AcpNodeInstall.NpmOptions(arch with { Distribution = "alpine" }, "22.1.0").Single().Command);
+        Assert.Empty(AcpNodeInstall.NpmOptions(arch with { Distribution = "nixos" }, "22.1.0"));
+        Assert.Empty(AcpNodeInstall.NpmOptions(arch with { Platform = PlatformKind.MacOS }, "22.1.0"));
+
+        Assert.Equal(24, AcpNodeInstall.ZypperCandidate("Loading repository data...\nS | Name          | Summary         | Type\n--+---------------+-----------------+--------\n  | nodejs-common | Common files    | package\n  | nodejs20      | Node.js 20      | package\ni | nodejs24      | Node.js 24      | package\n  | nodejs24-devel| Headers         | package\n"));
+        Assert.Null(AcpNodeInstall.ZypperCandidate("No matching items found."));
+        Assert.Equal(24, AcpNodeInstall.ApkCandidate("nodejs policy:\n  22.11.0-r0:\n    lib/apk/db/installed\n  24.3.0-r1:\n    https://dl-cdn.alpinelinux.org/alpine/edge/main\n"));
+        Assert.Null(AcpNodeInstall.ApkCandidate("nodejs policy:\n"));
 
         Assert.Equal(18, AcpNodeInstall.AptCandidate("nodejs:\n  Installed: (none)\n  Candidate: 18.19.1+dfsg-6ubuntu5\n  Version table:\n"));
         Assert.Null(AcpNodeInstall.AptCandidate("nodejs:\n  Installed: (none)\n  Candidate: (none)\n"));

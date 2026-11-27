@@ -31,6 +31,12 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
     {
         /// <summary>Whether Roslyn was last told the program is stopped (its break state).</summary>
         public bool InBreakState { get; set; }
+
+        /// <summary>The solution the next update is made from, as Roslyn commits it: the start's, then each committed update's.</summary>
+        public required Solution Baseline { get; set; }
+
+        /// <summary>The last update's solution, until it's committed or discarded.</summary>
+        public Solution? Pending { get; set; }
     }
 
     /// <summary>The debugger's side, as Roslyn asks for it: the runtime's capabilities, and the active statements of the update being made.</summary>
@@ -100,7 +106,9 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
         }
 
         var solution = currentSolution();
-        // No projects named (an attach): every project of the solution counts as running.
+        // The projects the debugged programs run; Roslyn counts the projects they reference with them. A rude edit in
+        // another project asks no program to restart (it comes back in NotRunning). No projects named (an attach, an
+        // AppHost's programs): every project of the solution counts as running.
         var running = solution.Projects
             .Where(p => p.FilePath is { } path && (parameters.Projects.Length == 0 || parameters.Projects.Any(r => Paths.Comparer.Equals(Path.GetFullPath(r), Path.GetFullPath(path)))))
             .ToImmutableDictionary(p => p.Id, _ => new RunningProjectOptions { RestartWhenChangesHaveNoEffect = false });
@@ -117,7 +125,7 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
         var id = service.StartDebuggingSession(solution, debugger, new StartTexts(solution), reportDiagnostics: false);
         lock (_sessions)
         {
-            _sessions[parameters.Session] = new Session(id, service, running, debugger);
+            _sessions[parameters.Session] = new Session(id, service, running, debugger) { Baseline = solution };
         }
 
         return true;
@@ -143,6 +151,18 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
         var solution = currentSolution();
         var results = await session.Service.EmitSolutionUpdateAsync(session.Id, solution, session.Running,
             (_, _, _) => ValueTask.FromResult(ImmutableArray<ActiveStatementSpan>.Empty), cancellationToken).ConfigureAwait(false);
+        // Roslyn commits an update with no changes that matter at once, and holds the others until they're committed.
+        var updated = results.Solution ?? solution;
+        var baseline = session.Baseline;
+        if (results.ModuleUpdates.Status == ModuleUpdateStatus.None)
+        {
+            session.Baseline = updated;
+        }
+        else if (results.ModuleUpdates.Status == ModuleUpdateStatus.Ready)
+        {
+            session.Pending = updated;
+        }
+
         var status = results.ModuleUpdates.Status switch
         {
             ModuleUpdateStatus.Ready => HotReloadUpdateResult.Ready,
@@ -155,10 +175,112 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
             // Roslyn's spans count from 0, the program's symbols from 1.
             ActiveStatements = [.. u.ActiveStatements.Select(a => new HotReloadActiveStatementUpdate(a.Method.Token, a.Method.Version, a.ILOffset, a.NewSpan.StartLine + 1, a.NewSpan.StartColumn + 1))],
         }).ToArray();
-        var rude = results.GetTransientDiagnostics().SelectMany(p => p.diagnostics).Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error).Select(Describe).ToArray();
+        // A rude edit restarts the running projects that reference its project (Roslyn's ProjectsToRestart, with the
+        // projects that caused each); one in a project none references restarts nothing. A program that joined the debug
+        // session later was built after its baseline (ADR 0109), so its projects' changes since were taken for rude edits
+        // of the session's program, which Continue then asked to restart (macOS CI, run 45872232919).
+        var causes = results.ProjectsToRestart.Values.SelectMany(p => p).ToHashSet();
+        var rude = new List<HotReloadDiagnostic>();
+        var notRunning = new List<HotReloadDiagnostic>();
+        foreach (var (project, diagnostics) in results.GetTransientDiagnostics())
+        {
+            foreach (var diagnostic in diagnostics.Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error))
+            {
+                var described = Describe(diagnostic) with { Detail = await GeneratedDetailAsync(baseline, updated, project, diagnostic, cancellationToken).ConfigureAwait(false) };
+                (causes.Contains(project) ? rude : notRunning).Add(described);
+            }
+        }
+
         var errors = results.GetPersistentDiagnostics().Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error).Select(Describe).ToArray();
         var restart = results.ProjectsToRestart.Keys.Select(p => solution.GetProject(p)?.FilePath).OfType<string>().ToArray();
-        return new HotReloadUpdateResult(status, updates, rude, errors, restart);
+        return new HotReloadUpdateResult(status, updates, [.. rude], errors, restart) { NotRunning = [.. notRunning] };
+    }
+
+    /// <summary>
+    /// For a rude edit in a source generator's document (<see cref="HotReloadDiagnostic.Detail"/>): its lines around the
+    /// edit in the baseline and now, and how the project's inputs changed between them. Null for an ordinary document.
+    /// TODO(issue): why the Razor generator's output changed with no edit (macOS CI, run 45872232919); this says next time.
+    /// </summary>
+    private static async Task<string?> GeneratedDetailAsync(Solution baseline, Solution current, ProjectId projectId, Diagnostic diagnostic, CancellationToken cancellationToken)
+    {
+        if (diagnostic.Location.GetLineSpan() is not { IsValid: true, Path.Length: > 0 } span
+            || current.GetProject(projectId) is not { } project
+            || !current.GetDocumentIdsWithFilePath(span.Path).IsEmpty)
+        {
+            return null;
+        }
+
+        var now = (await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault(d => d.FilePath is { } path && Paths.Comparer.Equals(path, span.Path));
+        if (now is null)
+        {
+            return null;
+        }
+
+        var before = baseline.GetProject(projectId);
+        var then = before is null ? null : (await before.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault(d => d.FilePath is { } path && Paths.Comparer.Equals(path, span.Path));
+        var line = span.StartLinePosition.Line;
+        var detail = new System.Text.StringBuilder();
+        detail.Append("generated; the baseline's lines: ").Append(then is null ? "(no such document)" : Lines(await then.GetTextAsync(cancellationToken).ConfigureAwait(false), line))
+            .Append("; now: ").Append(Lines(await now.GetTextAsync(cancellationToken).ConfigureAwait(false), line))
+            .Append("; the project since: ").Append(before is null ? "not in the baseline" : await ChangesAsync(project, before, cancellationToken).ConfigureAwait(false));
+        return detail.ToString();
+    }
+
+    /// <summary>Lines <paramref name="line"/> - 2 to + 2 (from 0) of <paramref name="text"/>, numbered from 1.</summary>
+    private static string Lines(SourceText text, int line) =>
+        string.Join(" | ", Enumerable.Range(Math.Max(0, line - 2), Math.Max(0, Math.Min(text.Lines.Count, line + 3) - Math.Max(0, line - 2)))
+            .Select(i => (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ": " + text.Lines[i].ToString().Trim()));
+
+    /// <summary>What changed in a project's inputs between two solutions, briefly: what a generator's output depends on.</summary>
+    private static async Task<string> ChangesAsync(Project project, Project before, CancellationToken cancellationToken)
+    {
+        static string Names(IEnumerable<string?> names) => string.Join(", ", names.OfType<string>().Select(Path.GetFileName).Take(5));
+
+        var changes = project.GetChanges(before);
+        var parts = new List<string>();
+        void Add(string what, IEnumerable<string?> names)
+        {
+            var list = names.ToList();
+            if (list.Count > 0)
+            {
+                parts.Add($"{what} {list.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} ({Names(list)})");
+            }
+        }
+
+        Add("metadata references added", changes.GetAddedMetadataReferences().Select(r => r.Display));
+        Add("metadata references removed", changes.GetRemovedMetadataReferences().Select(r => r.Display));
+        Add("analyzer references added", changes.GetAddedAnalyzerReferences().Select(r => r.Display));
+        Add("analyzer references removed", changes.GetRemovedAnalyzerReferences().Select(r => r.Display));
+        Add("additional files added", changes.GetAddedAdditionalDocuments().Select(d => project.GetAdditionalDocument(d)?.FilePath));
+        Add("additional files removed", changes.GetRemovedAdditionalDocuments().Select(d => before.GetAdditionalDocument(d)?.FilePath));
+        Add("additional files changed", changes.GetChangedAdditionalDocuments().Select(d => project.GetAdditionalDocument(d)?.FilePath));
+        Add("analyzer config files added", changes.GetAddedAnalyzerConfigDocuments().Select(d => project.GetAnalyzerConfigDocument(d)?.FilePath));
+        Add("analyzer config files removed", changes.GetRemovedAnalyzerConfigDocuments().Select(d => before.GetAnalyzerConfigDocument(d)?.FilePath));
+        Add("documents changed", changes.GetChangedDocuments().Select(d => project.GetDocument(d)?.FilePath));
+        if (!Equals(project.ParseOptions, before.ParseOptions))
+        {
+            parts.Add("parse options changed");
+        }
+
+        if (!Equals(project.CompilationOptions, before.CompilationOptions))
+        {
+            parts.Add("compilation options changed");
+        }
+
+        // An analyzer config's lines that changed: a build property the generator reads (build_property.*).
+        foreach (var id in changes.GetChangedAnalyzerConfigDocuments())
+        {
+            if (project.GetAnalyzerConfigDocument(id) is not { } now || before.GetAnalyzerConfigDocument(id) is not { } then)
+            {
+                continue;
+            }
+
+            var newLines = (await now.GetTextAsync(cancellationToken).ConfigureAwait(false)).Lines.Select(l => l.ToString().Trim()).ToHashSet(StringComparer.Ordinal);
+            var oldLines = (await then.GetTextAsync(cancellationToken).ConfigureAwait(false)).Lines.Select(l => l.ToString().Trim()).ToHashSet(StringComparer.Ordinal);
+            parts.Add($"analyzer config {Path.GetFileName(now.FilePath)} changed: +[{string.Join(", ", newLines.Except(oldLines).Take(5))}] -[{string.Join(", ", oldLines.Except(newLines).Take(5))}]");
+        }
+
+        return parts.Count == 0 ? "no input changed" : string.Join("; ", parts);
     }
 
     /// <summary>A frame's statement as Roslyn takes it: the instruction, its span (from 0) and what kind of frame it is.</summary>
@@ -183,6 +305,12 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
         }
 
         session.Service.CommitSolutionUpdate(session.Id);
+        if (session.Pending is { } pending)
+        {
+            session.Baseline = pending;
+            session.Pending = null;
+        }
+
         return true;
     }
 
@@ -195,6 +323,7 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
         }
 
         session.Service.DiscardSolutionUpdate(session.Id);
+        session.Pending = null;
         return true;
     }
 

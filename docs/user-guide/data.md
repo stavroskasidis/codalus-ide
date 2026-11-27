@@ -62,7 +62,7 @@ The generated context opens when it is done.
 
 Expanding a connection connects it and shows its databases (the connection's own first), then **Tables**, **Views**, **Procedures** and **Functions**, and for each table its columns (type, nullability, identity, foreign key), keys and indexes. The context menu has View Data, New Query, Reverse Engineer with EF Core (which fills the reverse engineering form with the connection and the selected tables), Refresh, Disconnect, Edit and Remove Connection.
 
-Database work happens in a separate process, `codalus-datahost`: a query that hangs or a driver that crashes never stops the IDE. SQL Server is reached through managed networking on every OS: Microsoft's native networking library for Windows isn't open source, so it isn't shipped.
+Database work happens in a separate process, `codalus-datahost`: a query that hangs or a driver that crashes never stops the IDE. SQL Server is reached through managed networking on every OS: Microsoft's native networking library for Windows isn't open source, so it isn't shipped. A server name with several addresses (an availability group's listener, a name with IPv4 and IPv6 addresses) is tried on all of them at once; add `MultiSubnetFailover=False` to the connection's options to try them one at a time.
 
 ## Table data
 

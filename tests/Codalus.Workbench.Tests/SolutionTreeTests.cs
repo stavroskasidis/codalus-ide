@@ -88,11 +88,20 @@ public sealed class SolutionTreeTests
         // for a first, single build on a macOS runner where the whole test took ten times its usual time (develop's
         // nightly, run 43113076593). The two alternate, a round of each at a time, so a busy spell slows both alike: timed one
         // batch after the other, the batch of 450 alone met one and took 303 ms against 61 ms (Linux CI, run 43886669518).
+        // Each timing also says what the GC did during it: the comparison still failed on a macOS runner, 243 ms against 37 ms
+        // for the best of seven rounds each (PR #567, run 45947483697), which neither CPU load nor the module's other tests
+        // reproduce on Linux (the two stay within a few ms). The failure message lists every round, so the next one shows
+        // whether the GC, the allocations or the whole runner made the difference.
+        var rounds = new List<string>();
         TimeSpan Time(SolutionInfo of)
         {
+            var (gen0, gen1, gen2) = (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+            var (paused, allocated) = (GC.GetTotalPauseDuration(), GC.GetAllocatedBytesForCurrentThread());
             var time = Stopwatch.StartNew();
             SolutionTree.FolderView(of, FolderListing.FromTree(P("ws"), entries, truncated: false));
             time.Stop();
+            rounds.Add(FormattableString.Invariant(
+                $"{of.Projects.Length} {time.Elapsed.TotalMilliseconds:0} ms (GC {GC.CollectionCount(0) - gen0}/{GC.CollectionCount(1) - gen1}/{GC.CollectionCount(2) - gen2}, paused {(GC.GetTotalPauseDuration() - paused).TotalMilliseconds:0} ms, {(GC.GetAllocatedBytesForCurrentThread() - allocated) / 1024 / 1024} MB)"));
             return time.Elapsed;
         }
 
@@ -137,7 +146,7 @@ public sealed class SolutionTreeTests
         Assert.Null(nodes.Single(n => n.Path == P("ws", "docs", "Page19999.md")).ProjectPath);
         Assert.True(
             withAll < (withOne * 4) + TimeSpan.FromMilliseconds(50),
-            $"the folder view of 20,000 entries took {withAll.TotalMilliseconds:0} ms with 450 projects and {withOne.TotalMilliseconds:0} ms with one");
+            $"the folder view of 20,000 entries took {withAll.TotalMilliseconds:0} ms with 450 projects and {withOne.TotalMilliseconds:0} ms with one; each round (projects, time, GC gen0/1/2, pause, allocated): {string.Join("; ", rounds)}");
     }
 
     private static DirectoryEntry Dir(params string[] segments) => new(P(segments), true);

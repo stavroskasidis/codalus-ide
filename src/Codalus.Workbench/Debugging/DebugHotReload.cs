@@ -17,6 +17,12 @@ public sealed record HotReloadOutcome(string Kind, IReadOnlyList<HotReloadDiagno
 
     public IReadOnlyList<string> HandlerErrors { get; init; } = [];
 
+    /// <summary>
+    /// Rude edits in projects no program of the Hot Reload session runs (a program that joined the session later, a
+    /// project nothing runs): they ask nobody to restart, and take effect when the project is built again.
+    /// </summary>
+    public IReadOnlyList<HotReloadDiagnostic> NotRunning { get; init; } = [];
+
     /// <summary>Nothing changed since the last edit applied.</summary>
     public const string None = "none";
 
@@ -147,7 +153,11 @@ public sealed class DebugHotReload : IAsyncDisposable
             {
                 _startCancel = new CancellationTokenSource();
                 var cancel = _startCancel.Token;
-                _starting = Task.Run(() => StartAsync(cancel));
+                // The projects of the programs the session began with, now: a program that joins it later (Start New
+                // Instance, ADR 0109) was built after this session's baseline, so its projects' changes since aren't edits
+                // of a program this session runs (macOS CI, run 45872232919).
+                var projects = _debugger.Processes.Select(p => p.Project).OfType<string>().Distinct(SolutionService.PathComparer).ToArray();
+                _starting = Task.Run(() => StartAsync(projects, cancel));
                 _browserInUse = _browser is not null;
             }
         }
@@ -156,8 +166,10 @@ public sealed class DebugHotReload : IAsyncDisposable
     /// <summary>
     /// Starts the language host's session as soon as the debug session runs: its baseline is the files as built, so
     /// an edit saved before it started couldn't be applied. The language host waits for the solution to load first.
+    /// <paramref name="projects"/> are those the session runs (the projects they reference too); with none known (an
+    /// attach, an AppHost's programs), every project of the solution counts as running.
     /// </summary>
-    private async Task<string?> StartAsync(CancellationToken cancellationToken)
+    private async Task<string?> StartAsync(string[] projects, CancellationToken cancellationToken)
     {
         try
         {
@@ -179,7 +191,7 @@ public sealed class DebugHotReload : IAsyncDisposable
             }
 
             var session = "debug-" + Guid.NewGuid().ToString("N");
-            if (!await client.HotReloadStartAsync(session, [], capabilities, cancellationToken).ConfigureAwait(false))
+            if (!await client.HotReloadStartAsync(session, projects, capabilities, cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }
@@ -227,11 +239,18 @@ public sealed class DebugHotReload : IAsyncDisposable
             else if (update.RudeEdits.Length > 0 || update.ProjectsToRestart.Length > 0)
             {
                 await client.HotReloadDiscardAsync(session, cancellationToken).ConfigureAwait(false);
-                outcome = new HotReloadOutcome(HotReloadOutcome.Rude, update.RudeEdits);
+                outcome = new HotReloadOutcome(HotReloadOutcome.Rude, update.RudeEdits) { NotRunning = update.NotRunning };
             }
-            else if (update.Status == HotReloadUpdateResult.None || update.Updates.Length == 0)
+            else if (update.Status == HotReloadUpdateResult.None)
             {
                 return HotReloadOutcome.Of(HotReloadOutcome.None);
+            }
+            else if (update.Updates.Length == 0)
+            {
+                // Only rude edits in projects the session doesn't run: Roslyn takes them for the next build's, and the next
+                // update is made from them.
+                await client.HotReloadCommitAsync(session, cancellationToken).ConfigureAwait(false);
+                return HotReloadOutcome.Of(HotReloadOutcome.None) with { NotRunning = update.NotRunning };
             }
             else
             {
@@ -239,6 +258,7 @@ public sealed class DebugHotReload : IAsyncDisposable
                 await (outcome.Kind is HotReloadOutcome.Applied or HotReloadOutcome.None
                     ? client.HotReloadCommitAsync(session, cancellationToken)
                     : client.HotReloadDiscardAsync(session, cancellationToken)).ConfigureAwait(false);
+                outcome = outcome with { NotRunning = update.NotRunning };
                 if (outcome.Kind == HotReloadOutcome.None)
                 {
                     return outcome;
@@ -367,6 +387,7 @@ public sealed class DebugHotReload : IAsyncDisposable
             _starting = null;
             _startCancel = null;
             _session = null;
+            _agents.SessionEnded();
             if (_browserInUse)
             {
                 _browser = null;

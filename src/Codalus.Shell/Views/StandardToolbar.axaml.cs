@@ -58,7 +58,7 @@ public sealed partial class StandardToolbar : UserControl
 
     /// <summary>
     /// The Start drop-down, filled whenever its choices change (not as it opens), so the narrow window's "…" copies it
-    /// as it is: Start; the launch profiles, the chosen one checked and the ones Codalus can't run disabled with the
+    /// as it is: Start (and, for a set of startup projects, Configure Startup Projects only); the launch profiles, the chosen one checked and the ones Codalus can't run disabled with the
     /// reason; for a web app the debugging browser and script debugging; the project's Debug properties.
     /// </summary>
     private void FillLaunchMenu()
@@ -71,6 +71,14 @@ public sealed partial class StandardToolbar : UserControl
         }
 
         items.Add(MenuEntry.Create(model.StartLabel, "play", model.StartCommand));
+        if (model.IsStartupSet)
+        {
+            // A set of startup projects (ADR 0110): each project's profile is the set's, chosen on the Startup Projects page.
+            items.Add(new Separator());
+            items.Add(MenuEntry.Create(Localizer.Get("standardToolbar.configureStartupProjects", "Configure Startup Projects…"), "tools", model.ConfigureStartupProjectsCommand));
+            return;
+        }
+
         if (model.LaunchMenu is not { } menu)
         {
             return;

@@ -31,6 +31,15 @@ Debug → **Configure Startup Projects** (or right-click the solution) opens the
 - **Single startup project**: the project F5 and Ctrl+F5 start, as Set as Startup Project chooses.
 - **Multiple startup projects**: give each project an action (**Start**, **Start without debugging** or **None**) and a launch profile, and order them with Move Up and Move Down. Press **Apply**.
 
+#### Launch profiles of several projects
+
+You can keep several such sets, each with a name, and switch between them in the toolbar, as in the classic IDE's multi-project launch profiles:
+- On the Startup Projects page, under **Multiple startup projects**, **Launch profile** lists `<Multiple Startup Projects>` (the set the page has always kept, saved only for you) and your named sets. **New** makes a set from the rows shown, named "Profile 1": give it a **Name**, set its projects and press **Apply**. **Delete** removes the chosen one.
+- **Share profile** saves the set in the solution's launch file next to it, `Contoso.slnLaunch` (for `Contoso.slnx`, `Contoso.slnxLaunch`, or a `Contoso.slnLaunch` it already has), for you to commit; otherwise it goes in that file's `.user` file, which stays yours (the `.gitignore` Codalus IDE writes ignores `*.user`). These are the classic IDE's files: the sets it saved show up here, and the ones you save show up there. A change to the files on disk, from a checkout or the classic IDE, shows up as it happens.
+- Each project of a set starts with the set's own launch profile, so a project can use one profile on its own and another with its partners.
+
+The toolbar's startup project box lists the executable projects, then `<Multiple Startup Projects>` and the named sets. Choosing a set makes F5 and Ctrl+F5 start it: the Start button says its name, and its drop-down offers **Configure Startup Projects…**. Choosing a project goes back to one startup project. Debug → Startup and Launch → **Select Startup Project…** lists the same choices. The choice is kept with the solution.
+
 F5 then builds the solution once and starts the projects in that order. Those set to Start are debugged in **one session**:
 - the Call Stack, Threads and Debug Location toolbar name each thread after its program (`Partner: Main Thread`);
 - the Processes window lists every program;
@@ -49,7 +58,11 @@ Right-click a project that starts (a program, or a library with an [analyzer or 
 
 A program that joins is part of the session as [several startup projects](#several-startup-projects) are: its threads are named after it once a second program runs, it stops at its own breakpoints, and the Processes window lists it. Right-click a program in the **Processes** window to **Terminate Process** or **Detach Process** (for one attached to, or with a console of its own) while the others go on. **Restart** brings back every program, and Stop ends them all.
 
-Some sessions and projects don't take part yet, and say so instead: a session attached to a process, a web app debugged with its page, a Blazor WebAssembly app, an Aspire AppHost, a container profile, a mobile or packaged app, and projects in a remote window. Stop the session to debug one of them, or start it without debugging.
+Web apps take part too. A **Blazor WebAssembly** app's page joins as one more program, with its dev server running beside it; closing the page stops the dev server. A **web app debugged with its page** (a Blazor Web App, or a server whose launch profile opens its page under the debugger) joins as one program, its server and its page together, as F5 debugs it: its threads are named after it (`Web: Browser: …`). A web app that joins a session runs without [Hot Reload while debugging](#hot-reload-while-debugging), which stays the session's first program's: its edits take effect after a restart.
+
+Every other kind of project joins the same way, started as F5 starts it: a .NET MAUI app on its device, a packaged WinUI app, a project of a [remote window](remote.md), an Aspire AppHost (its projects join with it; one AppHost runs at a time), and a project whose launch profile runs it in a container. **Attach to Process** (`Ctrl+Alt+P`) and its remote and container kin add the process to the running session too, and a session that began with an attach takes launched programs: Stop ends what it launched and detaches from what it attached to.
+
+One session doesn't take other programs: one whose Blazor Web App runs under `dotnet watch`, which netcoredbg's Hot Reload while debugging uses, since `dotnet watch` restarts the app by ending the session. It says so; stop it to debug another program, or start that one without debugging.
 
 ### Debugging on other machines
 
@@ -310,7 +323,7 @@ The status bar's Hot Reload item says when the edits last applied, and the Debug
 
 An edit applied **while the program runs** is Hot Reload's: a changed method runs its new code from its next call, and a method already running finishes in its old version.
 
-Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too.
+Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too. Such an edit in a project the program doesn't use (another app of the solution, or one you started into the session with **Start New Instance**) asks nothing: the Debug Console says it takes effect when that project is built again.
 
 Edits apply to programs started in the Debug Console, the integrated terminal or a console window, to tests you debug, and to a library the program hasn't loaded yet (they apply as it loads). After each one, the program's `[MetadataUpdateHandler]`s run, as under `dotnet watch`: Blazor components re-render with the new code, and other frameworks that refresh on Hot Reload do too.
 
@@ -366,7 +379,7 @@ The Codalus debugger's own limits:
 - symbols found on a server give a module its lines and names; its source files still come from your disk (embedded sources and Source Link aren't read by the debugger yet)
 - F# expressions are read as C#'s subset
 - Edit and Continue doesn't cover modules built with Windows PDBs
-- Start New Instance adds only programs that run on this machine or in WSL to a running session, and only to a session of such programs ([Starting another project while you debug](#starting-another-project-while-you-debug))
+- a web app that joins a running session ([Starting another project while you debug](#starting-another-project-while-you-debug)) has no Hot Reload while debugging, and a session whose web app runs under `dotnet watch` takes no other programs
 - the async call stack is for state machines only, and ends at `Task.WhenAll`, `Task.WhenAny` and `ContinueWith`; runtime async has none, and its limits for Step Out of a resumed method ([Async code](#async-code-and-runtime-async-net-11))
 
 These are netcoredbg's, when you choose it as the fallback; [the Codalus debugger](#the-codalus-debugger) does the first eight:
@@ -379,7 +392,6 @@ These are netcoredbg's, when you choose it as the fallback; [the Codalus debugge
 - no `new`, lambdas or generic methods in expressions, and hit counts and logpoints stop the program at each hit
 - with several startup projects, a stop in one program doesn't pause the others (on Windows, a program netcoredbg paused that way didn't always go on)
 - no data breakpoints and no mixed-mode debugging
-- Step Into New Instance doesn't stop at the entry point of a program netcoredbg attaches to in the integrated terminal or a console window: it runs to its first breakpoint
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
 - dumps written on another operating system don't open
 - no console input for a program debugged with the Debug Console (set `debug.console` to `integratedTerminal`)

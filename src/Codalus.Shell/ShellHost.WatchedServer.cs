@@ -167,12 +167,13 @@ public sealed partial class ShellHost
     }
 
     /// <summary>The page joins the compound session, or opens without the debugger when it can't (the server stays debugged).</summary>
-    private async Task AddPageAsync(string project, Browser browser, (string Url, string? InspectUri) page)
+    /// <param name="group">The web app's place in the session's programs, when Start New Instance added it (#547); null for F5's.</param>
+    private async Task AddPageAsync(string project, Browser browser, (string Url, string? InspectUri) page, int? group = null)
     {
         DebugLog.AppendLine($"> {browser.Display} {page.Url}");
         try
         {
-            await Debugger.AddBrowserAsync(StartJsDebug(browser), BrowserArguments(browser, page.Url, WebRoot(project), page.InspectUri), CancellationToken.None).ConfigureAwait(true);
+            await Debugger.AddBrowserAsync(StartJsDebug(browser), BrowserArguments(browser, page.Url, WebRoot(project), page.InspectUri), CancellationToken.None, group).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {

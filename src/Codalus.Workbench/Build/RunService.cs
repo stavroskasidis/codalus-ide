@@ -244,6 +244,7 @@ public sealed class RunService : IDisposable
         {
             _startupProject = projectPath;
             _multiple = false;
+            _activeSet = null;
         }
 
         StartupChanged?.Invoke(this, EventArgs.Empty);
@@ -289,29 +290,36 @@ public sealed class RunService : IDisposable
 
             _multiple = multiple;
             _entries = [.. entries ?? []];
+            _activeSet = null;
+            _sets = [];
         }
 
         StartupChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // ------------------------------------------------------------------ multiple startup projects (M14c)
+    // ------------------------------------------------------------------ multiple startup projects (M14c, ADR 0110)
 
     private bool _multiple;
     private List<StartupEntry> _entries = [];
+    private string? _activeSet;
+    private IReadOnlyList<LaunchSet> _sets = [];
 
-    /// <summary>Whether Start and Run start several projects (the Startup Projects dialog's "Multiple startup projects").</summary>
+    /// <summary>
+    /// Whether Start and Run start several projects: the unnamed set (the Startup Projects page's "Multiple startup
+    /// projects") or a named set of the solution's launch files. A named set that's gone from them turns it off.
+    /// </summary>
     public bool MultipleStartup
     {
         get
         {
             lock (_gate)
             {
-                return _multiple;
+                return _multiple && (_activeSet is null || _sets.Any(s => s.Name == _activeSet));
             }
         }
     }
 
-    /// <summary>Every project's action in the multiple-startup setting, in start order (projects without one are None).</summary>
+    /// <summary>The unnamed set's projects (saved with the solution's session), in start order (projects without one are None).</summary>
     public IReadOnlyList<StartupEntry> StartupEntries
     {
         get
@@ -323,33 +331,68 @@ public sealed class RunService : IDisposable
         }
     }
 
+    /// <summary>The named sets of the solution's launch files (ADR 0110), as last read.</summary>
+    public IReadOnlyList<LaunchSet> LaunchSets
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _sets;
+            }
+        }
+    }
+
+    /// <summary>The named set Start starts (null: a single project, or the unnamed set).</summary>
+    public LaunchSet? ActiveLaunchSet
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _multiple && _activeSet is { } name ? _sets.FirstOrDefault(s => s.Name == name) : null;
+            }
+        }
+    }
+
+    /// <summary>The active set's name, kept while its file is away (a checkout): for saving with the solution's state.</summary>
+    public string? ChosenLaunchSet
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _multiple ? _activeSet : null;
+            }
+        }
+    }
+
     /// <summary>
-    /// The projects a start starts, in order: with multiple startup projects, those whose action isn't None and that
-    /// are still in the solution; otherwise the startup project, started.
+    /// The projects a start starts, in order: with multiple startup projects, the active set's whose action isn't None
+    /// and that are still in the solution; otherwise the startup project, started with its chosen launch profile.
     /// </summary>
     public IReadOnlyList<StartupEntry> StartupTargets
     {
         get
         {
             var projects = _solutions.Solution?.Projects ?? [];
-            lock (_gate)
+            if (MultipleStartup)
             {
-                if (_multiple)
-                {
-                    return [.. _entries.Where(e => e.Action != StartupAction.None && projects.Any(p => SolutionService.PathComparer.Equals(p.Path, e.Project)))];
-                }
+                var entries = ActiveLaunchSet?.Entries ?? StartupEntries;
+                return [.. entries.Where(e => e.Action != StartupAction.None && projects.Any(p => SolutionService.PathComparer.Equals(p.Path, e.Project)))];
             }
 
-            return StartupProject is { } single ? [new StartupEntry(single, StartupAction.Start)] : [];
+            return StartupProject is { } single ? [new StartupEntry(single, StartupAction.Start, ChosenProfile(single))] : [];
         }
     }
 
-    /// <summary>Sets single or multiple startup projects (the Startup Projects dialog's Apply).</summary>
+    /// <summary>Sets single or the unnamed set of multiple startup projects (the Startup Projects page's Apply).</summary>
     public void SetStartupProjects(bool multiple, IReadOnlyList<StartupEntry> entries, string? single = null)
     {
         lock (_gate)
         {
             _multiple = multiple;
+            _activeSet = null;
             _entries = [.. entries];
             if (!multiple && single is not null)
             {
@@ -359,6 +402,113 @@ public sealed class RunService : IDisposable
 
         StartupChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>Makes a set the one Start starts: a named set of the launch files, or (null) the unnamed set.</summary>
+    public void SelectLaunchSet(string? name)
+    {
+        lock (_gate)
+        {
+            _multiple = true;
+            _activeSet = name;
+        }
+
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Restores the active named set (the solution's saved state), after <see cref="Load"/>.</summary>
+    public void LoadActiveLaunchSet(string? name)
+    {
+        lock (_gate)
+        {
+            if (name is not null)
+            {
+                _multiple = true;
+            }
+
+            _activeSet = name;
+        }
+
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Reads the open solution's launch files again (opening it, a change on disk, a save). Returns what couldn't be
+    /// read, or a set another one of its name hides, to log; raises <see cref="StartupChanged"/> when the sets changed.
+    /// </summary>
+    public IReadOnlyList<string> ReloadLaunchSets()
+    {
+        var read = _solutions.Solution is { IsFolder: false } solution
+            ? SolutionLaunchFiles.Read(solution.Path, solution.Format)
+            : new LaunchSetsRead([], []);
+        bool changed;
+        lock (_gate)
+        {
+            changed = !SameSets(_sets, read.Sets);
+            _sets = read.Sets;
+        }
+
+        if (changed)
+        {
+            StartupChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        return read.Problems;
+    }
+
+    /// <summary>The solution closed: its launch files' sets go (the active set's name stays until the next one loads its state).</summary>
+    public void ClearLaunchSets()
+    {
+        lock (_gate)
+        {
+            _sets = [];
+        }
+
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Saves a named set to the solution's launch files (<see cref="SolutionLaunchFiles.Save"/>), renamed from
+    /// <paramref name="previousName"/>, and reads them again; the active set follows a rename.
+    /// </summary>
+    public void SaveLaunchSet(LaunchSet set, string? previousName = null)
+    {
+        if (_solutions.Solution is not { IsFolder: false } solution)
+        {
+            throw new InvalidOperationException("Only a solution file has launch profiles.");
+        }
+
+        SolutionLaunchFiles.Save(solution.Path, solution.Format, set, previousName);
+        lock (_gate)
+        {
+            if (previousName is not null && _activeSet == previousName)
+            {
+                _activeSet = set.Name;
+            }
+        }
+
+        ReloadLaunchSets();
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Removes a named set from its launch file; if it was the active one, the unnamed set is.</summary>
+    public void DeleteLaunchSet(LaunchSet set)
+    {
+        SolutionLaunchFiles.Delete(set);
+        lock (_gate)
+        {
+            if (_activeSet == set.Name)
+            {
+                _activeSet = null;
+            }
+        }
+
+        ReloadLaunchSets();
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static bool SameSets(IReadOnlyList<LaunchSet> a, IReadOnlyList<LaunchSet> b) =>
+        a.Count == b.Count && a.Zip(b).All(p => p.First.Name == p.Second.Name && p.First.Shared == p.Second.Shared
+            && SolutionService.PathComparer.Equals(p.First.File ?? string.Empty, p.Second.File ?? string.Empty) && p.First.Entries.SequenceEqual(p.Second.Entries));
 
     /// <summary>
     /// A project's launch profiles (empty without a launch settings file), and how it runs in
@@ -418,7 +568,17 @@ public sealed class RunService : IDisposable
 
     /// <summary>The profile a run of <paramref name="projectPath"/> uses: the chosen one, else the first runnable one.</summary>
     public LaunchProfile? ResolveProfile(string projectPath, IReadOnlyList<LaunchProfile> profiles) =>
-        profiles.FirstOrDefault(p => p.Name == ChosenProfile(projectPath)) ?? profiles.FirstOrDefault(p => p.IsRunnable);
+        ProfileNamed(ChosenProfile(projectPath), profiles);
+
+    /// <summary>
+    /// The profile a startup entry starts with (ADR 0110): its own (a set's <c>DebugTarget</c>), else the first runnable
+    /// one; a single startup project's entry has the project's chosen profile.
+    /// </summary>
+    public static LaunchProfile? ResolveProfile(StartupEntry entry, IReadOnlyList<LaunchProfile> profiles) =>
+        ProfileNamed(entry.Profile, profiles);
+
+    private static LaunchProfile? ProfileNamed(string? name, IReadOnlyList<LaunchProfile> profiles) =>
+        profiles.FirstOrDefault(p => p.Name == name) ?? profiles.FirstOrDefault(p => p.IsRunnable);
 
     /// <summary>
     /// What a run of <paramref name="projectPath"/> would start (program, arguments, directory, environment) with its
@@ -542,7 +702,7 @@ public sealed class RunService : IDisposable
     /// <param name="openBrowser">False keeps the launch profile's browser closed (browser debugging opens its own, ADR 0026).</param>
     /// <param name="targetFramework">The framework to run (null: the active one); a Hot Reload run passes it to <c>dotnet watch</c>.</param>
     /// <param name="announceProcess">A Hot Reload run's app says its process id (<see cref="HotReloadPlan"/>), to debug it (#75).</param>
-    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true, string? targetFramework = null, bool announceProcess = false)
+    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true, string? targetFramework = null, bool announceProcess = false, StartupEntry? entry = null)
     {
         var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken, targetFramework).ConfigureAwait(false);
         var name = Path.GetFileNameWithoutExtension(projectPath);
@@ -552,7 +712,8 @@ public sealed class RunService : IDisposable
             channel.AppendLine($"Ignoring the launch settings: {error}");
         }
 
-        var profile = ResolveProfile(projectPath, profiles);
+        // A set's project starts with its own launch profile (ADR 0110), any other run with the project's chosen one.
+        var profile = entry is not null ? ResolveProfile(entry, profiles) : ResolveProfile(projectPath, profiles);
         var plan = await LaunchPlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
         if (!openBrowser)
         {
@@ -944,5 +1105,8 @@ public enum StartupAction
     StartWithoutDebugging,
 }
 
-/// <summary>A project's action in the multiple-startup setting.</summary>
-public sealed record StartupEntry(string Project, StartupAction Action);
+/// <summary>
+/// A project's action in a set of startup projects, and the launch profile it starts with (ADR 0110; null: the first
+/// runnable one).
+/// </summary>
+public sealed record StartupEntry(string Project, StartupAction Action, string? Profile = null);

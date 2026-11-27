@@ -480,6 +480,14 @@ internal abstract record ClrEvent
 {
     /// <summary>The process went on already (an event during a func-eval): the session mustn't continue it.</summary>
     public bool Continued { get; init; }
+
+    /// <summary>
+    /// Set when the target continues this event itself once the session has handled it, from the runtime's callback
+    /// thread: the session calls it instead of <see cref="IClrProcess.Continue"/> (true: go on; false: stay stopped).
+    /// A continue from another thread raced mscordbi's handling of the program's exit on that thread, and its transport
+    /// thread crashed (macOS CI, runs 43344309044 and 45578318597; <see cref="CorDebugTarget"/>).
+    /// </summary>
+    public Action<bool>? Resume { get; init; }
 }
 
 internal sealed record ClrModuleLoaded(IClrModule Module) : ClrEvent;

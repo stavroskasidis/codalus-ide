@@ -120,6 +120,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, s_watchdog);
 
         shell.Dialogs.Opened += OnDialogOpened;
+
+        // ADR 0113: the SDK manager reads a local copy of Microsoft's release metadata, so no step (the sweep's included) reaches the network.
+        shell.DotnetReleases = new Codalus.Workbench.Sdks.DotnetReleaseSource(Path.Combine(Work, "dotnet-releases-cache"), Path.Combine(samples, "DotnetReleases"));
         var exitCode = 1;
         try
         {
@@ -305,6 +308,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
         await StepAsync("shell.setup", "M46", "The first-run setup: the welcome page's origin preselects the keys, a theme family previewed live, VS Code's settings imported, the tools checked, the AI step's three ways compared and left as they were; the summary's Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
+        // ADR 0113: Tools → .NET SDKs on this machine's own .NET, against the local copy of the release metadata (the website's picture).
+        await StepAsync("setup.dotnetSdks", "ADR 0113", "Tools → .NET SDKs lists this machine's SDKs and runtimes by folder, the folder in use marked, with their updates and what's available; nothing is installed or removed", DotnetSdksStepAsync).ConfigureAwait(true);
+
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
         {
@@ -343,6 +349,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.DeleteProfileAsync("Smoke", confirm: false).ConfigureAwait(true);
             Check(shell.Profiles.Active == Workbench.Settings.ProfileStore.DefaultName && !shell.Profiles.Exists("Smoke"), "back on Default, the profile deleted");
             Check(shell.Workbench.Settings.GetValue("editor.fontSize").GetRawText() == fontSize, "Default's settings came back");
+        }).ConfigureAwait(true);
+
+        // #556 (ADR 0111): the UI's text in the shipped app, whose HarfBuzz and fontconfig calls are Native AOT's.
+        await StepAsync("shell.uiText", "1.1.0", "The UI's text: a variable font laid out at its instance's weight, the windows smoothing text the setting's way, and the UI's font size applied at once", async () =>
+        {
+            {
+                // The platform keeps (and disposes) the stream it reads a face from: one each.
+                var font = await File.ReadAllBytesAsync(Path.Combine(samples, "Fonts", "InterVariable-ascii.ttf")).ConfigureAwait(true);
+                var regular = ShellSystemFonts.FromFile(new MemoryStream(font, writable: false));
+                Check(regular is not null && ShellSystemFonts.IsVariable(regular.PlatformTypeface), "the variable font fixture reads as variable");
+                var bold = ShellSystemFonts.FromFile(new MemoryStream(font, writable: false))!;
+                Check(VariableFonts.Apply(bold, Avalonia.Media.FontWeight.Bold), "HarfBuzz takes the variable font's weight");
+                static double Advance(Avalonia.Media.GlyphTypeface face) =>
+                    Avalonia.Media.TextFormatting.TextShaper.Current.ShapeText("AI: Provider", new Avalonia.Media.TextFormatting.TextShaperOptions(face, 14)).Sum(g => g.GlyphAdvance);
+                Check(Advance(bold) > Advance(regular!), $"bold is laid out wider than regular ({Advance(bold):F1} against {Advance(regular!):F1})");
+            }
+
+            Check(Avalonia.Media.TextOptions.GetTextOptions(window) == shell.TextRendering.Current, $"the main window smooths text the setting's way ({shell.TextRendering.Current.TextRenderingMode}, {shell.TextRendering.Current.TextHintingMode})");
+            var settings = shell.Workbench.Settings;
+            await settings.SetAsync(Theming.UiFont.SizeSetting, 14, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.FontSize == 14, "the UI font size applies at once").ConfigureAwait(true);
+            await settings.SetAsync(Theming.UiFont.SizeSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.FontSize == Theming.UiFont.DefaultSize, "and goes back to 12").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.
@@ -1964,7 +1993,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
     }
 
-    /// <summary>Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session.</summary>
+    /// <summary>
+    /// Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session; as a named
+    /// set saved in the solution's launch file and chosen in the toolbar (ADR 0110).
+    /// </summary>
     private async Task DebugCompoundStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
@@ -1984,8 +2016,36 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         page.Rows.Single(r => r.Name == "Debuggee").Action = Workbench.Build.StartupAction.Start;
         page.Apply();
         Check(shell.Runs.StartupTargets.Count == 2, "two projects start");
+
+        // A named set (ADR 0110), shared: saved in Sessions.slnxLaunch, the classic IDE's launch file. The step runs
+        // twice (under the Codalus debugger again): the second time the page reads it from the file.
+        if (page.Sets.FirstOrDefault(s => s.Name == "Both") is { } both)
+        {
+            page.SelectedSet = both;
+        }
+        else
+        {
+            page.NewSet();
+            page.SetName = "Both";
+        }
+
+        page.IsShared = true;
+        page.Rows.Single(r => r.Name == "Partner").Action = Workbench.Build.StartupAction.Start;
+        page.Rows.Single(r => r.Name == "Debuggee").Action = Workbench.Build.StartupAction.Start;
+        await page.ApplyAsync().ConfigureAwait(true);
+        var launchFile = Path.Combine(Sessions, "Sessions.slnxLaunch");
+        Check(File.Exists(launchFile) && File.ReadAllText(launchFile).Contains("\"Name\": \"Both\"", StringComparison.Ordinal), $"the named set is saved in Sessions.slnxLaunch ({page.Status})");
+        Check(shell.Runs.ActiveLaunchSet?.Name == "Both" && shell.Runs.StartupTargets.Count == 2, "Start starts the named set's two projects");
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("smoke-test-startup-projects.png");
+
+        // The toolbar lists the sets after the projects: back to one project, then the set chosen there again.
+        shell.SetStartupProject(Path.Combine(Sessions, "Debuggee", "Debuggee.csproj"));
+        await WaitAsync(() => shell.Toolbar.StartupProjects.Any(c => c.Name == "Both") && shell.Toolbar.StartupProject?.Name == "Debuggee", "the toolbar lists the named set and shows the single project").ConfigureAwait(true);
+        Check(shell.Toolbar.StartupProjects.Any(c => c.Name == ShellHost.MultipleStartupProjectsLabel), "the toolbar lists <Multiple Startup Projects>");
+        shell.Toolbar.StartupProject = shell.Toolbar.StartupProjects.Single(c => c.Name == "Both");
+        await WaitAsync(() => shell.Runs.ActiveLaunchSet?.Name == "Both" && shell.Toolbar.StartLabel == "Both", "choosing the set in the toolbar makes Start start it").ConfigureAwait(true);
+        Check(shell.Runs.StartupTargets.Count == 2, "two projects start");
 
         var debuggee = SessionSource("Debuggee", "Program.cs");
         var partner = SessionSource("Partner", "Program.cs");

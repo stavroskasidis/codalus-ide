@@ -46,7 +46,8 @@ public sealed partial class TreeToolView : UserControl, IPaneView
         {
             // A command with an icon is an icon button, its title the tooltip and the name (M34h); a plugin's own command
             // without one keeps its title.
-            var button = new Button { Content = action.Title, Command = action.Command, FontSize = 12 };
+            var button = new Button { Content = action.Title, Command = action.Command };
+            button.Bind(FontSizeProperty, button.GetResourceObservable("Shell.FontSize.Body"));
             button.Classes.Add("toolbar");
             if (action.Icon is { } icon)
             {

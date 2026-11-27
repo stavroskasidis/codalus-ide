@@ -89,7 +89,8 @@ internal sealed class XamlStop
 /// wherever from;</item>
 /// <item>with <c>debug.breakOnFailedBinding</c>, a binding that fails stops the app as an exception would.</item>
 /// </list>
-/// A stop sends <c>event xstop …</c> (<see cref="XamlStop"/>) to the IDE, then calls <see cref="Debugger.Break"/> on
+/// A stop sends the breakpoints' states (<c>event xbreaks states</c>, as <see cref="Set"/> answers) and
+/// <c>event xstop …</c> (<see cref="XamlStop"/>) to the IDE, then calls <see cref="Debugger.Break"/> on
 /// the thread that created or changed the object, so the debugger stops there with its whole stack; the IDE shows the
 /// XAML line as the stop's location. Nothing stops without a debugger attached, or before the IDE's connection.
 /// </summary>
@@ -712,6 +713,10 @@ internal static class LiveBreak
             return;
         }
 
+        // The breakpoints' states first: the break suspends the whole app, this agent's reader too, so the IDE's own
+        // question for them (its sync once the agent connected) waits until the app goes on, and its breakpoints showed
+        // no state at the stop (macOS CI, run 45898000805: "The app didn't answer 'xbreaks' within 10 s").
+        Tell("event\txbreaks\t" + States());
         Tell("event\txstop\t" + stop.Encode());
         GC.KeepAlive(element);
         Breaker(stop, element);

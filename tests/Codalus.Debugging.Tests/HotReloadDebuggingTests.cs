@@ -380,6 +380,44 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
     }
 
     [Fact]
+    public async Task A_rude_edit_in_a_project_the_program_doesnt_run_restarts_nothing_and_the_programs_edits_go_on()
+    {
+        // The session runs the Visual Basic program, which doesn't reference the C# one. A program that joined the debug
+        // session after its Hot Reload began has projects like that, built after the baseline: their changes asked the
+        // session's program to restart, and Continue waited on the question (macOS CI, run 45872232919).
+        var vb = fixture.VisualBasic;
+        var session = "elsewhere-" + Guid.NewGuid().ToString("N");
+        Assert.True(await fixture.Client.HotReloadStartAsync(session, [vb.Project], ["Baseline", "AddMethodToExistingType"], Ct));
+        try
+        {
+            await CSharp.EditAsync("static class Greeter", "class Greeter : Exception");
+            await vb.EditAsync("        Return text", "        Return text & \" from VB\"");
+            var update = await fixture.Client.HotReloadUpdateAsync(session, Ct);
+            Assert.Equal(HotReloadUpdateResult.Ready, update.Status);
+            Assert.Empty(update.RudeEdits);
+            Assert.Empty(update.ProjectsToRestart);
+            var elsewhere = Assert.Single(update.NotRunning, d => d.Id.StartsWith("ENC", StringComparison.Ordinal));
+            Assert.Equal(CSharp.Path, DocumentUris.ToPath(elsewhere.Location!.Uri), ignoreCase: !OperatingSystem.IsLinux());
+            Assert.Null(elsewhere.Detail); // an ordinary document
+            Assert.Equal(vb.Project, Assert.Single(update.Updates).Project, ignoreCase: !OperatingSystem.IsLinux());
+            await fixture.Client.HotReloadCommitAsync(session, Ct);
+
+            // Committed, the C# project's change is the next build's: it doesn't come back.
+            await vb.EditAsync("\" from VB\"", "\" again\"");
+            var next = await fixture.Client.HotReloadUpdateAsync(session, Ct);
+            Assert.True(next.Status == HotReloadUpdateResult.Ready && next.RudeEdits.Length == 0 && next.NotRunning.Length == 0,
+                $"{next.Status}; rude edits: {string.Join("; ", next.RudeEdits.Concat(next.NotRunning).Select(d => d.Id + " " + d.Message))}");
+            Assert.Equal(vb.Project, Assert.Single(next.Updates).Project, ignoreCase: !OperatingSystem.IsLinux());
+            await fixture.Client.HotReloadDiscardAsync(session, Ct);
+        }
+        finally
+        {
+            await fixture.Client.HotReloadEndAsync(session, Ct);
+            await fixture.RestoreAsync();
+        }
+    }
+
+    [Fact]
     public async Task An_edit_applies_to_a_Visual_Basic_program()
     {
         var vb = fixture.VisualBasic;

@@ -641,7 +641,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             }
 
             var frameworks = project.Info.TargetFrameworks;
-            var framework = frameworks.Length <= 1 ? null
+            // A project that lists one framework in TargetFrameworks builds it, not MSBuild's outer build.
+            var framework = !project.PerFramework ? null
+                : frameworks.Length == 1 ? frameworks[0]
                 : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
             var (configuration, platform) = ProjectConfiguration(path, solutionProjects);
             var request = new DesignTimeBuilder.Request(path, configuration, platform, framework)

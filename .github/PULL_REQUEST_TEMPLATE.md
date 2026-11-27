@@ -13,4 +13,4 @@
 - [ ] New dependencies are MIT-compatible and recorded in `THIRD-PARTY-NOTICES.md`
 - [ ] Docs updated (README, `docs/`, plugin API changelog for API changes), and an ADR for significant decisions
 - [ ] No performance budget regressions (or the regression is justified above)
-- [ ] Commits are signed off (`git commit -s`, DCO)
+- [ ] Outside contributions: commits are signed off (`git commit -s`, DCO); not needed for the maintainer's own

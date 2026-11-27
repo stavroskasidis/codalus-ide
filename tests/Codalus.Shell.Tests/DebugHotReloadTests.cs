@@ -32,7 +32,8 @@ public sealed class DebugHotReloadTests
     private static async Task<Editor.CodeEditorDocument> EditAsync(ShellFixture f, string path, string oldText, string newText)
     {
         var editor = await f.Shell.OpenFileAsync(path, preview: false, null);
-        await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+        // The view, and its controller, exist only while the tab is shown.
+        await ShellFixture.PumpUntil(() => editor?.Controller is not null, describe: () => $"{path} has no view; the tab shown is {f.Shell.ActiveEditor?.Model.Path ?? "none"}");
         var offset = editor!.Model.Text.Text.IndexOf(oldText, StringComparison.Ordinal);
         Assert.True(offset >= 0, $"'{oldText}' not found");
         editor.Model.Text.Replace(offset, oldText.Length, newText);
@@ -142,6 +143,46 @@ public sealed class DebugHotReloadTests
         f.Shell.Workbench.Notifications.Choose(f.Shell.Workbench.Notifications.Items.Single(n => n.Actions.Contains("Continue with the Old Code")), "Restart");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Running && f.Shell.Debugger.ProcessId is { } now && now != before && f.Shell.DebugEdits.IsActive, seconds: 180, describe: () => Diagnostics(f));
         await ShellFixture.PumpUntil(() => !f.Shell.ErrorList.Rows.Any(r => r.Source == ErrorListViewModel.HotReloadSource));
+
+        await f.RunAsync("debug.stop");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle && !f.Shell.DebugEdits.IsActive, seconds: 60);
+    }
+
+    [AvaloniaFact]
+    public async Task A_rude_edit_in_a_project_the_program_doesnt_run_doesnt_ask_and_its_own_edits_apply()
+    {
+        // F5 on the Visual Basic program, with the C# one built beside it in the solution: the session's Hot Reload
+        // runs only the Visual Basic project. A web app that joined a session through Start New Instance (ADR 0109) is
+        // such a project, built after the session's baseline: Continue asked to restart the session's program for a
+        // change in it, and waited on the question (macOS CI, run 45872232919).
+        await using var f = ShellFixture.Create();
+        var csharp = await OpenAsync(f, DebugService.CodalusAdapter);
+        var folder = Path.GetDirectoryName(Path.GetDirectoryName(csharp))!;
+        var vb = Path.Combine(folder, "HotReloadVb", "Program.vb");
+        var before = f.Shell.Builds.LastBuild;
+        await f.RunAsync("build.buildSolution");
+        await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is { } b && b != before, seconds: 300);
+        Assert.True(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
+        f.Shell.Runs.SetStartupProject(Path.Combine(folder, "HotReloadVb", "HotReloadVb.vbproj"));
+        f.Shell.Debugger.Breakpoints.Toggle(vb, Array.FindIndex(File.ReadAllLines(vb), l => l.Contains("' [vb-call]", StringComparison.Ordinal)) + 1);
+        await f.RunAsync("debug.start");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 180, describe: () => Diagnostics(f));
+        await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive, seconds: 60, describe: () => Diagnostics(f));
+        // The stop opens Program.vb after it checks the source exists: a tab opened before that is hidden by it and gets
+        // no view (macOS CI, run 45960730514).
+        await ShellFixture.PumpUntil(() => Path.GetFileName(f.Shell.ActiveEditor?.Model.Path) == "Program.vb", seconds: 60, describe: () => Diagnostics(f));
+
+        // A rude edit in the C# program, and an edit to the Visual Basic one: Continue applies the second, asking nothing.
+        await EditAsync(f, csharp, "static class Greeter", "class Greeter : Exception");
+        await EditAsync(f, vb, "        Return text", "        Return text & \" from the shell\"");
+        f.Shell.Debugger.Breakpoints.Clear();
+        var resumed = f.RunAsync("debug.continue");
+        await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("hello 0 from the shell", StringComparison.Ordinal), seconds: 60, describe: () => Diagnostics(f));
+        await resumed;
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Actions.Contains("Continue with the Old Code"));
+        // The Debug Console says which change waits for a build, and where.
+        Assert.Matches($@"doesn't run take effect when it's built again: ENC\d+ [^\n]*\({System.Text.RegularExpressions.Regex.Escape(csharp)}, line \d+\)", f.Shell.DebugLog.GetText());
+        Assert.DoesNotContain("need a restart", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
 
         await f.RunAsync("debug.stop");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle && !f.Shell.DebugEdits.IsActive, seconds: 60);

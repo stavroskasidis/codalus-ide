@@ -232,6 +232,12 @@ public sealed class DeclarativeView : UserControl
         }
 
         var list = new ListBox { ItemsSource = rows.Select(r => Row(r, header: false)).ToList(), MaxHeight = 480 };
+        // A table's value is its selected row's index (ADR 0113): a view drawn again keeps showing what's selected.
+        if (int.TryParse(node.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var selected) && selected < rows.Length)
+        {
+            list.SelectedIndex = selected;
+        }
+
         Avalonia.Automation.AutomationProperties.SetName(list, id);
         list.SelectionChanged += (_, _) =>
         {

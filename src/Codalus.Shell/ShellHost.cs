@@ -118,6 +118,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings(), .. BuiltIns.TemplatesSettings(), .. StartPageSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
+        UiFont = new UiFont(app, Workbench.Settings);
+        TextRendering = new TextRendering(Workbench.Settings);
+        Workbench.Settings.Changed += OfferRestartForUiScale;
         Theme.Changed += (_, _) => UseFamilyDefaults();
         UseFamilyDefaults();
         ListenForOpenedFiles(app);
@@ -195,6 +198,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginBisect();
         InitializePluginPerformance();
         InitializeComponentsPage();
+        InitializeDotnetSdks();
         InitializeAi();
         InitializeAgent();
         InitializeHeadless();
@@ -370,6 +374,12 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public EditorFont EditorFont { get; }
 
+    /// <summary>The UI's font family and size (#556).</summary>
+    public UiFont UiFont { get; }
+
+    /// <summary>How the UI's text is smoothed (#556).</summary>
+    internal TextRendering TextRendering { get; }
+
     public OutputViewModel Output { get; }
 
     public NotificationsViewModel Notifications { get; }
@@ -481,6 +491,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         _ = OfferRecoveryAsync();
         StartUpdates();
+        _ = RepairOsIntegrationAsync();
 
         // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here. Something
         // opened while the startup waited for the environment (M56): the setup waits for a start that opens nothing, as it
@@ -728,6 +739,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DeviceLogViewModel.ToolWindowId => DeviceLogWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
             ComponentsWindow => ComponentsPage(),
+            DotnetSdksWindow => DotnetSdksPage(),
             _ => null,
         },
     };
@@ -1260,6 +1272,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         StatusBar.Dispose();
         Notifications.Dispose();
         Theme.Dispose();
+        UiFont.Dispose();
+        TextRendering.Dispose(); // its class handler for every top level held the shell
+        Workbench.Settings.Changed -= OfferRestartForUiScale;
         Editor.CodeColors.Release(Languages.LanguageIdOf);
         ReleaseViewCallbacks();
         Views.MenuBuilder.Release(this);

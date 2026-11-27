@@ -837,7 +837,12 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
                     }
                 }
 
-                if (!stopped && !e.Continued)
+                if (e.Resume is { } resume)
+                {
+                    // The target continues it from the runtime's callback thread (CorDebugTarget.QueueThenContinue).
+                    resume(!stopped);
+                }
+                else if (!stopped && !e.Continued)
                 {
                     TryContinue(process);
                 }

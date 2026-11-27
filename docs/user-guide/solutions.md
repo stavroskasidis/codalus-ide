@@ -139,6 +139,33 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 
 **Use This SDK** pins the selected SDK in `global.json` (with the roll-forward policy you choose) and reloads the solution with it. **Remove Pin** takes the version out again.
 
+**Manage SDKs…** opens Tools → .NET SDKs, below, to install, update and remove SDKs for the whole machine.
+
+### Managing the installed SDKs
+
+**Tools → .NET SDKs…** (also **Manage…** on the .NET SDK row of Help → Check Environment) manages the .NET on this machine, with or without a solution open. It has three lists, a search box, and the selection's details beside them:
+- **Installed**: each .NET folder (`~/.dotnet`, `/usr/lib/dotnet`, `/usr/local/share/dotnet`, `%ProgramFiles%\dotnet`…) as a heading, the one Codalus IDE uses first, with who manages it; under it its **SDKs**, then its **runtimes** (.NET, ASP.NET Core and Windows Desktop), folded into one row: the arrow (or Right) opens them. A row's chips say what needs you: a newer patch of its feature band (yellow when a release since fixes security issues), **Out of support**, **In use** for the SDK the open solution builds with, **Old patch** when a newer patch of its band sits beside it.
+- **Updates**: only what has a newer patch, by folder.
+- **Available**: each channel's newest SDK, a newer feature band of a channel you have, and runtimes alone (for running projects that target an older .NET). **Show previews** and **Show out of support** add the rest. The line above the list says which folder installs go into.
+
+The **details** of the selection say where it is and who manages that folder, its support, its feature band, the runtimes it brought (or, for a runtime, the SDKs that brought it), and whether a recent solution's `global.json` pins it. Only the buttons that apply show: **Install** or **Update to 10.0.112**, **Remove…**, and **Remove Old .NET 10 Patches…** when there are some. Under them, the exact command that Install or Update runs; when there's more than one way (your distribution's package, or `dotnet-install` into `~/.dotnet`), each is a choice with its command, and the button runs the one you pick. **What Remove does** lists the folders it deletes, or its command, and which runtimes stay and why; when an SDK can't be removed, the details say why instead of offering the button.
+
+Updates and what's available come from Microsoft's release information, read when the window opens and on **Refresh**, and kept for a day. Nothing checks in the background. Offline, the window shows the last copy and says how old it is.
+
+What each button does depends on who owns the folder, and nothing runs that the window hasn't shown you first. **Install** and **Update** run the command in the details when you choose them; **Remove…** asks, listing the folders again:
+- **Your own folder** (`~/.dotnet`, where Codalus IDE's own installs go): `dotnet-install` installs the exact version, with no password, and removing deletes the folders.
+- **A package manager's folder**: the distribution's package (apt, dnf, zypper, pacman; asked which package holds the SDK), the `dotnet-sdk` snap, Microsoft's installer package on macOS (removed with `sudo rm -rf` of the folders listed, since it has no uninstaller), or winget on Windows. These run in the integrated terminal, where `sudo` or Windows asks for your password. A distribution's package can't install an exact version, so the window also offers `dotnet-install` into `~/.dotnet` beside it.
+
+**Install** puts the selected SDK or runtime into the folder Codalus IDE uses. To add .NET 10 next to .NET 11, select **.NET SDK 10.0.x** in Available and choose Install. Both SDKs then sit side by side, and a solution builds with the newest unless its `global.json` pins another (**Use This SDK** above).
+
+**Update to…** installs the newest patch of the same feature band (10.0.102 to 10.0.104, never 10.0.1xx to 10.0.4xx), so a `global.json` pinned with the default roll-forward keeps working. Then it offers to remove the old patch, unless a recently opened solution's `global.json` pins that exact version.
+
+**Remove…** removes the SDK and the runtimes only it brought, with their reference packs and templates. A runtime stays when another SDK in the folder brought it too, when it's the newest of its channel there (so that channel's projects still run; remove it from the runtimes list if you don't need it), or when Codalus IDE's own helper processes run on it. The confirmation lists every folder, and what stays and why. You can't remove the SDK the open solution builds with, or the last SDK of the folder Codalus IDE uses. **Remove Old .NET 10 Patches…** removes every SDK of that channel that has a newer one of its band in the same folder, under the same rules. `host/fxr`, workload manifests and workload packs stay; `dotnet workload clean` removes the packs no SDK uses.
+
+**Workloads** belong to a feature band. After installing an SDK of a new band, the window offers to install the workloads an older band of the same channel has (MAUI, `wasm-tools`), in the terminal. It never does so on its own.
+
+After any change, Codalus IDE chooses its .NET folder again and checks the environment, as after an install from Check Environment. The .NET in WSL and on remote machines isn't managed here yet.
+
 **.NET 11 and C# 15:** the C# language service uses the .NET 11 SDK's compiler, so C# 15 (unions, collection expression arguments, labeled `break` and `continue`) shows no false errors, and the .NET 11 SDK's Razor generator runs in the editor.
 
 **Generators built for a newer compiler:** when a newer SDK's analyzers or source generators (the Razor generator of a .NET 12 preview, say) need a newer C# compiler than Codalus has, Codalus loads the same ones from the newest other installed SDK that it can load, and the Output window (Language Services) says so.

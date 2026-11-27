@@ -31,12 +31,20 @@ public sealed class DiffCommandTests
     {
         var name = SingleInstance.PipeName(Path.Combine(Path.GetTempPath(), "codalus-instance-" + Guid.NewGuid().ToString("N")));
 
+        // The first request loads the pipe and JSON assemblies and compiles the code that sends it. This test runs
+        // JIT-compiled and the shipped shell is Native AOT, so that cost is only the test's: on a macOS runner at a
+        // load of 17 to 29 on its three cores, it put the first refusal at 277 ms (CI run 45885608097). It's timed
+        // apart, on another name, and said with a failure below.
+        var warming = System.Diagnostics.Stopwatch.StartNew();
+        Assert.False(SingleInstance.TrySend(SingleInstance.PipeName(Path.Combine(Path.GetTempPath(), "codalus-instance-" + Guid.NewGuid().ToString("N"))), new InstanceRequest("ping", [])));
+        var firstCall = warming.ElapsedMilliseconds;
+
         // No shell running: the request is refused at once (a connect where nothing listens waits for its whole
         // timeout, half a second before every codalus <solution> started an IDE).
         var started = System.Diagnostics.Stopwatch.StartNew();
         Assert.False(SingleInstance.MayBeListening(name));
         Assert.False(SingleInstance.TrySend(name, new InstanceRequest("diff", ["a", "b"])));
-        Assert.True(started.ElapsedMilliseconds < 250, $"refused after {started.ElapsedMilliseconds} ms");
+        Assert.True(started.ElapsedMilliseconds < 250, $"refused after {started.ElapsedMilliseconds} ms (the first request, before it: {firstCall} ms)");
 
         // The pipe is looked up by its name, not found among all of the machine's (on Windows each listing took 185 ms on
         // a loaded runner, CI run 41233191844; this machine's 1,600 pipes, 12 ms).

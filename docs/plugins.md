@@ -167,6 +167,7 @@ context.Subscriptions.Add(context.Window.OnViewEvent("todoboard.summary", async 
 - Elements: `Stack`, `Row`, `Heading`, `Label` (plain, `muted`, `code`), `Button`, `TextBox`, `CheckBox`, `Dropdown`, `Table`, `Toolbar` and `Separator`.
 - Events: `click`; `change` with the value (a text box when the user presses Enter or leaves it); `select` and `activate` (double-click or Enter) with a table's row.
 - Call `SetView` again to update the view. Elements keep the user's input across updates by their `Id`.
+- A table's selected row (since 1.1): set its `Value` to the row's index (`ViewNode.Table(…) with { Value = "2" }`), so a view set again keeps showing it.
 
 A **custom editor** opens files in such a view. Declare it (`contributes.customEditors`), then `Window.RegisterCustomEditor(viewType, provider)`. The provider's `OpenAsync` gets a `CustomEditorDocument` (a view id, the path and the text) and fills the view; `SetCustomEditorText(viewId, text)` gives the file's new text, which marks the document modified, and the user saves it with Ctrl+S. `samples/plugins/TodoBoard` is a board for `*.todos.json` files and a summary tool window.
 

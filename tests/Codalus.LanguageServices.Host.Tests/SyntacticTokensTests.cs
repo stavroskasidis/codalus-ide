@@ -49,7 +49,14 @@ public sealed class SyntacticTokensTests : IAsyncLifetime
 
     private async Task<LanguageHostClient> StartAsync(TimeSpan? wait)
     {
-        var client = new LanguageHostClient("C# language service", ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly), policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) })
+        // The syntax's answer and the full one race once the wait is over (3d8232ae): a full answer that landed first
+        // failed these tests (macOS CI, run 45702937714). Held back, the syntax's comes first, as on a project still
+        // compiling.
+        var launch = ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly) with
+        {
+            Environment = wait is null ? null : new Dictionary<string, string> { ["CODALUS_LSHOST_HOLD_COLD_FULL_MS"] = "5000" },
+        };
+        var client = new LanguageHostClient("C# language service", launch, policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) })
         {
             SyntacticTokensWait = wait,
         };

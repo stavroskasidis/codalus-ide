@@ -68,7 +68,7 @@ public sealed class SessionEndTests
         await StartAsync(debug, silent, cancellationToken);
         silent.Close();
         await WaitUntilAsync(() => Volatile.Read(ref ended) == 1, "the silent session to end", cancellationToken);
-        Assert.Contains(output, line => line.Contains("The debugger ended the session without reporting the program's exit code, its connection closed", StringComparison.Ordinal));
+        Assert.Contains(output, line => line.Contains("The debugger ended the session without reporting the program's exit code, its connection closed (settled)", StringComparison.Ordinal));
 
         output.Clear();
         var reported = new FakeAdapter([]);
@@ -78,6 +78,48 @@ public sealed class SessionEndTests
         await WaitUntilAsync(() => Volatile.Read(ref ended) == 2, "the reported session to end", cancellationToken);
         Assert.Contains(output, line => line.Contains("The program has exited with code 3", StringComparison.Ordinal));
         Assert.DoesNotContain(output, line => line.Contains("without reporting", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public async Task An_adapter_whose_process_ends_after_its_connection_says_how_it_ended()
+    {
+        // The Codalus debugger's host ended after a program's end with nothing in its log (Linux CI, PR #561's run
+        // 45872761291): the session's diagnostic waits for the process and says how it ended. A shell stand-in answers
+        // initialize, closes its output, writes to stderr and ends by a signal, as a crashed host would.
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The stand-in adapter is a shell script.");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var folder = Directory.CreateTempSubdirectory("codalus-adapter-").FullName;
+        try
+        {
+            var script = Path.Combine(folder, "adapter.sh");
+            const string response = """{"seq":1,"type":"response","request_seq":1,"success":true,"command":"initialize","body":{}}""";
+            await File.WriteAllTextAsync(script, $$"""
+                #!/bin/sh
+                IFS= read -r header
+                IFS= read -r blank
+                length=${header#Content-Length: }
+                head -c "${length%?}" > /dev/null
+                body='{{response}}'
+                printf 'Content-Length: %d\r\n\r\n%s' ${#body} "$body"
+                sleep 0.5
+                exec 1>&-
+                echo 'Fatal error. Internal CLR error.' >&2
+                sleep 0.5
+                kill -SEGV $$
+                """, cancellationToken);
+            File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            await using var adapter = await DebugAdapter.StartAsync(script, cancellationToken);
+            await adapter.Closed.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+            await adapter.SettleAsync(TimeSpan.FromSeconds(10));
+            var described = adapter.Describe();
+            Assert.Contains("(exited, code 139, signal 11; its stderr: Fatal error. Internal CLR error.)", described, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     private static Task StartAsync(DebugService debug, FakeAdapter adapter, CancellationToken cancellationToken) =>

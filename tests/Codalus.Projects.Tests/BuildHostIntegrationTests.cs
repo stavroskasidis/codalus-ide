@@ -208,6 +208,31 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         Assert.Equal(["net10.0", "netstandard2.0"], Project(CoreProject).TargetFrameworks);
     }
 
+    // A MAUI project's TargetFrameworks on Linux, its other platforms conditioned out: MSBuild's evaluation without a
+    // TargetFramework is still the outer, cross-targeting one, which has no default items (Compile globs…).
+    private Task WriteOneFrameworkCoreAsync() => File.WriteAllTextAsync(CoreProject, """
+        <Project Sdk="Microsoft.NET.Sdk">
+          <PropertyGroup>
+            <TargetFrameworks>net10.0</TargetFrameworks>
+            <TargetFrameworks Condition="'$(NoSuchProperty)' == 'true'">$(TargetFrameworks);netstandard2.0</TargetFrameworks>
+          </PropertyGroup>
+        </Project>
+        """, TestContext.Current.CancellationToken);
+
+    [Fact]
+    public async Task A_project_listing_one_framework_in_TargetFrameworks_has_its_default_items()
+    {
+        await WriteOneFrameworkCoreAsync();
+
+        await OpenEvaluatedAsync(CoreProject);
+
+        var core = Project(CoreProject);
+        Assert.Equal(ProjectStates.Loaded, core.State);
+        Assert.Equal(["net10.0"], core.TargetFrameworks);
+        Assert.Single(core.Items, i => i.Kind == "Compile" && Path.GetFileName(i.Path) == "Greeter.cs");
+        Assert.Contains(core.References, r => r is { Kind: ReferenceKinds.Framework, Name: "Microsoft.NETCore.App" });
+    }
+
     // ------------------------------------------------------------------ file operations
 
     [Fact]
@@ -508,6 +533,22 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
     }
 
     // ------------------------------------------------------------------ design-time builds
+
+    [Fact]
+    public async Task A_project_listing_one_framework_in_TargetFrameworks_has_compiler_inputs()
+    {
+        await WriteOneFrameworkCoreAsync();
+
+        await _service.OpenAsync(CoreProject, trusted: true, restore: true, Timeout());
+        await WaitUntilAsync(() => _service.CompilerInputs.TryGetValue(CoreProject, out _), TimeSpan.FromMinutes(4),
+            () => string.Join(", ", _service.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)}={i.Value.State}")));
+
+        // The framework's build, not MSBuild's outer one, which has no CoreCompile.
+        var core = _service.CompilerInputs[CoreProject];
+        Assert.True(core.State == CompilerInputStates.Ok, core.Error);
+        Assert.Equal("net10.0", core.TargetFramework);
+        Assert.Contains("Greeter.cs", core.Arguments);
+    }
 
     [Fact]
     public async Task Design_time_builds_produce_compiler_inputs_for_the_active_framework()

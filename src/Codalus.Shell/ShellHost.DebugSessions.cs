@@ -146,7 +146,7 @@ public sealed partial class ShellHost
         }
 
         var launches = new List<DebugLaunch>();
-        DebugLog.Clear();
+        ClearDebugLogForNewSession();
         _pendingBrowserUrls.Clear();
         foreach (var target in targets)
         {
@@ -154,7 +154,7 @@ public sealed partial class ShellHost
             try
             {
                 var (containerInfo, containerProfiles, _) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);
-                if (Runs.ResolveProfile(target.Project, containerProfiles) is { } containerProfile && IsContainerProfile(containerProfile))
+                if (RunService.ResolveProfile(target, containerProfiles) is { } containerProfile && IsContainerProfile(containerProfile))
                 {
                     // A container runs on its own (ADR 0042): debugged, it is a session of its own after this one.
                     await StartInContainerAsync(target.Project, containerInfo, containerProfile, debug: false).ConfigureAwait(true);
@@ -170,7 +170,7 @@ public sealed partial class ShellHost
                         DebugLog.AppendLine($"[{name}] Ignoring the launch settings: {error}");
                     }
 
-                    var plan = await Runs.LaunchPlanAsync(info, Runs.ResolveProfile(target.Project, profiles), CancellationToken.None).ConfigureAwait(true);
+                    var plan = await Runs.LaunchPlanAsync(info, RunService.ResolveProfile(target, profiles), CancellationToken.None).ConfigureAwait(true);
                     var launch = plan.Wsl is not null
                         ? await WslLaunchAsync(name, plan).ConfigureAwait(true)
                         : new DebugLaunch(name, plan) { Console = ConsoleFor(info) };
@@ -185,11 +185,11 @@ public sealed partial class ShellHost
                         _pendingBrowserUrls.Enqueue(url);
                     }
 
-                    launches.Add(launch);
+                    launches.Add(launch with { Project = target.Project });
                 }
                 else
                 {
-                    var program = await Runs.StartAsync(target.Project, RunsInConsoleWindow, CancellationToken.None).ConfigureAwait(true);
+                    var program = await Runs.StartAsync(target.Project, RunsInConsoleWindow, CancellationToken.None, entry: target).ConfigureAwait(true);
                     if (program.Channel is { } channel && launches.Count == 0 && !debug)
                     {
                         Workbench.Output.Show(channel);
@@ -270,7 +270,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task AttachToRemoteProcessAsync(string? argument = null)
     {
-        if (Debugger.IsActive)
+        if (Debugger.IsActive && !Debugger.CanAddLaunch)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
@@ -454,7 +454,7 @@ public sealed partial class ShellHost
 
         try
         {
-            DebugLog.Clear();
+            ClearDebugLogForNewSession();
             DebugLog.AppendLine($"Attaching to {process.Name} ({process.Id.ToString(CultureInfo.InvariantCulture)}) on {target.Display} through {debugger.Path}…");
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);

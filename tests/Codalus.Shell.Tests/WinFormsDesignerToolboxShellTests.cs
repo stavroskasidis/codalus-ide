@@ -191,7 +191,8 @@ public sealed class WinFormsDesignerToolboxShellTests
 
         // E: a double-click on the CheckBox with placeOrderButton selected adds checkBox1 into buttonPanel at its default place,
         // selected, nothing armed, the designer active and its surface focused. The two presses come back to back (within
-        // the double-click time even on a slow machine: nothing renders between them), and the item is still under them after.
+        // the double-click time even on a slow machine: nothing runs or renders between them, see RawClick), and the item is
+        // still under them after.
         designer.SetSelection(["placeOrderButton"], notify: true);
         await Task.Delay(600, TestContext.Current.CancellationToken);
         checkItem = await ItemAsync("System.Windows.Forms.CheckBox");
@@ -200,16 +201,15 @@ public sealed class WinFormsDesignerToolboxShellTests
 
         // Each press as the Toolbox sees it: only a second press within the double-click time and size counts 2 and adds
         // the item; one that counts 1 toggles the first click's arming off and adds nothing (Windows CI, run 45253079989:
-        // "2 creates, armed nothing", with nothing recorded to tell why).
+        // "2 creates, armed nothing"; Linux CI, run 45758630133: both presses counted 1, at 9941 and 10634 ms, the window's
+        // MouseDown and MouseUp extensions having run the first click's jobs and renders in between).
         var presses = new List<string>();
         void OnPress(object? sender, PointerPressedEventArgs e) =>
             presses.Add($"{e.ClickCount} click(s) at {e.Timestamp} ms, {e.GetPosition(f.Window)} on {(e.Source as Control)?.GetType().Name}");
         checkItem.AddHandler(InputElement.PointerPressedEvent, OnPress, RoutingStrategies.Tunnel, handledEventsToo: true);
-        f.Window.MouseDown(checkCenter, MouseButton.Left);
-        f.Window.MouseUp(checkCenter, MouseButton.Left);
+        RawClick(f.Window, checkCenter);
         var armedByTheFirstClick = f.Shell.Toolbox.Armed?.Type;
-        f.Window.MouseDown(checkCenter, MouseButton.Left);
-        f.Window.MouseUp(checkCenter, MouseButton.Left);
+        RawClick(f.Window, checkCenter);
         checkItem.RemoveHandler(InputElement.PointerPressedEvent, OnPress);
         await ShellFixture.PumpUntil(() => host.Creates.Count == 3 && designer.Selection is ["checkBox1"], seconds: 30,
             () => $"the double-click's create ({host.Creates.Count} creates, armed {f.Shell.Toolbox.Armed?.Name ?? "nothing"}, the first click armed "
@@ -249,6 +249,22 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Equal("System.Windows.Forms.TextBox", f.Shell.Toolbox.Armed?.Type);
         Assert.Equal(4, host.Creates.Count);
         f.Shell.Toolbox.Disarm();
+    }
+
+    /// <summary>
+    /// A left click raised on the headless window itself, as an OS raises one: nothing else runs before or after it.
+    /// Avalonia.Headless's own MouseDown and MouseUp extensions run the dispatcher's jobs and force up to ten render ticks
+    /// before and after each event (12.1.6's HeadlessWindowExtensions.RunJobsOnImpl), and the window stamps an event with
+    /// its stopwatch as it's raised, so whatever the first click starts pushes the second press later: 238 ms apart on an
+    /// idle Linux session, 693 ms on Linux CI (run 45758630133), past the 500 ms double-click time. An OS stamps a press
+    /// when it happens, so a slow frame doesn't split a user's double-click. The window's input interface is internal.
+    /// </summary>
+    private static void RawClick(TopLevel window, Point point)
+    {
+        var headless = typeof(AvaloniaHeadlessPlatform).Assembly.GetType("Avalonia.Headless.IHeadlessWindow", throwOnError: true)!;
+        var impl = window.PlatformImpl ?? throw new ObjectDisposedException(window.GetType().Name);
+        headless.GetMethod("MouseDown")!.Invoke(impl, [point, MouseButton.Left, RawInputModifiers.None]);
+        headless.GetMethod("MouseUp")!.Invoke(impl, [point, MouseButton.Left, RawInputModifiers.None]);
     }
 
     /// <summary>

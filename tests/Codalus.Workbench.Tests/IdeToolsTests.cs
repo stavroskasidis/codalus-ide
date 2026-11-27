@@ -140,7 +140,7 @@ public sealed class IdeToolsTests : IDisposable
         var ct = timeout.Token;
 
         const string page = "<title>Orders</title><h1>Orders</h1><button id=add onclick=\"document.querySelector('h1').textContent='Added'; console.log('added', 1)\">Add</button><script>console.warn('loaded'); setTimeout(() => { throw new Error('late failure'); }, 0)</script>";
-        await using var agent = await AgentBrowser.StartAsync(browser.Path, _profile, "data:text/html," + Uri.EscapeDataString(page), headless: true, ct);
+        await using var agent = await AgentBrowser.StartAsync(browser.Executable(_profile), _profile, "data:text/html," + Uri.EscapeDataString(page), headless: true, ct);
 
         var text = await agent.GetPageAsync(null, ct);
         Assert.Contains("Orders", text, StringComparison.Ordinal);
@@ -169,7 +169,7 @@ public sealed class IdeToolsTests : IDisposable
         var ct = timeout.Token;
 
         // Someone else's browser (the page the IDE debugs): a profile, a DevTools port, and a page.
-        var start = new System.Diagnostics.ProcessStartInfo(browser.Path) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+        var start = new System.Diagnostics.ProcessStartInfo(browser.Executable(_profile)) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
         foreach (var argument in new[] { "--user-data-dir=" + _profile, "--remote-debugging-port=0", "--headless=new", "--no-first-run", "--no-default-browser-check", "data:text/html,<title>Debugged</title>" })
         {
             start.ArgumentList.Add(argument);
@@ -299,7 +299,7 @@ public sealed class IdeToolsTests : IDisposable
             }
         }, ct);
 
-        await using var agent = await AgentBrowser.StartAsync(browser.Path, _profile, "data:text/html,<title>First</title>", headless: true, ct);
+        await using var agent = await AgentBrowser.StartAsync(browser.Executable(_profile), _profile, "data:text/html,<title>First</title>", headless: true, ct);
         await agent.NavigateAsync($"http://127.0.0.1:{port}/", ct);
         var failures = new List<string>();
         for (var i = 0; i < 200; i++)

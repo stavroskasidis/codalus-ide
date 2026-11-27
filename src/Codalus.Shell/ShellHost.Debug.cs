@@ -114,7 +114,11 @@ public sealed partial class ShellHost
             code is { } c ? $"The program exited with code {c.ToString(CultureInfo.InvariantCulture)}." : "Debugging stopped.", TimeSpan.FromSeconds(6)));
         Debugger.Breakpoints.Changed += (_, _) => Ui.Post(() => Workbench.Context.Set("hasBreakpoints", Debugger.Breakpoints.All.Count + Debugger.Breakpoints.Functions.Count > 0));
         Watch.Changed += (_, _) => SaveEditorSession();
-        Debugger.ProcessesChanged += (_, _) => Ui.Post(() => Workbench.Context.Set("debugCanDetach", Debugger.CanDetach));
+        Debugger.ProcessesChanged += (_, _) => Ui.Post(() =>
+        {
+            Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
+            Workbench.Context.Set("debugCanAddProgram", Debugger.CanAddLaunch); // #547: Attach to Process adds to it
+        });
         InitializeDebugDepth();
         InitializeLiveTree();
         InitializeDebugSessions();
@@ -317,7 +321,7 @@ public sealed partial class ShellHost
             if (Remote is { } remote)
             {
                 // A remote window (M21): netcoredbg runs there, through the server.
-                DebugLog.Clear();
+                ClearDebugLogForNewSession();
                 await StartRemoteAsync(remote, project, info, profile, debug: true).ConfigureAwait(true);
                 return;
             }
@@ -338,7 +342,7 @@ public sealed partial class ShellHost
 
             var plan = await Runs.LaunchPlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
             _debugLaunchUrl = WebAppUrl(plan); // a web app is expected to listen there (the agent's tools wait for it)
-            DebugLog.Clear();
+            ClearDebugLogForNewSession();
             if (error is not null)
             {
                 DebugLog.AppendLine("Ignoring the launch settings: " + error);
@@ -398,7 +402,7 @@ public sealed partial class ShellHost
                 return;
             }
 
-            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry }; // Step Into New Instance (#547)
+            debugLaunch = debugLaunch with { StopAtEntry = launch.StopAtEntry, Project = project }; // Step Into New Instance (#547)
             if (launch.IsCanceled)
             {
                 return;
@@ -421,7 +425,7 @@ public sealed partial class ShellHost
     /// <summary>Debug → Attach to Process: the .NET processes first.</summary>
     public async Task AttachToProcessAsync(string? argument = null)
     {
-        if (Debugger.IsActive)
+        if (Debugger.IsActive && !Debugger.CanAddLaunch)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.debug.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
@@ -448,9 +452,15 @@ public sealed partial class ShellHost
             processId = picked;
         }
 
+        if (Debugger.IsActive && Debugger.Processes.Any(p => p.Id == processId && !p.Ended && p.Target is null))
+        {
+            StatusBar.ShowMessage(Localizer.Format("msg.debug.alreadyDebugged", "Process {0} is debugged already.", processId.ToString(CultureInfo.InvariantCulture)), TimeSpan.FromSeconds(4));
+            return;
+        }
+
         try
         {
-            DebugLog.Clear();
+            ClearDebugLogForNewSession(); // a session's attach adds to it (#547)
             DebugLog.AppendLine($"Attaching to process {processId.ToString(CultureInfo.InvariantCulture)}…");
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             await Debugger.AttachAsync(processId, CancellationToken.None).ConfigureAwait(true);
@@ -633,6 +643,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
+        Workbench.Context.Set("debugCanAddProgram", state != DebugState.Idle && Debugger.CanAddLaunch);
         UpdateDebuggerAbilities();
         if (state == DebugState.Idle)
         {

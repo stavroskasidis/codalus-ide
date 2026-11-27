@@ -462,6 +462,7 @@ public sealed partial class ShellHost
         Toolbar?.SetLaunching(Localizer.Get("msg.build.launchCancelling", "Cancelling…"));
     }
 
+    /// <summary>Select Startup Project: the solution's projects, then its sets of startup projects (ADR 0110).</summary>
     public async Task SelectStartupProjectAsync()
     {
         if (Solutions.Solution is not { } solution)
@@ -469,18 +470,23 @@ public sealed partial class ShellHost
             return;
         }
 
-        var current = Runs.StartupProject;
+        var current = ToolbarStartupChoice();
         var items = solution.Projects
             .Select(p => new QuickPickItem(p.Name)
             {
                 Tag = p.Path,
-                Detail = SolutionService.PathComparer.Equals(p.Path, current) ? "startup project" : Runs.IsExecutable(p.Path) ? null : "not executable",
+                Detail = !Runs.MultipleStartup && SolutionService.PathComparer.Equals(p.Path, current) ? "startup project" : Runs.IsExecutable(p.Path) ? null : "not executable",
             })
+            .Concat(LaunchSetChoices().Select(c => new QuickPickItem(c.Name)
+            {
+                Tag = c.Path,
+                Detail = c.Path == current ? Localizer.Get("msg.launchSets.startupProjectsActive", "startup projects, active") : Localizer.Get("msg.launchSets.startupProjects", "startup projects"),
+            }))
             .ToList();
-        var active = Math.Max(0, items.FindIndex(i => SolutionService.PathComparer.Equals((string)i.Tag!, current)));
+        var active = Math.Max(0, items.FindIndex(i => (string)i.Tag! == current));
         if (await Palette.ShowAsync(items, "Select the startup project", active).ConfigureAwait(true) is { Tag: string picked })
         {
-            SetStartupProject(picked);
+            SelectToolbarStartup(picked);
         }
     }
 
@@ -555,7 +561,7 @@ public sealed partial class ShellHost
 
         var name = Path.GetFileNameWithoutExtension(startup);
         var profile = Runs.ChosenProfile(startup);
-        var label = profile is null ? name : $"{name}: {profile}";
+        var label = Runs.MultipleStartup ? Runs.ActiveLaunchSet?.Name ?? MultipleStartupProjectsLabel : profile is null ? name : $"{name}: {profile}";
         var text = running.Count > 0 ? $"$(stop) {label} (running)" : $"$(play) {label}";
         Workbench.StatusBar.Set(new StatusBarItem(StartupStatusItem, text, StatusBarAlignment.Left, 48, ContributionSource.Shell.Id)
         {

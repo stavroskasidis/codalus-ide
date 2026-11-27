@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>.NET SDKs: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:20px;display:flex;flex-direction:column;gap:28px}
+.card-note{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 2px);padding:16px 20px}
+.card-note h1{margin:0 0 4px;font-size:18px;line-height:24px;color:var(--strong)}
+.card-note h2{margin:0 0 8px;font-size:14px;line-height:20px;color:var(--strong)}
+.card-note p{margin:0 0 8px;color:var(--fg)}
+.card-note ol,.card-note ul{margin:0;padding-left:20px;display:grid;gap:4px}
+.card-note .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px}
+.themes a{color:var(--link)}
+.plabel{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
+.plabel .letter{width:28px;height:28px;border-radius:6px;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex:none}
+.plabel h2{margin:0;font-size:15px;line-height:20px;color:var(--strong)}
+.plabel p{margin:2px 0 0;color:var(--muted);max-width:1100px}
+.doc{border:1px solid var(--border);background:var(--canvas)}
+.doc .doc-tabs{background:var(--tabs);padding:0 6px}
+.doc .doc-tab .x{display:inline-flex;color:var(--muted)}
+.body{background:var(--panel);border-top:1px solid var(--border)}
+
+/* Shared page header */
+.page{padding:16px 24px 20px;display:flex;flex-direction:column;gap:14px}
+.ph{display:flex;align-items:flex-start;gap:12px}
+.ph .ttl{flex:1;min-width:0}
+.ph h3{margin:0;font-size:18px;line-height:24px;font-weight:600;color:var(--strong)}
+.ph .sub{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.ph .acts{display:flex;gap:8px;align-items:center}
+.banner{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 12px;border-radius:var(--radius);border:1px solid var(--soft-border);background:var(--chip-warn);color:var(--chip-warn-fg)}
+.banner b{font-weight:600}
+.banner .btn{color:var(--fg)}
+.banner .btn.primary{color:var(--accent-fg)}
+.state{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.state svg.i{width:14px;height:14px}
+
+/* A: by .NET version */
+.folder{display:flex;flex-direction:column;gap:8px}
+.fh{display:flex;align-items:center;gap:8px;height:24px}
+.fh .path{font-family:var(--mono);color:var(--strong);font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{border:1px solid var(--soft-border);border-radius:calc(var(--radius) + 2px);background:var(--canvas);display:flex;flex-direction:column}
+.card.oos{border-color:var(--error)}
+.card .ch{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-bottom:1px solid var(--rule)}
+.card .ver{font-size:15px;font-weight:600;color:var(--strong)}
+.card .item{display:grid;grid-template-columns:16px 150px minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:36px;padding:4px 10px 4px 14px;border-bottom:1px solid var(--rule)}
+.card .item:last-child{border-bottom:0}
+.card .item .name{font-weight:600;white-space:nowrap}
+.card .item .what{display:flex;gap:8px;align-items:center;min-width:0}
+.card .item .act{display:flex;gap:4px;align-items:center;justify-content:flex-end}
+.card .item.rt .name{font-weight:400}
+.card .cf{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px;border-top:1px solid var(--rule);background:var(--header)}
+.ghosts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ghost{border:1px dashed var(--input-border);border-radius:calc(var(--radius) + 2px);padding:10px 10px 10px 14px;display:flex;align-items:center;gap:10px}
+.ghost .t{flex:1;min-width:0}
+.ghost .t b{display:block;color:var(--strong)}
+.sech{display:flex;align-items:center;gap:16px}
+.sech h4{margin:0;font-size:13px;font-weight:600;color:var(--strong)}
+
+/* B: list and details */
+.bwrap{display:flex;flex-direction:column}
+.bbar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--soft-border)}
+.bbar .tabs{border-bottom:0;height:28px;padding:0}
+.bsplit{display:grid;grid-template-columns:520px 1fr;min-height:560px}
+.blist{border-right:1px solid var(--soft-border);display:flex;flex-direction:column}
+.bgroup{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;background:var(--header);border-bottom:1px solid var(--rule);font-weight:600;color:var(--strong)}
+.bgroup .muted{font-weight:400}
+.bitem{display:grid;grid-template-columns:20px minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:6px 12px 6px 14px;border-bottom:1px solid var(--rule)}
+.bitem .l1{font-weight:600;color:var(--strong)}
+.bitem .l2{color:var(--muted);font-size:11px}
+.bitem.sel{background:var(--sel);color:var(--sel-fg)}
+.bitem.sel .l1,.bitem.sel .l2{color:inherit}
+.bitem.sub{padding-left:34px;grid-template-columns:16px minmax(0,1fr) auto}
+.bitem.coll{padding-top:4px;padding-bottom:4px}
+.bdet{padding:18px 24px;display:flex;flex-direction:column;gap:14px}
+.bdet .dh{display:flex;gap:12px;align-items:flex-start}
+.bdet .dh .big{width:36px;height:36px;border-radius:8px;background:var(--header);display:flex;align-items:center;justify-content:center;flex:none}
+.bdet .dh .big svg.i{width:22px;height:22px}
+.bdet h5{margin:0;font-size:17px;line-height:22px;color:var(--strong)}
+.bdet .chips{display:flex;gap:6px;margin-top:4px}
+.bdet .btns{display:flex;gap:8px}
+.dl{display:grid;grid-template-columns:150px 1fr;row-gap:6px;column-gap:16px}
+.dl dt{color:var(--muted)}
+.dl dd{margin:0}
+.runs{border:1px solid var(--soft-border);border-radius:var(--radius);background:var(--canvas)}
+.runs .rh{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--rule);font-weight:600;color:var(--strong)}
+.runs pre{margin:0;padding:10px 12px;font-family:var(--mono);font-size:12px;line-height:18px;background:var(--editor);color:var(--editor-fg);white-space:pre-wrap}
+.runs .rf{padding:8px 12px;color:var(--muted)}
+
+/* C: one tree grid */
+.ctb{display:flex;align-items:center;gap:6px;padding:6px 12px;border-bottom:1px solid var(--soft-border);background:var(--toolbar)}
+.cinfo{display:flex;align-items:center;gap:6px;padding:6px 14px;color:var(--muted);border-bottom:1px solid var(--rule)}
+.tg{width:100%;border-collapse:collapse}
+.tg th{height:28px;text-align:left;font-weight:600;color:var(--muted);background:var(--header);border-bottom:1px solid var(--soft-border);padding:0 10px;white-space:nowrap}
+.tg td{height:30px;padding:0 10px;border-bottom:1px solid var(--rule);white-space:nowrap;vertical-align:middle}
+.tg .nm{display:flex;align-items:center;gap:6px}
+.tg tr.f td{background:var(--header);font-weight:600;color:var(--strong);height:32px}
+.tg tr.c td{font-weight:600;color:var(--strong)}
+.tg .ind1{padding-left:22px}
+.tg .ind2{padding-left:46px}
+.tg .acts{display:flex;justify-content:flex-end;gap:4px}
+.tg .fill{color:var(--muted)}
+.pill-muted{color:var(--muted)}
+.cmp{width:100%;border-collapse:collapse}
+.cmp th,.cmp td{border-bottom:1px solid var(--rule);text-align:left;padding:6px 10px;vertical-align:top}
+.cmp th{color:var(--muted);font-weight:600}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="sheet">
+
+  <div class="card-note">
+    <h1>.NET SDKs, redesigned</h1>
+    <p class="muted">Tools → .NET SDKs… today, what is wrong with it, and three ways to lay it out. One made-up machine in every panel, so every state shows: <span class="mono">~/.dotnet</span> (yours, the .NET Codalus IDE uses) with .NET 11 and .NET 10 (a security update out, an old patch left behind), and <span class="mono">/usr/lib/dotnet</span> from the distribution's packages with .NET 8, out of support since 10 Nov 2026. The open solution is ContosoStore.</p>
+    <div class="cols">
+      <div>
+        <h2>What is wrong today</h2>
+        <ol>
+          <li>No page margin: the title and the folder path are clipped at the left edge.</li>
+          <li>Each table stretches across the document, so a version, its status and its support sit ~450 px apart.</li>
+          <li>"Up to date" on every row is noise, and what does need attention has no color, icon or position to stand out.</li>
+          <li>The buttons sit under each table and stay disabled until a row in that table is selected; with three tables and one selection, most of the buttons on screen are gray.</li>
+          <li>Runtimes are a table of their own, with their own Update, though an SDK's update brings its runtimes.</li>
+        </ol>
+      </div>
+      <div>
+        <h2>&nbsp;</h2>
+        <ol start="6">
+          <li>Install, the page's main action, and Refresh are below the fold.</li>
+          <li>Two date formats on one page (11/27/2026, 2028-11-14); "(LTS)" in parentheses where a chip would do.</li>
+          <li>The intro explains passwords and the terminal every time; that belongs in the confirmation and the folder's owner line.</li>
+          <li>A raw path is the section heading, and its owner a sentence ("Managed by you.").</li>
+          <li>It's built from the plugin view protocol's generic stack, table and toolbar nodes, which is why it reads as a form. Every alternative below needs a view of its own (as the package manager has) or new node kinds: card, chip, row actions.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="themes"><span class="muted">Theme:</span><a href="?theme=Classic%20Dark">Classic Dark</a><a href="?theme=Classic%20Light">Classic Light</a><a href="?theme=Classic%20Blue">Classic Blue</a><a href="?theme=Harbor%20Light">Harbor Light</a><a href="?theme=Harbor%20Dark">Harbor Dark</a><a href="?theme=Classic%20High%20Contrast">Classic High Contrast</a></div>
+  </div>
+
+  <!-- ===================== A ===================== -->
+  <section>
+    <div class="plabel"><span class="letter">A</span><div><h2>By .NET version</h2><p>One card per .NET version in each folder, its SDKs and runtimes together, each row's action on the row. A banner says what needs doing; everything that's fine says so once, in green. Install moves to the header; what isn't installed sits at the end as dashed cards.</p></div></div>
+    <div class="doc">
+      <div class="doc-tabs"><span class="doc-tab on"><svg class="i md c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>.NET SDKs<span class="x"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></span></div>
+      <div class="body"><div class="page">
+        <div class="ph">
+          <div class="ttl"><h3>.NET SDKs</h3><div class="sub">Release information from 27 Nov 2026, 17:57<button class="btn link has-icon"><svg class="i sm" aria-hidden="true"><use href="#i-refresh"></use></svg>Refresh</button></div></div>
+          <div class="acts"><button class="btn primary has-icon"><svg class="i" aria-hidden="true"><use href="#i-add"></use></svg>Install .NET…</button></div>
+        </div>
+        <div class="banner" role="status"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg><span><b>A security update for .NET 10</b> (10.0.405). .NET 8 in /usr/lib/dotnet has been out of support since 10 Nov 2026.</span><span class="grow"></span><button class="btn primary sm has-icon"><svg class="i" aria-hidden="true"><use href="#i-cloud-download"></use></svg>Update .NET 10…</button></div>
+
+        <div class="folder">
+          <div class="fh"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg><span class="path">/home/dev/.dotnet</span><span class="chip info">Codalus IDE uses it</span><span class="muted">Yours: installs and removes need no password</span></div>
+          <div class="cards">
+            <div class="card">
+              <div class="ch"><span class="ver">.NET 11</span><span class="chip plain square">STS</span><span class="muted">Supported until 14 Nov 2028</span><span class="grow"></span><button class="btn subtle icon sm" aria-label="More"><svg class="i" aria-hidden="true"><use href="#i-more"></use></svg></button></div>
+              <div class="item"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span class="name">SDK 11.0.100</span><span class="what"><span class="chip info"><svg class="i" aria-hidden="true"><use href="#i-solution"></use></svg>ContosoStore builds with it</span></span><span class="act"><span class="state ok-text"><svg class="i" aria-hidden="true"><use href="#i-check-circle"></use></svg>Up to date</span></span></div>
+              <div class="item rt"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg><span class="name">Runtimes</span><span class="what muted trim">.NET 11.0.0 · ASP.NET Core 11.0.0</span><span class="act"><span class="state ok-text"><svg class="i" aria-hidden="true"><use href="#i-check-circle"></use></svg>Up to date</span></span></div>
+            </div>
+            <div class="card">
+              <div class="ch"><span class="ver">.NET 10</span><span class="chip plain square">LTS</span><span class="muted">Supported until 14 Nov 2028</span><span class="grow"></span><button class="btn subtle icon sm" aria-label="More"><svg class="i" aria-hidden="true"><use href="#i-more"></use></svg></button></div>
+              <div class="item"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span class="name">SDK 10.0.404</span><span class="what"><span class="chip warn"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg>Security update: 10.0.405</span></span><span class="act"><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-cloud-download"></use></svg>Update…</button></span></div>
+              <div class="item"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span class="name">SDK 10.0.402</span><span class="what muted">Old patch: 10.0.404 replaces it</span><span class="act"><button class="btn subtle icon sm" aria-label="Remove 10.0.402…" title="Remove…"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button></span></div>
+              <div class="item rt"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg><span class="name">Runtimes</span><span class="what muted trim">.NET 10.0.15 · ASP.NET Core 10.0.15</span><span class="act muted">→ 10.0.16 with the SDK</span></div>
+              <div class="cf"><svg class="i c-orange" aria-hidden="true"><use href="#i-broom"></use></svg><button class="btn link">Remove 2 old .NET 10 patches…</button><span class="muted small">SDK 10.0.402, .NET Runtime 10.0.13</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="folder">
+          <div class="fh"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder"></use></svg><span class="path">/usr/lib/dotnet</span><span class="chip plain">apt</span><span class="muted">The distribution's packages: changes run in the terminal and ask for your password</span></div>
+          <div class="cards">
+            <div class="card oos">
+              <div class="ch"><span class="ver">.NET 8</span><span class="chip plain square">LTS</span><span class="chip err"><svg class="i" aria-hidden="true"><use href="#i-error"></use></svg>Out of support since 10 Nov 2026</span><span class="grow"></span><button class="btn sm has-icon"><svg class="i" aria-hidden="true"><use href="#i-terminal"></use></svg>Remove…</button></div>
+              <div class="item"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span class="name">SDK 8.0.122</span><span class="what muted">No more updates</span><span class="act"></span></div>
+              <div class="item rt"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg><span class="name">Runtimes</span><span class="what muted trim">.NET 8.0.22 · ASP.NET Core 8.0.22</span><span class="act"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="folder">
+          <div class="sech"><h4>Not installed</h4><span class="chk"><span class="box"></span>Show previews</span><span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Show out of support</span></div>
+          <div class="ghosts">
+            <div class="ghost"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span class="t"><b>.NET 9 · SDK 9.0.311</b><span class="muted small">STS · out of support since 10 Nov 2026</span></span><button class="btn sm">Install…</button></div>
+            <div class="ghost"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span class="t"><b>.NET 8 · SDK 8.0.416</b><span class="muted small">Into ~/.dotnet, beside apt's, at an exact version</span></span><button class="btn sm">Install…</button></div>
+            <div class="ghost"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg><span class="t"><b>A runtime alone</b><span class="muted small">To run projects that target an older .NET</span></span><button class="btn sm has-icon">Choose<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ===================== B ===================== -->
+  <section>
+    <div class="plabel"><span class="letter">B</span><div><h2>List and details, as the package manager</h2><p>Installed, Updates and Available tabs over a list grouped by folder (runtimes folded under it), and the selection's details on the right: its folder and owner, what it brought, who pins it, and the exact command its button runs, before the confirmation asks. The NuGet package manager's layout, so nothing new to learn; the selection always has a target, so no gray buttons.</p></div></div>
+    <div class="doc">
+      <div class="doc-tabs"><span class="doc-tab on"><svg class="i md c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>.NET SDKs<span class="x"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></span></div>
+      <div class="body bwrap">
+        <div class="bbar">
+          <div class="tabs" role="tablist"><button class="tab sel" role="tab" aria-selected="true">Installed<span class="badge">11</span></button><button class="tab" role="tab">Updates<span class="badge">1</span></button><button class="tab" role="tab">Available</button></div>
+          <span class="field sm" style="width:220px;margin-left:12px"><svg class="i sm lead" aria-hidden="true"><use href="#i-search"></use></svg><span class="ph">Search versions</span></span>
+          <span class="grow"></span>
+          <span class="muted">Release information from 27 Nov 2026, 17:57</span>
+          <button class="tb" aria-label="Refresh" title="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+        </div>
+        <div class="bsplit">
+          <div class="blist" role="listbox" aria-label="Installed .NET">
+            <div class="bgroup"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg><span class="mono">/home/dev/.dotnet</span><span class="grow"></span><span class="muted small">Codalus IDE uses it · yours</span></div>
+            <div class="bitem" role="option"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span><span class="l1">SDK 11.0.100</span><br><span class="l2">.NET 11 · STS · until 14 Nov 2028</span></span><span class="chip info">In use</span></div>
+            <div class="bitem sel" role="option" aria-selected="true"><svg class="i" aria-hidden="true"><use href="#i-cube"></use></svg><span><span class="l1">SDK 10.0.404</span><br><span class="l2">.NET 10 · LTS · until 14 Nov 2028</span></span><span class="chip warn"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg>10.0.405</span></div>
+            <div class="bitem" role="option"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span><span class="l1">SDK 10.0.402</span><br><span class="l2">.NET 10 · 10.0.404 replaces it</span></span><span class="chip plain">Old patch</span></div>
+            <div class="bitem sub coll" role="option"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg><span class="muted">Runtimes (5) · .NET 11.0.0, 10.0.15, 10.0.13 · ASP.NET Core 11.0.0, 10.0.15</span><span></span></div>
+            <div class="bgroup"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg><svg class="i c-folder" aria-hidden="true"><use href="#i-folder"></use></svg><span class="mono">/usr/lib/dotnet</span><span class="grow"></span><span class="muted small">apt · in the terminal</span></div>
+            <div class="bitem" role="option"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg><span><span class="l1">SDK 8.0.122</span><br><span class="l2">.NET 8 · LTS · ended 10 Nov 2026</span></span><span class="chip err">Out of support</span></div>
+            <div class="bitem sub coll" role="option"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg><span class="muted">Runtimes (2) · .NET 8.0.22 · ASP.NET Core 8.0.22</span><span></span></div>
+          </div>
+          <div class="bdet">
+            <div class="dh">
+              <span class="big"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg></span>
+              <div class="grow"><h5>.NET SDK 10.0.404</h5><div class="chips"><span class="chip plain square">LTS</span><span class="chip warn"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg>Security update: 10.0.405</span></div></div>
+            </div>
+            <div class="btns"><button class="btn primary has-icon"><svg class="i" aria-hidden="true"><use href="#i-cloud-download"></use></svg>Update to 10.0.405…</button><button class="btn has-icon"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg>Remove…</button><button class="btn has-icon"><svg class="i c-orange" aria-hidden="true"><use href="#i-broom"></use></svg>Remove Old .NET 10 Patches…</button></div>
+            <dl class="dl">
+              <dt>Folder</dt><dd><span class="mono">/home/dev/.dotnet</span> · yours, the .NET Codalus IDE uses</dd>
+              <dt>Support</dt><dd>.NET 10, long-term support, until 14 Nov 2028</dd>
+              <dt>Feature band</dt><dd>10.0.4xx</dd>
+              <dt>Brought</dt><dd>.NET Runtime 10.0.15, ASP.NET Core Runtime 10.0.15</dd>
+              <dt>Pinned by</dt><dd class="muted">No recent solution's global.json</dd>
+              <dt>Release notes</dt><dd><button class="btn link has-icon">10.0.405<svg class="i sm" aria-hidden="true"><use href="#i-link-external"></use></svg></button></dd>
+            </dl>
+            <div class="runs">
+              <div class="rh"><svg class="i c-blue" aria-hidden="true"><use href="#i-cloud-download"></use></svg>Update to 10.0.405 runs</div>
+              <pre>dotnet-install.sh --version 10.0.405 --install-dir /home/dev/.dotnet</pre>
+              <div class="rf">No password. Brings .NET Runtime 10.0.16 and ASP.NET Core Runtime 10.0.16, then offers to remove 10.0.404.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== C ===================== -->
+  <section>
+    <div class="plabel"><span class="letter">C</span><div><h2>One tree grid with row actions</h2><p>The smallest change: one grid instead of a table per folder and kind, grouped folder → .NET version → SDKs and runtimes, with columns sized to their content and each row's buttons on the row. A toolbar holds Install, Update All and Remove Old Patches. Closest to today's code: a tree-grid node with row actions in the view protocol would do.</p></div></div>
+    <div class="doc">
+      <div class="doc-tabs"><span class="doc-tab on"><svg class="i md c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>.NET SDKs<span class="x"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></span></div>
+      <div class="body">
+        <div class="ctb" role="toolbar">
+          <button class="btn primary sm has-icon"><svg class="i" aria-hidden="true"><use href="#i-add"></use></svg>Install .NET…<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button>
+          <span class="tb-sep"></span>
+          <button class="tb text"><svg class="i c-blue" aria-hidden="true"><use href="#i-cloud-download"></use></svg>Update All (1)…</button>
+          <button class="tb text"><svg class="i c-orange" aria-hidden="true"><use href="#i-broom"></use></svg>Remove Old Patches (2)…</button>
+          <span class="tb-sep"></span>
+          <button class="tb" aria-label="Refresh" title="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+          <span class="grow"></span>
+          <button class="tb text is-checked" aria-pressed="true"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg>Runtimes</button>
+          <span class="field sm" style="width:200px"><svg class="i sm lead" aria-hidden="true"><use href="#i-search"></use></svg><span class="ph">Search</span></span>
+        </div>
+        <div class="cinfo"><svg class="i sm c-info" aria-hidden="true"><use href="#i-info"></use></svg>Release information from 27 Nov 2026, 17:57. Every change shows its command first.</div>
+        <table class="tg">
+          <colgroup><col style="width:360px"><col style="width:330px"><col style="width:240px"><col></colgroup>
+          <thead><tr><th>Name</th><th>Status</th><th>Support</th><th></th></tr></thead>
+          <tbody>
+            <tr class="f"><td colspan="4"><span class="nm"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg><span class="mono">/home/dev/.dotnet</span><span class="chip info">Codalus IDE uses it</span><span class="muted" style="font-weight:400">yours</span></span></td></tr>
+            <tr class="c"><td class="ind1"><span class="nm"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg>.NET 11<span class="chip plain square">STS</span></span></td><td><span class="state ok-text"><svg class="i" aria-hidden="true"><use href="#i-check-circle"></use></svg>Up to date</span></td><td>Until 14 Nov 2028</td><td></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>SDK 11.0.100</span></td><td><span class="chip info"><svg class="i" aria-hidden="true"><use href="#i-solution"></use></svg>ContosoStore builds with it</span></td><td></td><td></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg>.NET Runtime 11.0.0</span></td><td></td><td></td><td></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg>ASP.NET Core Runtime 11.0.0</span></td><td></td><td></td><td></td></tr>
+            <tr class="c"><td class="ind1"><span class="nm"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg>.NET 10<span class="chip plain square">LTS</span></span></td><td><span class="chip warn"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg>Security update</span></td><td>Until 14 Nov 2028</td><td></td></tr>
+            <tr class="hover"><td class="ind2"><span class="nm"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>SDK 10.0.404</span></td><td><span class="warn-text">→ 10.0.405, with runtimes 10.0.16</span></td><td></td><td><span class="acts"><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-cloud-download"></use></svg>Update…</button><button class="btn subtle icon sm" aria-label="Remove…"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button></span></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>SDK 10.0.402</span></td><td class="muted">Old patch</td><td></td><td></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg>.NET Runtime 10.0.15</span></td><td class="muted">Updated with the SDK</td><td></td><td></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg>ASP.NET Core Runtime 10.0.15</span></td><td class="muted">Updated with the SDK</td><td></td><td></td></tr>
+            <tr><td class="ind2"><span class="nm"><svg class="i c-blue" aria-hidden="true"><use href="#i-layers"></use></svg>.NET Runtime 10.0.13</span></td><td class="muted">Old patch, no SDK needs it</td><td></td><td></td></tr>
+            <tr class="f"><td colspan="4"><span class="nm"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg><svg class="i c-folder" aria-hidden="true"><use href="#i-folder"></use></svg><span class="mono">/usr/lib/dotnet</span><span class="chip plain">apt</span><span class="muted" style="font-weight:400">changes run in the terminal</span></span></td></tr>
+            <tr class="c"><td class="ind1"><span class="nm"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg>.NET 8<span class="chip plain square">LTS</span><span class="muted" style="font-weight:400">SDK 8.0.122 and 2 runtimes</span></span></td><td><span class="chip err"><svg class="i" aria-hidden="true"><use href="#i-error"></use></svg>Out of support</span></td><td class="error-text">Ended 10 Nov 2026</td><td><span class="acts"><button class="btn sm has-icon"><svg class="i" aria-hidden="true"><use href="#i-terminal"></use></svg>Remove…</button></span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="card-note">
+    <h2>Which one</h2>
+    <table class="cmp">
+      <thead><tr><th style="width:160px"></th><th>A · By .NET version</th><th>B · List and details</th><th>C · Tree grid</th></tr></thead>
+      <tbody>
+        <tr><th>What needs doing</th><td>Banner, then the card; best at a glance</td><td>Updates tab with a count; one item at a time</td><td>Chips in the Status column; Update All</td></tr>
+        <tr><th>Many SDKs or folders</th><td>Cards grow tall past ~5 versions</td><td>Scales best: a list and search</td><td>Scales well: groups fold</td></tr>
+        <tr><th>Shows the command</th><td>In the confirmation (as today)</td><td>Before you click, in the details</td><td>In the confirmation (as today)</td></tr>
+        <tr><th>Build cost</th><td>A view of its own</td><td>A view of its own, the package manager's parts</td><td>A tree-grid node with row actions</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:10px">Proposed: A. <b>Decided 2026-11-27: B</b> (<a href="../../adr/0113-the-dotnet-sdk-manager.md#the-layout-amended-2026-11-27">ADR 0113</a>). Since the details show the exact command, Install and Update run from their button without another question, and Remove still confirms; several ways to install are radio choices in the details; there's no Update All.</p>
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Classic Dark","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: window.CodalusControls.theme(this.props.theme) };
+  }
+}
+</script>
+</body>
+</html>
