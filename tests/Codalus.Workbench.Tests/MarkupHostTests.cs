@@ -178,6 +178,42 @@ public sealed class MarkupHostTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Msbuild_list_properties_check_and_complete_each_entry()
+    {
+        // #573: TargetFrameworks and RuntimeIdentifiers are ';'-separated lists, not one value.
+        var ct = Timeout();
+        var text = "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFrameworks>net11.0;net10.0; netstandard2.0;</TargetFrameworks>\n    <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>\n    <OutputType>Ex</OutputType>\n  </PropertyGroup>\n</Project>\n";
+        var (project, uri, client) = await OpenAsync("Lib.csproj", text);
+
+        // Only OutputType's value is wrong: the lists of known values aren't.
+        var warning = Assert.Single(await DiagnosticsAsync(project, d => d.Count > 0, ct));
+        Assert.Equal("msbuild.value", warning.Code);
+        Assert.Equal(4, warning.Range.Start.Line);
+
+        // A framework that isn't one is flagged on its own, not the list.
+        var typo = text.Replace("net10.0;", "ne10.0;", StringComparison.Ordinal).Replace(">Ex<", ">Exe<", StringComparison.Ordinal);
+        await _service.ChangeAsync(project, ++_version, [new TextDocumentContentChangeEvent(null, typo)]);
+        var tfm = Assert.Single(await DiagnosticsAsync(project, d => d.Count == 1 && d[0].Code == "msbuild.tfm", ct));
+        Assert.Contains("'ne10.0'", tfm.Message, StringComparison.Ordinal);
+        Assert.Equal(At(typo, "<TargetFrameworks>net11.0;"), tfm.Range.Start);
+        Assert.Equal(At(typo, "net11.0;ne10.0"), tfm.Range.End);
+
+        // Completion replaces the entry at the caret, keeping the others.
+        await _service.ChangeAsync(project, ++_version, [new TextDocumentContentChangeEvent(null, text)]);
+        var frameworks = await client.CompletionAsync(uri, At(text, "net11.0;net1"), null, ct);
+        var net9 = Assert.Single(frameworks.Items, i => i.Label == "net9.0");
+        Assert.Equal(At(text, "net11.0;"), net9.TextEdit!.Range.Start);
+        Assert.Equal(At(text, "net11.0;net10.0"), net9.TextEdit.Range.End);
+        var standard = Assert.Single((await client.CompletionAsync(uri, At(text, "; net"), null, ct)).Items, i => i.Label == "netstandard2.1");
+        Assert.Equal(At(text, "; "), standard.TextEdit!.Range.Start);
+        Assert.Equal(At(text, "netstandard2.0"), standard.TextEdit.Range.End);
+        var runtimes = await client.CompletionAsync(uri, At(text, "win-x64;"), null, ct);
+        var arm = Assert.Single(runtimes.Items, i => i.Label == "linux-arm64");
+        Assert.Equal(At(text, "win-x64;"), arm.TextEdit!.Range.Start);
+        Assert.Equal(At(text, "win-x64;linux-x64"), arm.TextEdit.Range.End);
+    }
+
+    [Fact]
     public async Task Xml_yaml_and_editorconfig_files_are_checked()
     {
         var ct = Timeout();

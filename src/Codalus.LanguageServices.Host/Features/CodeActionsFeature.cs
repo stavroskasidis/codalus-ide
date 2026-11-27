@@ -43,7 +43,11 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
         var lineSpan = span.Length == 0 ? TextSpan.FromBounds(line.Start, line.End) : span;
         var found = await diagnostics.DiagnosticsInSpanAsync(document, lineSpan, cancellationToken).ConfigureAwait(false);
         var providers = ProviderCatalog.CodeFixes(document.Project).ToList();
-        foreach (var diagnostic in found.Where(d => !d.IsSuppressed).OrderBy(d => d.Severity == DiagnosticSeverity.Error ? 0 : 1))
+        // Errors first, then the nearest to the caret: fixes are listed once per title, so where two diagnostics on the
+        // line offer the same fix, the one under the caret is the one applied (#571).
+        foreach (var diagnostic in found.Where(d => !d.IsSuppressed)
+            .OrderBy(d => d.Severity == DiagnosticSeverity.Error ? 0 : 1)
+            .ThenBy(d => Distance(d.Location.SourceSpan, span)))
         {
             foreach (var provider in providers.Where(p => p.FixableDiagnosticIds.Contains(diagnostic.Id)))
             {
@@ -167,6 +171,12 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
                 : null;
         }
     }
+
+    /// <summary>How far a diagnostic is from the caret or selection: 0 when they touch.</summary>
+    private static int Distance(TextSpan diagnostic, TextSpan span) =>
+        diagnostic.End < span.Start ? span.Start - diagnostic.End
+        : diagnostic.Start > span.End ? diagnostic.Start - span.End
+        : 0;
 
     private static void Flatten(RoslynCodeAction action, string? parent, string kind, bool preferred, List<(RoslynCodeAction, string, string, bool)> into)
     {

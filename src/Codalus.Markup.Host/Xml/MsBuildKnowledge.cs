@@ -193,6 +193,9 @@ internal static class MsBuildKnowledge
 
     public static MsBuildItem? Item(string name) => Items.FirstOrDefault(i => i.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Whether a property's value is a <c>;</c>-separated list of the values <see cref="ValuesFor"/> offers.</summary>
+    public static bool IsList(string property) => property is "TargetFrameworks" or "RuntimeIdentifiers";
+
     /// <summary>The values offered for a property: its choices, TFMs, runtime identifiers, or none.</summary>
     public static string[] ValuesFor(string property) => property switch
     {
