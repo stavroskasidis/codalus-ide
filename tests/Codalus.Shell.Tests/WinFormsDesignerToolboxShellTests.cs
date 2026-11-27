@@ -207,9 +207,9 @@ public sealed class WinFormsDesignerToolboxShellTests
         void OnPress(object? sender, PointerPressedEventArgs e) =>
             presses.Add($"{e.ClickCount} click(s) at {e.Timestamp} ms, {e.GetPosition(f.Window)} on {(e.Source as Control)?.GetType().Name}");
         checkItem.AddHandler(InputElement.PointerPressedEvent, OnPress, RoutingStrategies.Tunnel, handledEventsToo: true);
-        RawClick(f.Window, checkCenter);
+        ShellFixture.RawClick(f.Window, checkCenter);
         var armedByTheFirstClick = f.Shell.Toolbox.Armed?.Type;
-        RawClick(f.Window, checkCenter);
+        ShellFixture.RawClick(f.Window, checkCenter);
         checkItem.RemoveHandler(InputElement.PointerPressedEvent, OnPress);
         await ShellFixture.PumpUntil(() => host.Creates.Count == 3 && designer.Selection is ["checkBox1"], seconds: 30,
             () => $"the double-click's create ({host.Creates.Count} creates, armed {f.Shell.Toolbox.Armed?.Name ?? "nothing"}, the first click armed "
@@ -249,22 +249,6 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Equal("System.Windows.Forms.TextBox", f.Shell.Toolbox.Armed?.Type);
         Assert.Equal(4, host.Creates.Count);
         f.Shell.Toolbox.Disarm();
-    }
-
-    /// <summary>
-    /// A left click raised on the headless window itself, as an OS raises one: nothing else runs before or after it.
-    /// Avalonia.Headless's own MouseDown and MouseUp extensions run the dispatcher's jobs and force up to ten render ticks
-    /// before and after each event (12.1.6's HeadlessWindowExtensions.RunJobsOnImpl), and the window stamps an event with
-    /// its stopwatch as it's raised, so whatever the first click starts pushes the second press later: 238 ms apart on an
-    /// idle Linux session, 693 ms on Linux CI (run 45758630133), past the 500 ms double-click time. An OS stamps a press
-    /// when it happens, so a slow frame doesn't split a user's double-click. The window's input interface is internal.
-    /// </summary>
-    private static void RawClick(TopLevel window, Point point)
-    {
-        var headless = typeof(AvaloniaHeadlessPlatform).Assembly.GetType("Avalonia.Headless.IHeadlessWindow", throwOnError: true)!;
-        var impl = window.PlatformImpl ?? throw new ObjectDisposedException(window.GetType().Name);
-        headless.GetMethod("MouseDown")!.Invoke(impl, [point, MouseButton.Left, RawInputModifiers.None]);
-        headless.GetMethod("MouseUp")!.Invoke(impl, [point, MouseButton.Left, RawInputModifiers.None]);
     }
 
     /// <summary>

@@ -222,13 +222,13 @@ public sealed class DataTipLayoutTests
         var name = s.InTextView(tip.Header.NameBlock);
         Assert.True(name.Top <= s.InView(word).Y && s.InView(word).Y <= name.Bottom, $"the header's name at {name}, app at {s.InView(word)}");
 
-        // A double-click on the header's name selects the word under it.
+        // A double-click on the header's name selects the word under it. Its presses are raw, back to back (ShellFixture.RawClick):
+        // the headless extensions ran the first click's jobs and renders in between, and under load the second press came
+        // past the double-click time and counted 1, leaving the tip open (a local Linux run of the whole project, 2026-11-27).
         var host = HostOf(tip.Header.NameBlock);
         var at = InHost(tip.Header.NameBlock, new Point(6, 8));
-        host.MouseDown(at, MouseButton.Left);
-        host.MouseUp(at, MouseButton.Left);
-        host.MouseDown(at, MouseButton.Left);
-        host.MouseUp(at, MouseButton.Left);
+        ShellFixture.RawClick(host, at);
+        ShellFixture.RawClick(host, at);
         ShellFixture.Pump();
         Assert.False(s.Editor.IsQuickInfoOpen);
         Assert.Equal("app", s.Editor.Editor.SelectedText);
