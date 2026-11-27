@@ -245,12 +245,19 @@ internal sealed class DiagnosticsService : IDisposable
         if (Analyzers(document.Project, model.Compilation, includeProject: !isMisc, includeIde: withIde) is { } analyzers)
         {
             diagnostics.AddRange((await analyzers.GetAnalyzerSyntaxDiagnosticsAsync(tree, cancellationToken).ConfigureAwait(false))
-                .Where(d => span is null || d.Location.SourceSpan.IntersectsWith(span.Value)));
-            diagnostics.AddRange(await analyzers.GetAnalyzerSemanticDiagnosticsAsync(model, span, cancellationToken).ConfigureAwait(false));
+                .Where(d => InSpan(d, span)));
+
+            // A span does not limit what symbol-end actions report: Roslyn's "Make member readonly" (IDE0251) reports
+            // every member of the struct from the struct's end, so the caret's line got its siblings' fixes too (#571).
+            diagnostics.AddRange((await analyzers.GetAnalyzerSemanticDiagnosticsAsync(model, span, cancellationToken).ConfigureAwait(false))
+                .Where(d => InSpan(d, span)));
         }
 
         return diagnostics;
     }
+
+    private static bool InSpan(RoslynDiagnostic diagnostic, Microsoft.CodeAnalysis.Text.TextSpan? span) =>
+        span is not { } filter || (diagnostic.Location.IsInSource && diagnostic.Location.SourceSpan.IntersectsWith(filter));
 
     /// <summary>Roslyn's IDE analyzers are skipped for very large files, which they would slow down a lot.</summary>
     public const int IdeAnalyzerLineLimit = 10_000;
