@@ -175,7 +175,8 @@ public sealed class DotnetSdkManagerShellTests
         f.Shell.Dialogs.Accept();
         await installing;
 
-        Assert.Contains("--version 10.0.111", Assert.Single(ran), StringComparison.Ordinal);
+        // dotnet-install.ps1 takes -Version, dotnet-install.sh --version (Windows CI, run 45942399760).
+        Assert.Contains(OperatingSystem.IsWindows() ? "-Version 10.0.111" : "--version 10.0.111", Assert.Single(ran), StringComparison.Ordinal);
         Assert.DoesNotContain(Find(f.Shell.DotnetSdksRoot(), "available")!.Rows!, r => r[0] == ".NET SDK 10.0.111");
     }
 
