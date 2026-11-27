@@ -293,7 +293,7 @@ internal sealed class UpToDateCheck(Func<string, IReadOnlyDictionary<string, str
         }
 
         var frameworks = ProjectEvaluator.TargetFrameworks(outer);
-        if (frameworks.Length <= 1 || outer.GetPropertyValue("TargetFramework").Length > 0)
+        if (!ProjectEvaluator.IsCrossTargeting(outer))
         {
             snapshots.Add(Capture(outer));
         }
