@@ -1,0 +1,58 @@
+{
+  "channel-version": "10.0",
+  "latest-release": "10.0.12",
+  "latest-runtime": "10.0.12",
+  "latest-sdk": "10.0.401",
+  "support-phase": "active",
+  "release-type": "lts",
+  "eol-date": "2028-11-14",
+  "releases": [
+    {
+      "release-date": "2026-11-10",
+      "release-version": "10.0.12",
+      "security": true,
+      "cve-list": [ { "cve-id": "CVE-2026-0001", "cve-url": "https://example.com/cve" } ],
+      "runtime": { "version": "10.0.12" },
+      "sdk": { "version": "10.0.401", "runtime-version": "10.0.12" },
+      "sdks": [
+        { "version": "10.0.401", "runtime-version": "10.0.12" },
+        { "version": "10.0.112", "runtime-version": "10.0.12" }
+      ],
+      "aspnetcore-runtime": { "version": "10.0.12" },
+      "windowsdesktop": { "version": "10.0.12" }
+    },
+    {
+      "release-date": "2026-10-13",
+      "release-version": "10.0.11",
+      "security": false,
+      "runtime": { "version": "10.0.11" },
+      "sdk": { "version": "10.0.400", "runtime-version": "10.0.11" },
+      "sdks": [
+        { "version": "10.0.400", "runtime-version": "10.0.11" },
+        { "version": "10.0.111", "runtime-version": "10.0.11" }
+      ],
+      "aspnetcore-runtime": { "version": "10.0.11" },
+      "windowsdesktop": { "version": "10.0.11" }
+    },
+    {
+      "release-date": "2026-09-08",
+      "release-version": "10.0.10",
+      "security": false,
+      "runtime": { "version": "10.0.10" },
+      "sdk": { "version": "10.0.110", "runtime-version": "10.0.10" },
+      "sdks": [ { "version": "10.0.110", "runtime-version": "10.0.10" } ],
+      "aspnetcore-runtime": { "version": "10.0.10" },
+      "windowsdesktop": { "version": "10.0.10" }
+    },
+    {
+      "release-date": "2025-11-11",
+      "release-version": "10.0.0",
+      "security": false,
+      "runtime": { "version": "10.0.0" },
+      "sdk": { "version": "10.0.100", "runtime-version": "10.0.0" },
+      "sdks": [ { "version": "10.0.100", "runtime-version": "10.0.0" } ],
+      "aspnetcore-runtime": { "version": "10.0.0" },
+      "windowsdesktop": { "version": "10.0.0" }
+    }
+  ]
+}

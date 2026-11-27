@@ -1,0 +1,21 @@
+{
+  "channel-version": "8.0",
+  "latest-release": "8.0.22",
+  "latest-runtime": "8.0.22",
+  "latest-sdk": "8.0.416",
+  "support-phase": "eol",
+  "release-type": "lts",
+  "eol-date": "2026-11-10",
+  "releases": [
+    {
+      "release-date": "2026-11-10",
+      "release-version": "8.0.22",
+      "security": true,
+      "runtime": { "version": "8.0.22" },
+      "sdk": { "version": "8.0.416", "runtime-version": "8.0.22" },
+      "sdks": [ { "version": "8.0.416", "runtime-version": "8.0.22" }, { "version": "8.0.122", "runtime-version": "8.0.22" } ],
+      "aspnetcore-runtime": { "version": "8.0.22" },
+      "windowsdesktop": { "version": "8.0.22" }
+    }
+  ]
+}

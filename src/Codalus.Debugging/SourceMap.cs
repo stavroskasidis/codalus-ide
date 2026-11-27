@@ -202,6 +202,8 @@ public sealed class PathMappingDebugAdapter : IDebugAdapter
 
     public string Describe() => Inner.Describe();
 
+    public Task SettleAsync(TimeSpan wait) => Inner.SettleAsync(wait);
+
     private static DapJsonContext Json => DapJsonContext.Default;
 
     private Task OnEventAsync(DapEvent e)

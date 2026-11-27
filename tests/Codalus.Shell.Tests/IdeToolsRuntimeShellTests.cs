@@ -22,6 +22,13 @@ public sealed class IdeToolsRuntimeShellTests
         $"\nState: {f.Shell.Debugger.State}, edits: {f.Shell.DebugEdits.IsActive}; {f.Shell.Debugger.Describe()}\n"
         + "Debug log:\n" + f.Shell.DebugLog.GetText() + "\nNotifications:\n" + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
 
+    /// <summary>
+    /// <paramref name="part"/> is in a tool's <paramref name="text"/>; a failure shows all of it. Assert.Contains shows
+    /// its first 50 characters, which left a CPU profile without Primes.IsPrime unexplained (Windows CI, run 45866039470).
+    /// </summary>
+    private static void AssertIn(string part, string text) =>
+        Assert.True(text.Contains(part, StringComparison.Ordinal), $"'{part}' isn't in the tool's answer:\n{text}");
+
     [AvaloniaFact]
     public async Task Agents_apply_code_changes_to_the_program_being_debugged()
     {
@@ -96,11 +103,11 @@ public sealed class IdeToolsRuntimeShellTests
         var cpu = await CallAsync(f, "profile_stop");
         Assert.False(cpu.IsError, cpu.Text);
         Assert.StartsWith("CPU profile of CpuBound (process ", cpu.Text, StringComparison.Ordinal);
-        Assert.Contains("Hot path (inclusive % of the samples", cpu.Text, StringComparison.Ordinal);
-        Assert.Contains("Top functions by self time", cpu.Text, StringComparison.Ordinal);
-        Assert.Contains("Top functions by total time", cpu.Text, StringComparison.Ordinal);
-        Assert.Contains("CpuBound.Primes.IsPrime", cpu.Text, StringComparison.Ordinal);
-        Assert.Contains("(CpuBound/Program.cs:", cpu.Text, StringComparison.Ordinal);
+        AssertIn("Hot path (inclusive % of the samples", cpu.Text);
+        AssertIn("Top functions by self time", cpu.Text);
+        AssertIn("Top functions by total time", cpu.Text);
+        AssertIn("CpuBound.Primes.IsPrime", cpu.Text);
+        AssertIn("(CpuBound/Program.cs:", cpu.Text);
         Assert.Contains(f.Shell.Layout.Documents.OfType<SolutionManagementDocument>(), d => d.ViewModel is ProfilingReportViewModel);
         Assert.True((await CallAsync(f, "profile_stop")).IsError);
 
@@ -112,9 +119,9 @@ public sealed class IdeToolsRuntimeShellTests
         var heap = await CallAsync(f, "memory_snapshot");
         Assert.False(heap.IsError, heap.Text);
         Assert.StartsWith("Heap of Leaky (process ", heap.Text, StringComparison.Ordinal);
-        Assert.Contains("Largest types", heap.Text, StringComparison.Ordinal);
-        Assert.Contains(" Order", heap.Text, StringComparison.Ordinal);
-        Assert.Contains("What keeps the largest alive", heap.Text, StringComparison.Ordinal);
+        AssertIn("Largest types", heap.Text);
+        AssertIn(" Order", heap.Text);
+        AssertIn("What keeps the largest alive", heap.Text);
 
         // Attached to the program that runs, stopped by the agent.
         var attach = await CallAsync(f, "profile_start");

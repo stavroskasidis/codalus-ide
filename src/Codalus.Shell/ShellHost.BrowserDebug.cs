@@ -96,7 +96,7 @@ public sealed partial class ShellHost
             return null;
         }
 
-        DebugLog.AppendLine($"Debugging in {browser.Display}{(browser.Version is { } version ? " " + version : "")} ({browser.Path}) through vscode-js-debug {JsDebug.Version}.");
+        DebugLog.AppendLine($"Debugging in {browser.Display}{(browser.Version is { } version ? " " + version : "")} ({browser.Location}) through vscode-js-debug {JsDebug.Version}.");
         try
         {
             await JsDebug.EnsureAsync(new Progress<string>(line => DebugLog.AppendLine(line)), CancellationToken.None).ConfigureAwait(true);
@@ -134,8 +134,12 @@ public sealed partial class ShellHost
 
         _debugBrowserProfile = profile;
         string[] arguments = ["--user-data-dir=" + profile, "--remote-debugging-port=0", .. Browsers.Headless ? new[] { "--headless=new" } : []];
-        return new(browser.LaunchType, url, webRoot, inspectUri, browser.Path, arguments, UserDataDir: false, Trace: trace is null ? null : new JsDebugTrace(trace));
+        return new(browser.LaunchType, url, webRoot, inspectUri, browser.Executable(profile, PageFolder(url)), arguments, UserDataDir: false, Trace: trace is null ? null : new JsDebugTrace(trace));
     }
+
+    /// <summary>The folder of a page opened from a file (Debug a Web Page), which a Flatpak browser is given; else null.</summary>
+    private static string? PageFolder(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
 
     /// <summary>The profile of the browser pages are debugged in (it keeps the page's sign-ins between sessions).</summary>
     internal string DebugBrowserProfile => Path.Combine(Paths.State, "debug-browser");

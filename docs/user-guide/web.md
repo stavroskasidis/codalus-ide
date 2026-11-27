@@ -90,6 +90,7 @@ A standalone Blazor WebAssembly app (`dotnet new blazorwasm`) runs on the WebAss
   - The browser gets a profile of its own (`debug-browser` in the IDE's state folder), so your own browser, its tabs and its extensions aren't touched, and a page you sign in to stays signed in for the next session. Its debugging port listens on this machine only; [an agent's browser tools](ai.md#the-ides-tools) drive the same page. Stopping the session closes it and stops the dev server.
   - The first session downloads the browser debugger, vscode-js-debug (about 1.2 MB), and Node.js if the web language servers haven't already. The Debug Console shows the progress.
   - The setting **Browser** (`debug.browser`) picks the browser: `auto` (Chrome, then Edge, then Chromium), `chrome`, `edge`, `chromium`, or a path.
+  - On Linux, a browser installed from Flatpak (Flathub's Chrome, Edge or Chromium) is found too, after one installed from your distribution's packages. Its sandbox is given its debugging profile's folder for each session, and read access to the page's folder when **Debug a Web Page** opens an HTML file, and nothing else; a path to another Flatpak browser's launcher (`/var/lib/flatpak/exports/bin/<app id>`, or `~/.local/share/flatpak/exports/bin/<app id>`) works as well.
 - **Hot Reload** works once the page is open in a browser, because the components run there: start with Hot Reload, open the page (or let `launchBrowser` open it), then save. The status bar says when the change was applied.
 
 ## Debugging the server and the page together

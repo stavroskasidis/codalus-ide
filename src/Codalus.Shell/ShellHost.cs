@@ -198,6 +198,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginBisect();
         InitializePluginPerformance();
         InitializeComponentsPage();
+        InitializeDotnetSdks();
         InitializeAi();
         InitializeAgent();
         InitializeHeadless();
@@ -738,6 +739,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DeviceLogViewModel.ToolWindowId => DeviceLogWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
             ComponentsWindow => ComponentsPage(),
+            DotnetSdksWindow => DotnetSdksPage(),
             _ => null,
         },
     };
