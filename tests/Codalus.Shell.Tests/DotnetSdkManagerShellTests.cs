@@ -2,7 +2,6 @@ using System.Reflection;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Platform;
-using Codalus.Plugins.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Sdks;
 using Codalus.Workbench.Setup;
@@ -11,15 +10,25 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// Tools → .NET SDKs (ADR 0113) in the shell: a .NET folder of the test's own (in a temporary folder) and the samples'
-/// copy of the release metadata. The list with its updates, a removal that deletes only after the confirmation, an
-/// install whose command goes to a stand-in, and Check Environment's Manage…. Nothing reaches the network or installs.
+/// copy of the release metadata. The lists with their updates, the details with the command a button runs, a removal
+/// that deletes only after the confirmation, an install that runs the details' command without another question (into a
+/// stand-in), and Check Environment's Manage…. Nothing reaches the network or installs.
 /// </summary>
 public sealed class DotnetSdkManagerShellTests
 {
     private static string Samples => Path.Combine(
         typeof(DotnetSdkManagerShellTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusRepoRoot").Value!, "samples", "DotnetReleases");
 
-    private static ViewNodeDto? Find(ViewNodeDto node, string id) => node.Id == id ? node : node.Children?.Select(c => Find(c, id)).FirstOrDefault(c => c is not null);
+    private static DotnetSdkRowViewModel Row(DotnetSdksViewModel model, string title) => model.Rows.Single(r => r.Title == title);
+
+    private static string SdkKey(Machine machine, string version) => $"sdk|{machine.Root}|{version}";
+
+    /// <summary>Selects a row and waits for its details' preview (the plans and what Remove does).</summary>
+    private static async Task SelectAsync(DotnetSdksViewModel model, string key)
+    {
+        Assert.True(model.Select(key), key);
+        await model.PreviewTask;
+    }
 
     private sealed class Machine : IAsyncDisposable
     {
@@ -63,21 +72,63 @@ public sealed class DotnetSdkManagerShellTests
     {
         await using var machine = new Machine();
         await using var f = await OpenAsync(machine);
+        var model = f.Shell.DotnetSdksModel;
 
-        var root = f.Shell.DotnetSdksRoot();
-        var sdks = Find(root, "sdks:0")!.Rows!;
-        Assert.Equal(["11.0.100", "10.0.110"], sdks.Select(r => r[0]));
-        Assert.Equal("Up to date", sdks[0][1]);
-        Assert.Equal("Security update: 10.0.112", sdks[1][1]);
-        Assert.Equal(3, sdks[1].Length); // the folder and its owner are its section's, not every row's
-        Assert.Contains(root.Children!, c => c is { Style: "heading" } && c.Text == machine.Root);
-        Assert.Contains(root.Children!, c => c.Text == "The .NET Codalus IDE uses. Managed by you.");
-        Assert.Contains(Find(root, "runtimes:0")!.Rows!, r => r[0] == ".NET Runtime" && r[1] == "10.0.10" && r[2] == "Security update: 10.0.12");
-        Assert.Contains(Find(root, "available")!.Rows!, r => r[0] == ".NET SDK 10.0.401");
-        Assert.DoesNotContain(Find(root, "available")!.Rows!, r => r[1] == "9.0");
+        // Installed: the folder once, as a heading; its SDKs; its runtimes folded, with their updates counted.
+        var folder = model.Rows[0];
+        Assert.True(folder.IsHeader);
+        Assert.Equal(machine.Root, folder.Title);
+        Assert.Equal("Codalus IDE uses it · managed by you", folder.Detail);
+        Assert.Equal(["SDK 11.0.100", "SDK 10.0.110", "Runtimes (3)"], model.Rows.Skip(1).Select(r => r.Title));
+        var sdk = Row(model, "SDK 10.0.110");
+        Assert.Equal("Security update: 10.0.112", Assert.Single(sdk.Chips, c => c.IsWarning).Tip);
+        Assert.Equal("10.0.112", sdk.Chips.Single(c => c.IsWarning).Text);
+        Assert.Contains(Row(model, "Runtimes (3)").Chips, c => c.Text == "1 update");
+        Assert.Equal(5, model.InstalledCount);
+        Assert.Equal(2, model.UpdatesCount);
 
-        await f.Shell.OnDotnetSdksEventAsync("showOutOfSupport", "change", "true", null);
-        Assert.Contains(Find(f.Shell.DotnetSdksRoot(), "available")!.Rows!, r => r[0] == ".NET SDK 9.0.308");
+        model.ToggleGroup(Row(model, "Runtimes (3)"));
+        Assert.Contains(Row(model, ".NET Runtime 10.0.10").Chips, c => c.Tip == "Security update: 10.0.12");
+
+        // Updates: only what has a newer patch, by folder.
+        model.Tab = DotnetSdksTab.Updates;
+        Assert.Equal([machine.Root, "SDK 10.0.110", ".NET Runtime 10.0.10"], model.Rows.Select(r => r.Title));
+
+        // Available: what can be installed into the folder in use; out of support only when asked.
+        model.Tab = DotnetSdksTab.Available;
+        Assert.Contains(model.Rows, r => r.Title == ".NET SDK 10.0.401");
+        Assert.DoesNotContain(model.Rows, r => r.Detail.StartsWith(".NET 9.0", StringComparison.Ordinal));
+        model.ShowOutOfSupport = true;
+        Assert.Contains(model.Rows, r => r.Title == ".NET SDK 9.0.308");
+
+        model.Search = "9.0.3";
+        Assert.Equal([".NET SDK 9.0.308"], model.Rows.Where(r => r.Title.Contains("SDK", StringComparison.Ordinal)).Select(r => r.Title));
+    }
+
+    [AvaloniaFact]
+    public async Task The_details_show_what_the_sdk_brought_and_the_exact_command_its_update_runs()
+    {
+        await using var machine = new Machine();
+        await using var f = await OpenAsync(machine);
+        var model = f.Shell.DotnetSdksModel;
+
+        await SelectAsync(model, SdkKey(machine, "10.0.110"));
+
+        var details = model.Details!;
+        Assert.Equal(".NET SDK 10.0.110", details.Heading);
+        Assert.Equal("Update to 10.0.112", details.PrimaryLabel);
+        Assert.True(details.HasPrimary);
+        Assert.Contains(details.Facts, x => x.Label == "Feature band" && x.Value == "10.0.1xx");
+        Assert.Contains(details.Facts, x => x.Label == "Runtimes it brought" && x.Value == ".NET Runtime 10.0.10");
+        var option = Assert.Single(details.Options);
+        Assert.Contains(OperatingSystem.IsWindows() ? "-Version 10.0.112" : "--version 10.0.112", option.Command, StringComparison.Ordinal);
+        Assert.False(details.HasManyOptions); // one way: no radio button
+        Assert.True(details.CanRemove);
+        Assert.Contains(Path.Combine(machine.Root, "sdk", "10.0.110"), details.RemovalText, StringComparison.Ordinal);
+
+        // The SDK in use has nothing to update: no Update button, and Remove is offered with what it deletes.
+        await SelectAsync(model, SdkKey(machine, "11.0.100"));
+        Assert.False(model.Details!.HasPrimary);
     }
 
     [AvaloniaFact]
@@ -85,9 +136,10 @@ public sealed class DotnetSdkManagerShellTests
     {
         await using var machine = new Machine();
         await using var f = await OpenAsync(machine);
-        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 1); // 10.0.110
+        var model = f.Shell.DotnetSdksModel;
+        await SelectAsync(model, SdkKey(machine, "10.0.110"));
 
-        var cancelled = f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
+        var cancelled = model.RemoveAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Assert.Contains(Path.Combine(machine.Root, "sdk", "10.0.110"), f.Shell.Dialogs.Message, StringComparison.Ordinal);
         Assert.Contains(".NET Runtime 10.0.10 stays: it's the newest .NET 10.0 runtime here", f.Shell.Dialogs.Message, StringComparison.Ordinal);
@@ -96,37 +148,40 @@ public sealed class DotnetSdkManagerShellTests
         Assert.True(Directory.Exists(Path.Combine(machine.Root, "sdk", "10.0.110")));
 
         // 11.0.100 stays, so 10.0.110 isn't the last SDK; its runtime isn't the newest of .NET 10 but the only one: it stays.
-        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
+        var removing = model.RemoveAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.Accept();
         await removing;
 
         Assert.False(Directory.Exists(Path.Combine(machine.Root, "sdk", "10.0.110")));
         Assert.True(Directory.Exists(Path.Combine(machine.Root, "shared", "Microsoft.NETCore.App", "10.0.10")));
-        Assert.Equal(["11.0.100"], Find(f.Shell.DotnetSdksRoot(), "sdks:0")!.Rows!.Select(r => r[0]));
-        Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text == ".NET SDK 10.0.110 is removed.");
+        Assert.Equal(["SDK 11.0.100"], model.Rows.Where(r => r.Item is InstalledSdk).Select(r => r.Title));
+        Assert.Equal(".NET SDK 10.0.110 is removed.", model.Message);
     }
 
     [AvaloniaFact]
-    public async Task Removing_the_last_sdk_of_the_folder_in_use_is_refused_with_the_reason()
+    public async Task The_last_sdk_of_the_folder_in_use_offers_no_remove_and_says_why()
     {
         await using var machine = new Machine();
         Directory.Delete(Path.Combine(machine.Root, "sdk", "10.0.110"));
         await using var f = await OpenAsync(machine);
-        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 0);
+        var model = f.Shell.DotnetSdksModel;
 
-        await f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
+        await SelectAsync(model, SdkKey(machine, "11.0.100"));
 
+        Assert.False(model.Details!.CanRemove);
+        Assert.Contains("is the last SDK in", model.Details.RemoveRefused, StringComparison.Ordinal);
+        await model.RemoveAsync();
         Assert.False(f.Shell.Dialogs.IsOpen);
         Assert.True(Directory.Exists(Path.Combine(machine.Root, "sdk", "11.0.100")));
-        Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text?.Contains("is the last SDK in", StringComparison.Ordinal) == true);
     }
 
     [AvaloniaFact]
-    public async Task Install_shows_the_exact_command_and_runs_it_after_the_yes()
+    public async Task Install_runs_the_command_the_details_show_without_another_question()
     {
         await using var machine = new Machine();
         await using var f = await OpenAsync(machine);
+        var model = f.Shell.DotnetSdksModel;
         var ran = new List<string>();
         f.Shell.SdkCommandStandIn = (program, arguments, _, _) =>
         {
@@ -134,19 +189,18 @@ public sealed class DotnetSdkManagerShellTests
             Directory.CreateDirectory(Path.Combine(machine.Root, "sdk", "10.0.401"));
             return Task.FromResult((0, string.Empty));
         };
-        var row = Find(f.Shell.DotnetSdksRoot(), "available")!.Rows!.ToList().FindIndex(r => r[0] == ".NET SDK 10.0.401");
-        await f.Shell.OnDotnetSdksEventAsync("available", "select", null, row);
-
-        var installing = f.Shell.OnDotnetSdksEventAsync("install", "click", null, null);
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        model.Tab = DotnetSdksTab.Available;
+        await SelectAsync(model, "av|sdk|10.0.401");
         var expected = OperatingSystem.IsWindows() ? "dotnet-install.ps1" : $"--version 10.0.401 --install-dir \"{machine.Root}\"";
-        Assert.Contains(expected, f.Shell.Dialogs.Message, StringComparison.Ordinal);
-        f.Shell.Dialogs.Accept();
-        await installing;
+        Assert.Contains(expected, Assert.Single(model.Details!.Options).Command, StringComparison.Ordinal);
 
+        await model.PrimaryAsync();
+
+        Assert.False(f.Shell.Dialogs.IsOpen);
         Assert.Contains(expected, Assert.Single(ran), StringComparison.Ordinal);
-        Assert.Contains("10.0.401", Find(f.Shell.DotnetSdksRoot(), "sdks:0")!.Rows!.Select(r => r[0]));
-        Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text == ".NET SDK 10.0.401 is installed.");
+        model.Tab = DotnetSdksTab.Installed;
+        Assert.Contains(model.Rows, r => r.Title == "SDK 10.0.401");
+        Assert.Equal(".NET SDK 10.0.401 is installed.", model.Message);
     }
 
     [AvaloniaFact]
@@ -154,6 +208,7 @@ public sealed class DotnetSdkManagerShellTests
     {
         await using var machine = new Machine();
         await using var f = await OpenAsync(machine);
+        var model = f.Shell.DotnetSdksModel;
         var ran = new List<string>();
         f.Shell.SdkCommandStandIn = (program, arguments, _, _) =>
         {
@@ -164,20 +219,20 @@ public sealed class DotnetSdkManagerShellTests
         var mismatch = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Mismatch, "builds") { WantedVersion = "10.0.111", Version = "11.0.100" };
 
         await f.Shell.InstallFromPromptAsync(mismatch);
+        await model.PreviewTask;
 
-        var available = Find(f.Shell.DotnetSdksRoot(), "available")!.Rows!;
-        Assert.Equal([".NET SDK 10.0.111", "10.0", "The open solution's global.json asks for it"], available[0]);
-        Assert.False(Find(f.Shell.DotnetSdksRoot(), "install")!.Disabled); // selected
+        Assert.Equal(DotnetSdksTab.Available, model.Tab);
+        Assert.Equal(".NET SDK 10.0.111", model.Rows[0].Title);
+        Assert.Equal("The open solution's global.json asks for it", model.Rows[0].Detail);
+        Assert.Same(model.Rows[0], model.Selected);
+        Assert.True(model.Details!.HasPrimary);
         Assert.False(f.Shell.Dialogs.IsOpen); // nothing runs until Install
 
-        var installing = f.Shell.OnDotnetSdksEventAsync("install", "click", null, null);
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
-        f.Shell.Dialogs.Accept();
-        await installing;
+        await model.PrimaryAsync();
 
         // dotnet-install.ps1 takes -Version, dotnet-install.sh --version (Windows CI, run 45942399760).
         Assert.Contains(OperatingSystem.IsWindows() ? "-Version 10.0.111" : "--version 10.0.111", Assert.Single(ran), StringComparison.Ordinal);
-        Assert.DoesNotContain(Find(f.Shell.DotnetSdksRoot(), "available")!.Rows!, r => r[0] == ".NET SDK 10.0.111");
+        Assert.DoesNotContain(model.Rows, r => r.Title == ".NET SDK 10.0.111");
     }
 
     [AvaloniaFact]
@@ -194,21 +249,78 @@ public sealed class DotnetSdkManagerShellTests
         Assert.Equal("Install .NET SDK", f.Shell.Dialogs.Title);
         f.Shell.Dialogs.Cancel();
         await prompt;
-        Assert.Contains(f.Shell.DotnetSdksRoot().Children!, c => c.Text?.StartsWith("Microsoft's release information couldn't be read", StringComparison.Ordinal) == true);
+        Assert.StartsWith("Microsoft's release information couldn't be read", f.Shell.DotnetSdksModel.ReleaseInfoProblem, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The window as it renders: the list, a global.json prompt's SDK selected, and a removal's confirmation over it,
-    /// saved to <c>CODALUS_UI_SNAPSHOTS</c> when it's set (a visual check; the website's picture comes from the smoke step).
+    /// Two ways to install (the distribution's package, or <c>dotnet-install</c> into <c>~/.dotnet</c>): the details list
+    /// both as radio choices, the recommended one chosen, and the button runs the one the user picks.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Several_ways_to_install_are_radio_choices_and_the_chosen_one_runs()
+    {
+        var package = new InstallPlan("dotnet", InstallKind.Terminal, "The distribution's package", "sudo apt-get install dotnet-sdk-10.0") { Recommended = true, Title = "The distribution's package" };
+        var script = new InstallPlan("dotnet", InstallKind.Run, "dotnet-install", "dotnet-install.sh --version 10.0.401") { Title = "dotnet-install into ~/.dotnet" };
+        var actions = new StandInActions([package, script]);
+        var installation = new DotnetInstallation("/usr/lib/dotnet", DotnetRootOwner.LinuxPackage, InUse: true) { Sdks = ["11.0.100"] };
+        var facts = new DotnetSdkFacts(new LocalDotnetMachine(PlatformInfo.Current), [installation], new DateOnly(2026, 11, 27));
+        var available = new AvailableDotnet("10.0", AvailableDotnet.Sdk, "10.0.401");
+        using var model = new DotnetSdksViewModel(actions) { Tab = DotnetSdksTab.Available };
+        model.SetData(new DotnetSdksData(facts, DotnetSdkPlanner.InstalledSdks(facts), [], [available]));
+        await model.PreviewTask;
+
+        var details = model.Details!;
+        Assert.True(details.HasManyOptions);
+        Assert.Equal(["The distribution's package", "dotnet-install into ~/.dotnet"], details.Options.Select(o => o.Title));
+        Assert.Contains("It runs in the terminal", details.Options[0].Note, StringComparison.Ordinal);
+        Assert.Same(package, details.Plan);
+
+        details.Options[1].IsSelected = true;
+        details.Options[0].IsSelected = false;
+        await model.PrimaryAsync();
+
+        Assert.Same(script, actions.Installed);
+    }
+
+    private sealed class StandInActions(IReadOnlyList<InstallPlan> plans) : IDotnetSdksActions
+    {
+        public InstallPlan? Installed { get; private set; }
+
+        public Task<DotnetSdkPreview> PreviewAsync(object item, CancellationToken cancellationToken) => Task.FromResult(new DotnetSdkPreview(plans, null));
+
+        public Task InstallAsync(AvailableDotnet item, InstallPlan plan)
+        {
+            Installed = plan;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateAsync(object item, InstallPlan plan) => Task.CompletedTask;
+
+        public Task RemoveAsync(object item) => Task.CompletedTask;
+
+        public Task RemoveOldPatchesAsync(InstalledSdk sdk) => Task.CompletedTask;
+
+        public Task RefreshAsync() => Task.CompletedTask;
+
+        public void FiltersChanged()
+        {
+        }
+    }
+
+    /// <summary>
+    /// The window as it renders: the list with an SDK's details, a global.json prompt's SDK selected in Available, and a
+    /// removal's confirmation over it, saved to <c>CODALUS_UI_SNAPSHOTS</c> when it's set (a visual check; the website's
+    /// picture comes from the smoke step).
     /// </summary>
     [AvaloniaFact]
     public async Task The_window_renders_its_list_a_prompts_selection_and_a_removals_confirmation()
     {
         await using var machine = new Machine();
         await using var f = await OpenAsync(machine);
-        var view = new ShellHost.DotnetSdksView(f.Shell);
+        var model = f.Shell.DotnetSdksModel;
+        var view = new Codalus.Shell.Views.DotnetSdksView { DataContext = model };
         var dialog = new Codalus.Shell.Views.DialogView { DataContext = f.Shell.Dialogs, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
-        var window = new Avalonia.Controls.Window { Width = 1100, Height = 900, Content = new Avalonia.Controls.Panel { Children = { view, dialog } } };
+        var window = new Avalonia.Controls.Window { Width = 1100, Height = 760, Content = new Avalonia.Controls.Panel { Children = { view, dialog } } };
         window.Show();
         var snapshots = Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS");
         void Snap(string name)
@@ -224,16 +336,21 @@ public sealed class DotnetSdkManagerShellTests
             }
         }
 
-        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 1);
+        await SelectAsync(model, SdkKey(machine, "10.0.110"));
         Snap("dotnet-sdks-list.png");
+        var list = view.GetVisualDescendants().OfType<Avalonia.Controls.ListBox>().Single(l => l.Name == "List");
+        Assert.Equal(2, list.SelectedIndex); // under the folder's heading and 11.0.100
+        Assert.True(view.GetVisualDescendants().OfType<Avalonia.Controls.Button>().Single(b => b.Name == "PrimaryButton").IsEffectivelyVisible);
 
         await f.Shell.InstallFromPromptAsync(new ToolStatus("dotnet", ".NET SDK", true, ToolState.Mismatch, "builds") { WantedVersion = "10.0.111", Version = "11.0.100" });
+        await model.PreviewTask;
         Snap("dotnet-sdks-prompt.png");
-        Assert.Equal(0, view.View.GetVisualDescendants().OfType<Avalonia.Controls.ListBox>().Single(l => Avalonia.Automation.AutomationProperties.GetName(l) == "available").SelectedIndex);
-        Assert.Equal(".NET SDK 10.0.111", Find(f.Shell.DotnetSdksRoot(), "available")!.Rows![0][0]);
+        Assert.Equal(0, list.SelectedIndex);
+        Assert.Equal(".NET SDK 10.0.111", model.Rows[0].Title);
 
-        await f.Shell.OnDotnetSdksEventAsync("sdks:0", "select", null, 1);
-        var removing = f.Shell.OnDotnetSdksEventAsync("sdkRemove:0", "click", null, null);
+        model.Tab = DotnetSdksTab.Installed;
+        await SelectAsync(model, SdkKey(machine, "10.0.110"));
+        var removing = model.RemoveAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Snap("dotnet-sdks-remove.png");
         f.Shell.Dialogs.Cancel();

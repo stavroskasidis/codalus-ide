@@ -1,10 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
-using Avalonia.Controls;
 using Codalus.Platform;
-using Codalus.Plugins.Protocol;
-using Codalus.Shell.Controls;
 using Codalus.Shell.Infrastructure;
+using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Localization;
 using Codalus.Workbench.Menus;
@@ -17,27 +15,20 @@ namespace Codalus.Shell;
 /// <summary>
 /// Tools → .NET SDKs (ADR 0113): the .NET SDKs and runtimes of this machine, by folder, with their updates from
 /// Microsoft's release metadata; install another channel, update within a feature band, remove an SDK and the runtimes
-/// only it brought. Every change shows its exact command or folders first. A declarative view, as Components is.
+/// only it brought. The selection's details show the exact command or folders before anything runs (layout B of
+/// <c>docs/design/controls/DotnetSdks.dc.html</c>): Install and Update run from their button, Remove confirms.
 /// </summary>
 public sealed partial class ShellHost
 {
     public const string DotnetSdksWindow = "dotnetSdks";
 
     private DotnetSdksContent? _dotnetSdksContent;
+    private DotnetSdksViewModel? _dotnetSdksModel;
     private DotnetReleaseSource? _dotnetReleases;
     private DotnetSdkFacts? _sdkFacts;
-    private IReadOnlyList<InstalledSdk> _sdkRows = [];
-    private IReadOnlyList<InstalledRuntime> _runtimeRows = [];
-    private IReadOnlyList<AvailableDotnet> _availableRows = [];
-    private int _selectedSdk = -1;
-    private int _selectedRuntime = -1;
-    private int _selectedAvailable = -1;
-    private bool _showPreviews;
-    private bool _showOutOfSupport;
     private bool _sdksBusy;
-    private string? _sdksMessage;
-    private string? _sdksMetadataNote;
-    private Action? _sdksChanged;
+    private string? _sdksReleaseTime;
+    private string? _sdksReleaseProblem;
     private SdkRequest? _sdkRequest;
     private bool _selectRequest;
 
@@ -52,6 +43,27 @@ public sealed partial class ShellHost
         internal DotnetSdksContent(ShellHost shell) => Shell = shell;
 
         internal ShellHost Shell { get; }
+
+        public DotnetSdksViewModel Model => Shell.DotnetSdksModel;
+    }
+
+    /// <summary>The window's lists, selection and details.</summary>
+    internal DotnetSdksViewModel DotnetSdksModel => _dotnetSdksModel ??= new DotnetSdksViewModel(new DotnetSdksActions(this));
+
+    /// <summary>What the last change did, shown above the lists until it's dismissed or replaced.</summary>
+    private string? SdksMessage
+    {
+        get => DotnetSdksModel.Message;
+        set => DotnetSdksModel.Message = value;
+    }
+
+    /// <summary>A view restored with the layout: OpenDotnetSdks didn't read the folders, so it reads them now.</summary>
+    internal void EnsureDotnetSdksRead()
+    {
+        if (!DotnetSdksLoaded)
+        {
+            _ = RunSdkActionAsync(() => RefreshDotnetSdksAsync());
+        }
     }
 
     /// <summary>Whether the window has read the .NET folders once (the smoke step waits for it).</summary>
@@ -70,9 +82,6 @@ public sealed partial class ShellHost
 
     /// <summary>Tests: runs an install, update or removal command in place of the real process (exit code and output).</summary>
     internal ProcessRunner? SdkCommandStandIn { get; set; }
-
-    /// <summary>Tests: picks one of several ways to install (null: cancelled), in place of the dialog.</summary>
-    internal Func<IReadOnlyList<InstallPlan>, Task<InstallPlan?>>? SdkInstallChooser { get; set; }
 
     /// <summary>Microsoft's release metadata, cached in the cache folder (<c>CODALUS_DOTNET_RELEASES</c> points it elsewhere).</summary>
     internal DotnetReleaseSource DotnetReleases
@@ -170,12 +179,16 @@ public sealed partial class ShellHost
 
         IReadOnlyList<DotnetChannel> channels = [];
         var releases = new Dictionary<string, DotnetChannelReleases>(StringComparer.Ordinal);
-        string? note = null;
+        string? when = null;
+        string? problem = null;
         try
         {
             var index = await Task.Run(() => DotnetReleases.GetIndexAsync(refreshMetadata, _lifetime.Token)).ConfigureAwait(true);
             channels = index.Value;
-            note = MetadataNote(index.FetchedAt, index.FetchError);
+            when = index.FetchedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+            problem = index.FetchError is { } error
+                ? Localizer.Format("msg.sdks.metadataStale", "Microsoft's release information couldn't be refreshed ({0}): this is the copy of {1}.", error, when)
+                : null;
             var wanted = installations.SelectMany(i => i.Sdks.Concat(i.Runtimes.Select(r => r.Version))).Select(DotnetSdkPlanner.ChannelOf)
                 .Distinct(StringComparer.Ordinal).Where(c => channels.Any(x => x.Version == c)).ToList();
             var read = await Task.WhenAll(wanted.Select(async channel =>
@@ -200,7 +213,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
-            note = Localizer.Format("msg.sdks.noMetadata", "Microsoft's release information couldn't be read, so updates and what's available aren't shown: {0}", ex.Message);
+            problem = Localizer.Format("msg.sdks.noMetadata", "Microsoft's release information couldn't be read, so updates and what's available aren't shown: {0}", ex.Message);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -233,16 +246,9 @@ public sealed partial class ShellHost
             Pinned = pinned,
             HostsStillRun = SdkMachineStandIn is null ? (root, removed) => check.HostsStillRunWithout(root, [.. removed.Select(r => (r.Framework, r.Version))]) : null,
         };
-        _sdksMetadataNote = note;
+        _sdksReleaseTime = when;
+        _sdksReleaseProblem = problem;
         Fill();
-    }
-
-    private static string MetadataNote(DateTimeOffset fetchedAt, string? error)
-    {
-        var when = fetchedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
-        return error is null
-            ? Localizer.Format("msg.sdks.metadataFrom", "Updates and what's available come from Microsoft's release information of {0}.", when)
-            : Localizer.Format("msg.sdks.metadataStale", "Microsoft's release information couldn't be refreshed ({0}): this is the copy of {1}.", error, when);
     }
 
     private void Fill()
@@ -252,273 +258,21 @@ public sealed partial class ShellHost
             return;
         }
 
-        _sdkRows = DotnetSdkPlanner.InstalledSdks(facts);
-        _runtimeRows = DotnetSdkPlanner.InstalledRuntimes(facts);
-        _availableRows = DotnetSdkPlanner.Available(facts, _showPreviews, _showOutOfSupport);
-        if (_sdkRequest is { } request && RequestedRow(request) is { } requested)
+        var model = DotnetSdksModel;
+        var requested = _sdkRequest is { } request ? RequestedRow(request) : null;
+        var select = requested is not null && _selectRequest;
+        if (select)
         {
-            // What the prompt asked for, first and selected once.
-            _availableRows = [requested, .. _availableRows.Where(a => !(a.IsSdk && a.Version == requested.Version))];
-            if (_selectRequest)
-            {
-                _selectedAvailable = 0;
-                _selectRequest = false;
-            }
+            _selectRequest = false;
         }
 
-        _selectedSdk = Math.Min(_selectedSdk, _sdkRows.Count - 1);
-        _selectedRuntime = Math.Min(_selectedRuntime, _runtimeRows.Count - 1);
-        _selectedAvailable = Math.Min(_selectedAvailable, _availableRows.Count - 1);
-        _sdksChanged?.Invoke();
-    }
-
-    private static int IndexOfFirst<T>(IReadOnlyList<T> rows, Func<T, bool> match)
-    {
-        for (var i = 0; i < rows.Count; i++)
+        model.SetData(new DotnetSdksData(facts, DotnetSdkPlanner.InstalledSdks(facts), DotnetSdkPlanner.InstalledRuntimes(facts), DotnetSdkPlanner.Available(facts, model.ShowPreviews, model.ShowOutOfSupport))
         {
-            if (match(rows[i]))
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private static string Owner(DotnetRootOwner owner) => owner switch
-    {
-        DotnetRootOwner.User => Localizer.Get("msg.sdks.ownerUser", "you"),
-        DotnetRootOwner.LinuxPackage => Localizer.Get("msg.sdks.ownerPackage", "the distribution's packages"),
-        DotnetRootOwner.Snap => Localizer.Get("msg.sdks.ownerSnap", "the dotnet-sdk snap"),
-        DotnetRootOwner.MacPackage => Localizer.Get("msg.sdks.ownerPkg", "Microsoft's installer"),
-        DotnetRootOwner.WindowsInstaller => Localizer.Get("msg.sdks.ownerWindows", "Microsoft's installer or winget"),
-        _ => Localizer.Get("msg.sdks.ownerAdministrator", "an administrator"),
-    };
-
-    private static string UpdateText(string? update, bool security, bool usedBySolution)
-    {
-        var parts = new List<string>();
-        if (update is not null)
-        {
-            parts.Add(security
-                ? Localizer.Format("msg.sdks.securityUpdate", "Security update: {0}", update)
-                : Localizer.Format("msg.sdks.update", "Update: {0}", update));
-        }
-        else
-        {
-            parts.Add(Localizer.Get("msg.sdks.upToDate", "Up to date"));
-        }
-
-        if (usedBySolution)
-        {
-            parts.Add(Localizer.Get("msg.sdks.usedBySolution", "the open solution builds with it"));
-        }
-
-        return string.Join(", ", parts);
-    }
-
-    internal ViewNodeDto DotnetSdksRoot()
-    {
-        var children = new List<ViewNodeDto>
-        {
-            new("text") { Text = Localizer.Get("msg.sdks.title", ".NET SDKs"), Style = "heading" },
-            new("text")
-            {
-                Text = Localizer.Get("msg.sdks.intro", "The .NET SDKs and runtimes on this machine, by folder. Every change shows its exact command or the folders it deletes before anything runs; what needs a password runs in the terminal."),
-                Style = "muted",
-            },
-        };
-        if (_sdksMetadataNote is { } note)
-        {
-            children.Add(new ViewNodeDto("text") { Text = note, Style = "muted" });
-        }
-
-        if (_sdkFacts is null)
-        {
-            children.Add(new ViewNodeDto("text") { Text = Localizer.Get("msg.sdks.reading", "Reading the .NET folders…"), Style = "muted" });
-            return new ViewNodeDto("stack") { Children = [.. children] };
-        }
-
-        if (_sdkFacts.Installations.Count == 0)
-        {
-            children.Add(new ViewNodeDto("text") { Text = Localizer.Get("msg.sdks.none", "No .NET is installed where Codalus IDE looks for it. Install an SDK from the list below.") });
-        }
-
-        // One section per .NET folder (the folder and its owner said once, so the columns have room): its SDKs and its
-        // runtimes, each table with its own buttons. A selection is in one table at a time.
-        for (var k = 0; k < _sdkFacts.Installations.Count; k++)
-        {
-            var installation = _sdkFacts.Installations[k];
-            children.Add(new ViewNodeDto("separator"));
-            children.Add(new ViewNodeDto("text") { Text = installation.Root, Style = "heading" });
-            children.Add(new ViewNodeDto("text")
-            {
-                Text = installation.InUse
-                    ? Localizer.Format("msg.sdks.folderInUse", "The .NET Codalus IDE uses. Managed by {0}.", Owner(installation.Owner))
-                    : Localizer.Format("msg.sdks.folderManaged", "Managed by {0}.", Owner(installation.Owner)),
-                Style = "muted",
-            });
-
-            var sdkOffset = IndexOfFirst(_sdkRows, r => r.Installation == installation);
-            var sdks = _sdkRows.Where(r => r.Installation == installation).ToList();
-            if (sdks.Count > 0)
-            {
-                var selected = _selectedSdk - sdkOffset is var local && local >= 0 && local < sdks.Count ? local : -1;
-                children.Add(new ViewNodeDto("table")
-                {
-                    Id = $"sdks:{k}",
-                    Value = selected >= 0 ? selected.ToString(CultureInfo.InvariantCulture) : null,
-                    Columns = [Localizer.Get("msg.sdks.colSdk", "SDK"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support")],
-                    Rows = [.. sdks.Select(r => new[] { r.Version, UpdateText(r.Update, r.SecurityUpdate, r.UsedBySolution), r.Support })],
-                });
-                var sdk = selected >= 0 ? sdks[selected] : null;
-                children.Add(new ViewNodeDto("toolbar")
-                {
-                    Children =
-                    [
-                        new ViewNodeDto("button") { Id = $"sdkUpdate:{k}", Text = sdk?.Update is { } to ? Localizer.Format("msg.sdks.updateTo", "Update to {0}…", to) : Localizer.Get("msg.sdks.updateButton", "Update…"), Disabled = _sdksBusy || sdk?.Update is null },
-                        new ViewNodeDto("button") { Id = $"sdkRemove:{k}", Text = Localizer.Get("msg.sdks.remove", "Remove…"), Disabled = _sdksBusy || sdk is null },
-                        new ViewNodeDto("button")
-                        {
-                            Id = $"sdkOldPatches:{k}",
-                            Text = sdk is null ? Localizer.Get("msg.sdks.oldPatches", "Remove Old Patches…") : Localizer.Format("msg.sdks.oldPatchesOf", "Remove Old .NET {0} Patches…", sdk.Channel),
-                            Disabled = _sdksBusy || sdk is null || DotnetSdkPlanner.OldPatches(sdk.Installation, sdk.Channel).Count == 0,
-                        },
-                    ],
-                });
-            }
-
-            var runtimeOffset = IndexOfFirst(_runtimeRows, r => r.Installation == installation);
-            var runtimes = _runtimeRows.Where(r => r.Installation == installation).ToList();
-            if (runtimes.Count > 0)
-            {
-                var selected = _selectedRuntime - runtimeOffset is var local && local >= 0 && local < runtimes.Count ? local : -1;
-                children.Add(new ViewNodeDto("table")
-                {
-                    Id = $"runtimes:{k}",
-                    Value = selected >= 0 ? selected.ToString(CultureInfo.InvariantCulture) : null,
-                    Columns = [Localizer.Get("msg.sdks.colRuntime", "Runtime"), Localizer.Get("msg.sdks.colVersion", "Version"), Localizer.Get("msg.sdks.colStatus", "Status"), Localizer.Get("msg.sdks.colSupport", "Support")],
-                    Rows = [.. runtimes.Select(r => new[] { DotnetFrameworks.Title(r.Runtime.Framework), r.Runtime.Version, UpdateText(r.Update, r.SecurityUpdate, usedBySolution: false), r.Support })],
-                });
-                var runtime = selected >= 0 ? runtimes[selected] : null;
-                children.Add(new ViewNodeDto("toolbar")
-                {
-                    Children =
-                    [
-                        new ViewNodeDto("button") { Id = $"runtimeUpdate:{k}", Text = runtime?.Update is { } runtimeTo ? Localizer.Format("msg.sdks.updateTo", "Update to {0}…", runtimeTo) : Localizer.Get("msg.sdks.updateButton", "Update…"), Disabled = _sdksBusy || runtime?.Update is null },
-                        new ViewNodeDto("button") { Id = $"runtimeRemove:{k}", Text = Localizer.Get("msg.sdks.remove", "Remove…"), Disabled = _sdksBusy || runtime is null },
-                    ],
-                });
-            }
-        }
-
-        children.Add(new ViewNodeDto("separator"));
-
-        // Available.
-        var target = _sdkFacts.Target;
-        children.Add(new ViewNodeDto("text") { Text = Localizer.Get("msg.sdks.available", "Available"), Style = "heading" });
-        children.Add(new ViewNodeDto("text")
-        {
-            Text = target is null
-                ? Localizer.Format("msg.sdks.installsIntoNew", "Installs go into {0}.", DotnetSdkPlanner.UserRoot(_sdkFacts))
-                : Localizer.Format("msg.sdks.installsInto", "Installs go into {0}, the .NET Codalus IDE uses (managed by {1}).", target.Root, Owner(target.Owner)),
-            Style = "muted",
+            Requested = requested,
+            SelectRequested = select,
+            ReleaseInfoTime = _sdksReleaseTime,
+            ReleaseInfoProblem = _sdksReleaseProblem,
         });
-        children.Add(new ViewNodeDto("stack")
-        {
-            Orientation = "horizontal",
-            Children =
-            [
-                new ViewNodeDto("checkbox") { Id = "showPreviews", Text = Localizer.Get("msg.sdks.showPreviews", "Show previews"), Checked = _showPreviews },
-                new ViewNodeDto("checkbox") { Id = "showOutOfSupport", Text = Localizer.Get("msg.sdks.showOutOfSupport", "Show out of support"), Checked = _showOutOfSupport },
-            ],
-        });
-        children.Add(new ViewNodeDto("table")
-        {
-            Id = "available",
-            Value = _selectedAvailable >= 0 ? _selectedAvailable.ToString(CultureInfo.InvariantCulture) : null,
-            Columns = [Localizer.Get("msg.sdks.colInstall", "Install"), Localizer.Get("msg.sdks.colChannel", "Channel"), Localizer.Get("msg.sdks.colSupport", "Support")],
-            Rows = [.. _availableRows.Select(a => new[] { a.Title, a.Channel, a.Support })],
-        });
-        children.Add(new ViewNodeDto("toolbar")
-        {
-            Children =
-            [
-                new ViewNodeDto("button") { Id = "install", Text = Localizer.Get("msg.sdks.install", "Install…"), Style = "primary", Disabled = _sdksBusy || _selectedAvailable < 0 || _selectedAvailable >= _availableRows.Count },
-                new ViewNodeDto("button") { Id = "refresh", Text = Localizer.Get("msg.sdks.refresh", "Refresh"), Disabled = _sdksBusy },
-            ],
-        });
-        if (_sdksMessage is { } message)
-        {
-            children.Add(new ViewNodeDto("text") { Text = message });
-        }
-
-        return new ViewNodeDto("stack") { Children = [.. children] };
-    }
-
-    /// <summary>What the user did in the window.</summary>
-    internal async Task OnDotnetSdksEventAsync(string id, string kind, string? value, int? row)
-    {
-        // A folder's tables and buttons are "<id>:<folder>": a row is the folder's, mapped to the whole list's.
-        var folder = -1;
-        if (id.IndexOf(':', StringComparison.Ordinal) is var colon and > 0 && int.TryParse(id.AsSpan(colon + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var index))
-        {
-            folder = index;
-            id = id[..colon];
-        }
-
-        var installation = _sdkFacts is { } facts && folder >= 0 && folder < facts.Installations.Count ? facts.Installations[folder] : null;
-        switch (id, kind)
-        {
-            case ("sdks", "select" or "activate") when installation is not null:
-                _selectedSdk = row is { } sdkRow ? IndexOfFirst(_sdkRows, r => r.Installation == installation) + sdkRow : -1;
-                _selectedRuntime = -1;
-                break;
-            case ("runtimes", "select" or "activate") when installation is not null:
-                _selectedRuntime = row is { } runtimeRow ? IndexOfFirst(_runtimeRows, r => r.Installation == installation) + runtimeRow : -1;
-                _selectedSdk = -1;
-                break;
-            case ("available", "select"):
-                _selectedAvailable = row ?? -1;
-                break;
-            case ("available", "activate"):
-                _selectedAvailable = row ?? -1;
-                await RunSdkActionAsync(InstallSelectedAsync).ConfigureAwait(true);
-                return;
-            case ("showPreviews", "change"):
-                _showPreviews = value == "true";
-                Fill();
-                return;
-            case ("showOutOfSupport", "change"):
-                _showOutOfSupport = value == "true";
-                Fill();
-                return;
-            case ("install", "click"):
-                await RunSdkActionAsync(InstallSelectedAsync).ConfigureAwait(true);
-                return;
-            case ("sdkUpdate", "click"):
-                await RunSdkActionAsync(UpdateSelectedSdkAsync).ConfigureAwait(true);
-                return;
-            case ("sdkRemove", "click"):
-                await RunSdkActionAsync(RemoveSelectedSdkAsync).ConfigureAwait(true);
-                return;
-            case ("sdkOldPatches", "click"):
-                await RunSdkActionAsync(RemoveOldPatchesAsync).ConfigureAwait(true);
-                return;
-            case ("runtimeUpdate", "click"):
-                await RunSdkActionAsync(UpdateSelectedRuntimeAsync).ConfigureAwait(true);
-                return;
-            case ("runtimeRemove", "click"):
-                await RunSdkActionAsync(RemoveSelectedRuntimeAsync).ConfigureAwait(true);
-                return;
-            case ("refresh", "click"):
-                await RunSdkActionAsync(() => RefreshDotnetSdksAsync(refreshMetadata: true)).ConfigureAwait(true);
-                return;
-            default:
-                return;
-        }
-
-        _sdksChanged?.Invoke();
     }
 
     /// <summary>One change at a time: the buttons are off while it runs.</summary>
@@ -530,7 +284,7 @@ public sealed partial class ShellHost
         }
 
         _sdksBusy = true;
-        _sdksChanged?.Invoke();
+        DotnetSdksModel.IsBusy = true;
         try
         {
             await action().ConfigureAwait(true);
@@ -538,22 +292,80 @@ public sealed partial class ShellHost
         finally
         {
             _sdksBusy = false;
-            _sdksChanged?.Invoke();
+            DotnetSdksModel.IsBusy = false;
         }
     }
 
     private static ToolStatus SdkTool(string title) => new("dotnet", title, true, ToolState.Found, "The .NET SDK manager");
 
-    private async Task InstallSelectedAsync()
+    /// <summary>The window's actions, for its view model.</summary>
+    private sealed class DotnetSdksActions(ShellHost shell) : IDotnetSdksActions
     {
-        if (_sdkFacts is not { } facts || _selectedAvailable < 0 || _selectedAvailable >= _availableRows.Count)
+        public Task<DotnetSdkPreview> PreviewAsync(object item, CancellationToken cancellationToken) => shell.PreviewSdkAsync(item, cancellationToken);
+
+        public Task InstallAsync(AvailableDotnet item, InstallPlan plan) => shell.RunSdkActionAsync(() => shell.InstallDotnetAsync(item, plan));
+
+        public Task UpdateAsync(object item, InstallPlan plan) => item switch
         {
-            return;
+            InstalledSdk sdk => shell.RunSdkActionAsync(() => shell.UpdateSdkAsync(sdk, plan)),
+            InstalledRuntime runtime => shell.RunSdkActionAsync(() => shell.UpdateRuntimeAsync(runtime, plan)),
+            _ => Task.CompletedTask,
+        };
+
+        public Task RemoveAsync(object item) => item switch
+        {
+            InstalledSdk sdk => shell.RunSdkActionAsync(() => shell.RemoveSdkAsync(sdk)),
+            InstalledRuntime runtime => shell.RunSdkActionAsync(() => shell.RemoveRuntimeAsync(runtime)),
+            _ => Task.CompletedTask,
+        };
+
+        public Task RemoveOldPatchesAsync(InstalledSdk sdk) => shell.RunSdkActionAsync(() => shell.RemoveOldPatchesAsync(sdk));
+
+        public Task RefreshAsync() => shell.RunSdkActionAsync(() => shell.RefreshDotnetSdksAsync(refreshMetadata: true));
+
+        public void FiltersChanged() => shell.Fill();
+    }
+
+    /// <summary>
+    /// What a selection's buttons would do, for its details: each way its install or update runs, and what Remove deletes
+    /// or runs (or why it's refused). A package's folder asks which package holds it (<c>dpkg -S</c>…), off the UI thread.
+    /// </summary>
+    internal async Task<DotnetSdkPreview> PreviewSdkAsync(object item, CancellationToken cancellationToken)
+    {
+        if (_sdkFacts is not { } facts)
+        {
+            return new DotnetSdkPreview([], null);
         }
 
-        var available = _availableRows[_selectedAvailable];
-        var plans = DotnetSdkPlanner.InstallOptions(facts, available.Framework, available.Version);
-        if (await RunSdkPlanAsync(SdkTool(available.Title), plans).ConfigureAwait(true) is not { } plan)
+        switch (item)
+        {
+            case AvailableDotnet available:
+                return new DotnetSdkPreview(DotnetSdkPlanner.InstallOptions(facts, available.Framework, available.Version), null);
+            case InstalledSdk sdk:
+            {
+                var owner = await OwnerPackageAsync(sdk.Installation, Path.Combine(sdk.Installation.Root, "sdk", sdk.Version)).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+                var plans = sdk.Update is { } to ? DotnetSdkPlanner.UpdateOptions(facts, sdk.Installation, AvailableDotnet.Sdk, sdk.Version, to, owner) : [];
+                return new DotnetSdkPreview(plans, DotnetSdkPlanner.RemoveSdk(facts, sdk.Installation, sdk.Version, owner));
+            }
+
+            case InstalledRuntime runtime:
+            {
+                var owner = await OwnerPackageAsync(runtime.Installation, Path.Combine(runtime.Installation.Root, "shared", runtime.Runtime.Framework, runtime.Runtime.Version)).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+                var plans = runtime.Update is { } to ? DotnetSdkPlanner.UpdateOptions(facts, runtime.Installation, runtime.Runtime.Framework, runtime.Runtime.Version, to, owner) : [];
+                return new DotnetSdkPreview(plans, DotnetSdkPlanner.RemoveRuntime(facts, runtime.Installation, runtime.Runtime, owner));
+            }
+
+            default:
+                return new DotnetSdkPreview([], null);
+        }
+    }
+
+    /// <summary>Install, the way the details' chosen option says: it runs without another question, since the details showed its command.</summary>
+    private async Task InstallDotnetAsync(AvailableDotnet available, InstallPlan chosen)
+    {
+        if (await RunSdkPlanAsync(SdkTool(available.Title), [chosen], confirmed: true).ConfigureAwait(true) is not { } plan)
         {
             return;
         }
@@ -564,7 +376,7 @@ public sealed partial class ShellHost
             _sdkRequest = null;
         }
 
-        _sdksMessage = Localizer.Format("msg.sdks.installed", "{0} is installed.", available.Title);
+        SdksMessage = Localizer.Format("msg.sdks.installed", "{0} is installed.", available.Title);
         await AfterSdkChangeAsync(plan).ConfigureAwait(true);
         if (request is { ReloadSolution: true } && Solutions.IsOpen)
         {
@@ -586,21 +398,14 @@ public sealed partial class ShellHost
         }
     }
 
-    private async Task UpdateSelectedSdkAsync()
+    private async Task UpdateSdkAsync(InstalledSdk row, InstallPlan chosen)
     {
-        if (_sdkFacts is not { } facts || _selectedSdk < 0 || _selectedSdk >= _sdkRows.Count || _sdkRows[_selectedSdk] is not { Update: { } newVersion } row)
+        if (row.Update is not { } newVersion || await RunSdkPlanAsync(SdkTool($".NET SDK {newVersion}"), [chosen], confirmed: true).ConfigureAwait(true) is not { } plan)
         {
             return;
         }
 
-        var owner = await OwnerPackageAsync(row.Installation, Path.Combine(row.Installation.Root, "sdk", row.Version)).ConfigureAwait(true);
-        var plans = DotnetSdkPlanner.UpdateOptions(facts, row.Installation, AvailableDotnet.Sdk, row.Version, newVersion, owner);
-        if (await RunSdkPlanAsync(SdkTool($".NET SDK {newVersion}"), plans).ConfigureAwait(true) is not { } plan)
-        {
-            return;
-        }
-
-        _sdksMessage = Localizer.Format("msg.sdks.updated", ".NET SDK {0} is installed.", newVersion);
+        SdksMessage = Localizer.Format("msg.sdks.updated", ".NET SDK {0} is installed.", newVersion);
         await AfterSdkChangeAsync(plan).ConfigureAwait(true);
 
         // Side by side (the user's folders, the .pkg, winget): the old patch is still there, so offer it (ADR 0113).
@@ -608,69 +413,65 @@ public sealed partial class ShellHost
         {
             if (_sdkFacts.Pinned.Contains(row.Version))
             {
-                _sdksMessage += " " + Localizer.Format("msg.sdks.keptPinned", ".NET SDK {0} stays: a recent solution's global.json pins it.", row.Version);
+                SdksMessage += " " + Localizer.Format("msg.sdks.keptPinned", ".NET SDK {0} stays: a recent solution's global.json pins it.", row.Version);
                 return;
             }
 
+            var owner = await OwnerPackageAsync(after, Path.Combine(after.Root, "sdk", row.Version)).ConfigureAwait(true);
             await RemoveAsync(after, DotnetSdkPlanner.RemoveSdk(_sdkFacts, after, row.Version, owner), afterUpdate: newVersion).ConfigureAwait(true);
         }
     }
 
-    private async Task UpdateSelectedRuntimeAsync()
+    private async Task UpdateRuntimeAsync(InstalledRuntime row, InstallPlan chosen)
     {
-        if (_sdkFacts is not { } facts || _selectedRuntime < 0 || _selectedRuntime >= _runtimeRows.Count || _runtimeRows[_selectedRuntime] is not { Update: { } newVersion } row)
+        if (row.Update is not { } newVersion)
         {
             return;
         }
 
-        var owner = await OwnerPackageAsync(row.Installation, Path.Combine(row.Installation.Root, "shared", row.Runtime.Framework, row.Runtime.Version)).ConfigureAwait(true);
-        var plans = DotnetSdkPlanner.UpdateOptions(facts, row.Installation, row.Runtime.Framework, row.Runtime.Version, newVersion, owner);
         var title = $"{DotnetFrameworks.Title(row.Runtime.Framework)} {newVersion}";
-        if (await RunSdkPlanAsync(SdkTool(title), plans).ConfigureAwait(true) is { } plan)
+        if (await RunSdkPlanAsync(SdkTool(title), [chosen], confirmed: true).ConfigureAwait(true) is { } plan)
         {
-            _sdksMessage = Localizer.Format("msg.sdks.installed", "{0} is installed.", title);
+            SdksMessage = Localizer.Format("msg.sdks.installed", "{0} is installed.", title);
             await AfterSdkChangeAsync(plan).ConfigureAwait(true);
         }
     }
 
-    private async Task RemoveSelectedSdkAsync()
+    private async Task RemoveSdkAsync(InstalledSdk row)
     {
-        if (_sdkFacts is not { } facts || _selectedSdk < 0 || _selectedSdk >= _sdkRows.Count)
+        if (_sdkFacts is not { } facts)
         {
             return;
         }
 
-        var row = _sdkRows[_selectedSdk];
         var owner = await OwnerPackageAsync(row.Installation, Path.Combine(row.Installation.Root, "sdk", row.Version)).ConfigureAwait(true);
         await RemoveAsync(row.Installation, DotnetSdkPlanner.RemoveSdk(facts, row.Installation, row.Version, owner)).ConfigureAwait(true);
     }
 
-    private async Task RemoveOldPatchesAsync()
+    private async Task RemoveOldPatchesAsync(InstalledSdk row)
     {
-        if (_sdkFacts is not { } facts || _selectedSdk < 0 || _selectedSdk >= _sdkRows.Count)
+        if (_sdkFacts is not { } facts)
         {
             return;
         }
 
-        var row = _sdkRows[_selectedSdk];
         var old = DotnetSdkPlanner.OldPatches(row.Installation, row.Channel).Where(s => !facts.Pinned.Contains(s)).ToList();
         if (old.Count == 0)
         {
-            _sdksMessage = Localizer.Format("msg.sdks.noOldPatches", "Every .NET {0} SDK here is the newest of its band, or pinned by a recent solution's global.json.", row.Channel);
+            SdksMessage = Localizer.Format("msg.sdks.noOldPatches", "Every .NET {0} SDK here is the newest of its band, or pinned by a recent solution's global.json.", row.Channel);
             return;
         }
 
         await RemoveAsync(row.Installation, DotnetSdkPlanner.RemoveSdks(facts, row.Installation, old)).ConfigureAwait(true);
     }
 
-    private async Task RemoveSelectedRuntimeAsync()
+    private async Task RemoveRuntimeAsync(InstalledRuntime row)
     {
-        if (_sdkFacts is not { } facts || _selectedRuntime < 0 || _selectedRuntime >= _runtimeRows.Count)
+        if (_sdkFacts is not { } facts)
         {
             return;
         }
 
-        var row = _runtimeRows[_selectedRuntime];
         var owner = await OwnerPackageAsync(row.Installation, Path.Combine(row.Installation.Root, "shared", row.Runtime.Framework, row.Runtime.Version)).ConfigureAwait(true);
         await RemoveAsync(row.Installation, DotnetSdkPlanner.RemoveRuntime(facts, row.Installation, row.Runtime, owner)).ConfigureAwait(true);
     }
@@ -683,7 +484,7 @@ public sealed partial class ShellHost
     {
         if (removal.Refused is { } refused)
         {
-            _sdksMessage = refused;
+            SdksMessage = refused;
             if (afterUpdate is null)
             {
                 Workbench.Notifications.Warning(refused);
@@ -751,13 +552,13 @@ public sealed partial class ShellHost
 
             if (failed.Count > 0)
             {
-                _sdksMessage = Localizer.Format("msg.sdks.removeFailed", "{0} was removed in part: {1}", removal.What, string.Join(" ", failed));
+                SdksMessage = Localizer.Format("msg.sdks.removeFailed", "{0} was removed in part: {1}", removal.What, string.Join(" ", failed));
                 await AfterSdkChangeAsync(null).ConfigureAwait(true);
                 return;
             }
         }
 
-        _sdksMessage = (afterUpdate is null ? string.Empty : _sdksMessage + " ") + Localizer.Format("msg.sdks.removed", "{0} is removed.", removal.What);
+        SdksMessage = (afterUpdate is null ? string.Empty : SdksMessage + " ") + Localizer.Format("msg.sdks.removed", "{0} is removed.", removal.What);
         await AfterSdkChangeAsync(null).ConfigureAwait(true);
     }
 
@@ -769,7 +570,7 @@ public sealed partial class ShellHost
     {
         if (plans.Count == 0)
         {
-            _sdksMessage = Localizer.Format("msg.setup.noPlan", "There's no way to install {0} from here on this system.", tool.Title);
+            SdksMessage = Localizer.Format("msg.setup.noPlan", "There's no way to install {0} from here on this system.", tool.Title);
             return null;
         }
 
@@ -778,7 +579,7 @@ public sealed partial class ShellHost
             plans,
             confirmed ? _ => Task.FromResult(true) : null,
             SdkCommandStandIn,
-            confirmed ? null : SdkInstallChooser).ConfigureAwait(true);
+            null).ConfigureAwait(true);
         if (ran is not var (plan, code))
         {
             return null;
@@ -786,7 +587,7 @@ public sealed partial class ShellHost
 
         if (code != 0)
         {
-            _sdksMessage = Localizer.Format("msg.sdks.failed", "{0} failed (exit code {1}). The Environment Setup output has the details.", plan.Summary, code);
+            SdksMessage = Localizer.Format("msg.sdks.failed", "{0} failed (exit code {1}). The Environment Setup output has the details.", plan.Summary, code);
             return null;
         }
 
@@ -855,25 +656,5 @@ public sealed partial class ShellHost
                 ? await EnvironmentCheck.RunProcessAsync(found, arguments, null, TimeSpan.FromSeconds(10), CancellationToken.None).ConfigureAwait(true)
                 : (-1, string.Empty);
         return code == 0 ? DotnetSdkPlanner.PackageOwner(output) : null;
-    }
-
-    internal sealed class DotnetSdksView : UserControl
-    {
-        private readonly DeclarativeView _view = new();
-
-        public DotnetSdksView(ShellHost shell)
-        {
-            Content = new ScrollViewer { Content = _view };
-            shell._sdksChanged = () => _view.Root = shell.DotnetSdksRoot();
-            _view.Raised += (id, kind, value, row) => _ = shell.OnDotnetSdksEventAsync(id, kind, value, row);
-            _view.Root = shell.DotnetSdksRoot();
-            if (!shell.DotnetSdksLoaded)
-            {
-                // Restored with the layout: OpenDotnetSdks didn't read the folders.
-                _ = shell.RunSdkActionAsync(() => shell.RefreshDotnetSdksAsync());
-            }
-        }
-
-        public DeclarativeView View => _view;
     }
 }
