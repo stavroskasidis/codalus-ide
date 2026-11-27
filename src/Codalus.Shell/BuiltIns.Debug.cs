@@ -109,7 +109,7 @@ internal static partial class BuiltIns
         {
             Title = "Browser",
             Category = "Debugging",
-            Description = "The browser for debugging in the browser (Blazor WebAssembly, JavaScript): auto (Chrome, then Edge, then Chromium), chrome, edge, chromium, or the path of a Chromium browser.",
+            Description = "The browser for debugging in the browser (Blazor WebAssembly, JavaScript): auto (Chrome, then Edge, then Chromium; on Linux each installed natively, then from Flatpak), chrome, edge, chromium, or the path of a Chromium browser (or of a Flatpak's launcher in flatpak/exports/bin).",
             Order = 3,
         },
         SettingDescriptor.Create(ShellHost.JavaScriptDebugSetting, "true", SettingType.Boolean, ContributionSource.Shell) with

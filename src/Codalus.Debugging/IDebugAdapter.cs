@@ -30,6 +30,12 @@ public interface IDebugAdapter : IAsyncDisposable
     /// <summary>What the adapter and its program are doing, for a session that stopped making progress (empty when it can't say).</summary>
     string Describe() => string.Empty;
 
+    /// <summary>
+    /// Waits up to <paramref name="wait"/> for the adapter's own process to end once its connection has closed, so that
+    /// <see cref="Describe"/> says how it ended (its exit code or signal). Adapters without a process return at once.
+    /// </summary>
+    Task SettleAsync(TimeSpan wait) => Task.CompletedTask;
+
     /// <summary>The adapters the session talks to: itself, or a compound session's live parts (M55: each Codalus debugger takes an edit).</summary>
     IReadOnlyList<IDebugAdapter> Adapters => [this];
 

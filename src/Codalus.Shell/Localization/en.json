@@ -4749,7 +4749,7 @@
   "setting.debug.breakAllProcesses.title": "Break all processes when one process breaks",
   "setting.debug.breakOnFailedBinding.description": "A binding that fails in the Avalonia app (or WPF app on Windows) being debugged stops it, as a thrown exception does, at the binding's XAML.",
   "setting.debug.breakOnFailedBinding.title": "Break when a binding fails",
-  "setting.debug.browser.description": "The browser for debugging in the browser (Blazor WebAssembly, JavaScript): auto (Chrome, then Edge, then Chromium), chrome, edge, chromium, or the path of a Chromium browser.",
+  "setting.debug.browser.description": "The browser for debugging in the browser (Blazor WebAssembly, JavaScript): auto (Chrome, then Edge, then Chromium; on Linux each installed natively, then from Flatpak), chrome, edge, chromium, or the path of a Chromium browser (or of a Flatpak's launcher in flatpak/exports/bin).",
   "setting.debug.browser.title": "Browser",
   "setting.debug.codalusOffer.description": "When you save an edit while netcoredbg debugs a program, offer once to debug with the Codalus debugger, which applies edits to the program while it's debugged.",
   "setting.debug.codalusOffer.title": "Offer the Codalus debugger for edits",

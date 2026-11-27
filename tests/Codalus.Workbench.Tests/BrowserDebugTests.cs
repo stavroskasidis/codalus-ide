@@ -28,6 +28,12 @@ public sealed class BrowserDebugTests : IDisposable
         }
     }
 
+    /// <summary>The browser's profile, in the test's folder as the IDE's is in its state folder (a Flatpak browser gets access to it).</summary>
+    private string Profile => Path.Combine(_site, "profile");
+
+    /// <summary>The arguments the IDE starts the browser with (<c>ShellHost.BrowserArguments</c>), headless.</summary>
+    private string[] ProfileArguments => ["--user-data-dir=" + Profile, "--remote-debugging-port=0", "--headless=new"];
+
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromMinutes(5)).Token).Token;
 
@@ -73,7 +79,7 @@ public sealed class BrowserDebugTests : IDisposable
         var url = new Uri(Path.Combine(_site, "index.html")).AbsoluteUri;
         await debug.LaunchBrowserAsync(
             ct => JsDebugAdapter.StartAsync(jsDebug.NodePath, jsDebug.ServerScript, browser.LaunchType, ct),
-            new BrowserLaunchArguments(browser.LaunchType, url, _site, RuntimeExecutable: browser.Path, RuntimeArgs: ["--headless=new"], Trace: trace is null ? null : new JsDebugTrace(trace)),
+            new BrowserLaunchArguments(browser.LaunchType, url, _site, RuntimeExecutable: browser.Executable(Profile, pageFolder: _site), RuntimeArgs: ProfileArguments, UserDataDir: false, Trace: trace is null ? null : new JsDebugTrace(trace)),
             Timeout());
         try
         {
@@ -143,7 +149,7 @@ public sealed class BrowserDebugTests : IDisposable
         debug.Breakpoints.Toggle(script, 2);
         await debug.LaunchBrowserAsync(
             ct => JsDebugAdapter.StartAsync(jsDebug.NodePath, jsDebug.ServerScript, browser.LaunchType, ct),
-            new BrowserLaunchArguments(browser.LaunchType, site.BaseUrl + "/index.html", _site, InspectUri: proxy.InspectUri, RuntimeExecutable: browser.Path, RuntimeArgs: ["--headless=new"]),
+            new BrowserLaunchArguments(browser.LaunchType, site.BaseUrl + "/index.html", _site, InspectUri: proxy.InspectUri, RuntimeExecutable: browser.Executable(Profile), RuntimeArgs: ProfileArguments, UserDataDir: false),
             Timeout());
         try
         {
@@ -182,6 +188,53 @@ public sealed class BrowserDebugTests : IDisposable
         Assert.Equal(("http://localhost:5045/counter", inspect), LaunchPlanner.BrowserDebugTarget(wasm, profile));
         Assert.Null(LaunchPlanner.BrowserDebugTarget(wasm with { RunArguments = "exec /p/bin/App.dll" }, profile));
         Assert.Null(LaunchPlanner.BrowserDebugTarget(wasm, profile with { InspectUri = null }));
+    }
+
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    public async Task A_flatpak_browser_is_found_by_its_exported_launcher_and_starts_with_access_to_its_profile()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Flatpak is Linux's.");
+        var exports = Path.Combine(_site, "flatpak", "exports", "bin");
+        Directory.CreateDirectory(exports);
+        foreach (var (app, kind, display) in new[] { ("com.microsoft.Edge", Browsers.Edge, "Edge"), ("org.chromium.Chromium", Browsers.Chromium, "Chromium"), ("com.brave.Browser", Browsers.Chrome, "Chrome") })
+        {
+            var exported = Path.Combine(exports, app);
+            File.WriteAllText(exported, string.Empty);
+            Assert.Equal(new Browser(kind, exported, app), Browsers.Find(exported));
+            Assert.Equal(display, Browsers.Find(exported)!.Display);
+            Assert.Equal("Flatpak " + app, Browsers.Find(exported)!.Location);
+        }
+
+        // A native browser starts as it is; a Flatpak through a launcher in its profile folder, which the sandbox is
+        // given. The profile's path is quoted for the shell: a stand-in flatpak prints the arguments it gets.
+        Assert.Equal("/usr/bin/chromium", new Browser(Browsers.Chromium, "/usr/bin/chromium").Executable(Path.Combine(_site, "native")));
+        var flatpak = Path.Combine(_site, "flatpak-stand-in");
+        File.WriteAllText(flatpak, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\n");
+        File.SetUnixFileMode(flatpak, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var profile = Path.Combine(_site, "it's a profile");
+        Directory.CreateDirectory(profile);
+        var launcher = Path.Combine(profile, "launcher.sh");
+        File.WriteAllText(launcher, Browsers.FlatpakLauncher(flatpak, "com.microsoft.Edge", profile));
+        File.SetUnixFileMode(launcher, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var start = new System.Diagnostics.ProcessStartInfo(launcher) { RedirectStandardOutput = true, UseShellExecute = false, ArgumentList = { "--user-data-dir=" + profile, "about:blank" } };
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var output = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(["run", "--filesystem=" + profile, "com.microsoft.Edge", "--user-data-dir=" + profile, "about:blank"], output.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+
+        // A page opened from a file: its folder, read-only.
+        File.WriteAllText(launcher, Browsers.FlatpakLauncher(flatpak, "com.microsoft.Edge", profile, _site));
+        using var withPage = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(launcher) { RedirectStandardOutput = true, UseShellExecute = false })!;
+        var pageOutput = await withPage.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await withPage.WaitForExitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(["run", "--filesystem=" + profile, "--filesystem=" + _site + ":ro", "com.microsoft.Edge"], pageOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+
+        var edge = new Browser(Browsers.Edge, Path.Combine(exports, "com.microsoft.Edge"), "com.microsoft.Edge");
+        var written = edge.Executable(profile);
+        Assert.Equal(Path.Combine(profile, Browsers.FlatpakLauncherName), written);
+        Assert.Contains("--filesystem=" + profile.Replace("'", "'\\''", StringComparison.Ordinal), File.ReadAllText(written), StringComparison.Ordinal);
+        Assert.True(File.GetUnixFileMode(written).HasFlag(UnixFileMode.UserExecute));
     }
 
     [Fact]

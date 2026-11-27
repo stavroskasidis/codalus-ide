@@ -1931,6 +1931,13 @@ public sealed class DebugService : IAsyncDisposable
         // its process before it had sent them (fixed: DapServer.SendEndAsync); TODO(issue): why netcoredbg did.
         if (!_exitReported && !_stopRequested && !_attached)
         {
+            if (adapter.Closed.IsCompleted)
+            {
+                // How the adapter's process ended, once it has: the Codalus debugger's host ended with nothing in its log
+                // (PR #561's run 45872761291), one thread left when the connection closed.
+                await adapter.SettleAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            }
+
             Output?.Invoke(this, DebugOutput.Diagnostic($"The debugger ended the session without reporting the program's exit code{(adapter.Closed.IsCompleted ? ", its connection closed" : string.Empty)} ({adapter.Describe()}).\n"));
         }
 
