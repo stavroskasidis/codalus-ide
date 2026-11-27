@@ -38,18 +38,18 @@ public sealed record AcpKnownAgent(string Id, string Name, string Description, s
 public static class AcpAgentCatalog
 {
     /// <summary>When the entries were last checked against the ACP registry.</summary>
-    public const string RegistryChecked = "2026-11-26";
+    public const string RegistryChecked = "2026-11-27";
 
     /// <summary>The known agents, in the order the list shows them.</summary>
     public static IReadOnlyList<AcpKnownAgent> Agents { get; } =
     [
         Npx("pi", "pi", "ACP adapter for the pi coding agent", "pi-acp", "0.0.35", [], "pi"),
-        Npx("claude", "Claude", "ACP wrapper for Anthropic's Claude", "@agentclientprotocol/claude-agent-acp", "0.112.0", [], "claude"),
-        Npx("codex", "Codex", "ACP adapter for OpenAI's coding assistant", "@agentclientprotocol/codex-acp", "2.12.0", [], "codex"),
+        Npx("claude", "Claude", "ACP wrapper for Anthropic's Claude", "@agentclientprotocol/claude-agent-acp", "0.113.0", [], "claude"),
+        Npx("codex", "Codex", "ACP adapter for OpenAI's coding assistant", "@agentclientprotocol/codex-acp", "2.12.1", [], "codex"),
         Npx("gemini", "Gemini CLI", "Google's official CLI for Gemini", "@google/gemini-cli", "0.71.1", ["--acp"], "gemini"),
         Npx("copilot", "GitHub Copilot", "GitHub's AI pair programmer", "@github/copilot", "1.0.116", ["--acp"], "copilot"),
         Installed("opencode", "OpenCode", "The open source coding agent", "1.19.6", "opencode", ["acp"]),
-        Installed("goose", "goose", "A local, extensible, open source AI agent", "1.61.0", "goose", ["acp"]),
+        Installed("goose", "goose", "A local, extensible, open source AI agent", "1.61.1", "goose", ["acp"]),
     ];
 
     private static AcpKnownAgent Npx(string id, string name, string description, string package, string version, string[] args, string cli) =>
