@@ -296,6 +296,53 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task A_code_fix_applies_where_the_caret_is_not_to_a_sibling_with_the_same_fix()
+    {
+        // Every member of the struct can be made readonly (IDE0251): the analyzer reports them all at once, from the
+        // struct's symbol end, and each fix has the same title. The fix offered on a line must be that line's (#571).
+        var path = fixture.File("src", "App", "Counter.cs");
+        await File.WriteAllTextAsync(path,
+            "internal struct Counter\n{\n    private int _value;\n\n" +
+            "    public int First() => _value + 1;\n\n" +
+            "    public int Second() => _value + 2;\n\n" +
+            "    public int Third() => _value + 3;\n}\n", Ct);
+        await fixture.OpenAsync(path);
+        try
+        {
+            foreach (var member in new[] { "Second", "Third", "First" })
+            {
+                var at = fixture.At(path, member + "()", 1);
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                Protocol.CodeAction? makeReadonly;
+                Protocol.CodeAction[] actions;
+                while (true)
+                {
+                    actions = await fixture.Client.CodeActionsAsync(Uri(path), new Protocol.Range(at, at), [], Ct);
+                    makeReadonly = actions.FirstOrDefault(a => a.Kind == CodeActionKind.QuickFix && a.Title.Contains("readonly", StringComparison.Ordinal));
+                    if (makeReadonly is not null || started.Elapsed > TimeSpan.FromSeconds(60))
+                    {
+                        break;
+                    }
+
+                    await Task.Delay(250, Ct);
+                }
+
+                Assert.True(makeReadonly is not null, string.Join(", ", actions.Select(a => a.Title)));
+                var resolved = await fixture.Client.ResolveCodeActionAsync(makeReadonly, Ct);
+                var change = Assert.Single(resolved.Edit!.DocumentChanges);
+                var fixedText = Apply(fixture.Text(path).Text, change.Edits);
+                Assert.Contains($"public readonly int {member}()", fixedText, StringComparison.Ordinal);
+                Assert.Equal(1, fixedText.Split("readonly").Length - 1);
+            }
+        }
+        finally
+        {
+            await fixture.Languages.CloseAsync(path);
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Pasted_code_gets_the_usings_it_needs()
     {
         var path = fixture.File("src", "App", "Pasted.cs");
