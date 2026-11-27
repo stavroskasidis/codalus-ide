@@ -40,6 +40,7 @@ public sealed class App : Application
         // transition races the value it posts at the end: every other switch left the whole document view at 0.85, so the
         // editor's and the compare view's colors read 15% dimmer (#83). The classic IDE has no fade either; zero turns it off.
         Dock.Controls.DeferredContentControl.DeferredContentPresentationSettings.RevealDuration = TimeSpan.Zero;
+        Controls.ResizeEdges.Install(); // every resize edge grabbable across 8 px (#574)
         AvaloniaXamlLoader.Load(this);
     }
 

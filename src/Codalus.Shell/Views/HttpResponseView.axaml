@@ -167,9 +167,10 @@
     <GridSplitter x:Name="HistorySplitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" AutomationProperties.Name="{l:T httpResponse.resizeTheHistory}">
       <GridSplitter.Template>
         <ControlTemplate>
-          <Border Background="Transparent">
+          <Panel Background="Transparent">
             <Border x:Name="Rule" Background="{DynamicResource Shell.Border}" />
-          </Border>
+            <Border x:Name="PART_GrabArea" Background="Transparent" />
+          </Panel>
         </ControlTemplate>
       </GridSplitter.Template>
     </GridSplitter>

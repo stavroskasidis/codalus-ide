@@ -123,6 +123,7 @@ What it starts is this copy of Codalus IDE (the installed app, the AppImage file
 ## Window layouts
 
 - **Save and apply** (Window → Save Window Layout, Apply Window Layout, Delete Window Layout): name the current arrangement of tool windows and bring it back later. Default is the layout Codalus IDE starts with. Layouts are kept in the state folder's `layouts.json`.
+- **Resize** a tool window or the document area by dragging the edge between them. Each edge takes the mouse across 8 px, whatever its theme draws there (Graphite's and Daylight's 1 px hairlines too), and so do an auto-hidden tool window's edge and the dividers inside tool windows.
 - **Auto Hide**: an auto-hidden tool window slides out at the size you last dragged it to, and keeps that size when Codalus IDE restarts and in saved layouts. One that has no size yet slides out at its side's default share of the window.
 - **Full Screen** (Window → Full Screen, `Shift+Alt+Enter`, `⌃⌘F` on macOS).
 - **Distraction-Free Mode** (Window): only the documents, full screen, without the toolbar or status bar. Run it again to get your tool windows and window back as they were.

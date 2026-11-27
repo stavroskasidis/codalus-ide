@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
@@ -19,6 +20,26 @@ namespace Codalus.Shell.Infrastructure;
 /// </summary>
 internal sealed partial class SmokeTest
 {
+    /// <summary>
+    /// Where the pointer just inside <see cref="ResizeEdges.GrabSize"/> px around <paramref name="edge"/>'s middle line
+    /// finds something else than the edge, or <see langword="null"/> when it finds the edge all across.
+    /// </summary>
+    private string? GrabbedAcross(Control edge)
+    {
+        var down = edge.Bounds.Width <= edge.Bounds.Height;
+        var middle = edge.TranslatePoint(new Point(edge.Bounds.Width / 2, edge.Bounds.Height / 2), window)!.Value;
+        foreach (var offset in new[] { -(ResizeEdges.GrabSize / 2 - 0.25), 0, ResizeEdges.GrabSize / 2 - 0.25 })
+        {
+            var hit = window.InputHitTest(down ? middle + new Point(offset, 0) : middle + new Point(0, offset)) as Visual;
+            if (hit is null || (hit != edge && !hit.GetVisualAncestors().Contains(edge)))
+            {
+                return $"{hit?.GetType().Name ?? "nothing"} at {offset} px";
+            }
+        }
+
+        return null;
+    }
+
     private async Task RoundedCornersStepAsync()
     {
         var before = shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, SettingScope.User);
@@ -37,6 +58,9 @@ internal sealed partial class SmokeTest
                 Check(visuals.OfType<TabStripEdge>().Any(e => e.IsEffectivelyVisible && e.Bounds.Height == 1), $"{theme}: the frame's edge is drawn under the tabs");
                 Check(visuals.OfType<Border>().Any(b => b.Classes.Contains("standardToolbar") && b.CornerRadius == new CornerRadius(4)), $"{theme}: the toolbar is a 4 px card");
                 Check(visuals.OfType<Dock.Controls.ProportionalStackPanel.ProportionalStackPanelSplitter>().Any(s => s.IsEffectivelyVisible && s.Thickness == 6), $"{theme}: 6 px between the cards");
+                var gutter = visuals.OfType<Dock.Controls.ProportionalStackPanel.ProportionalStackPanelSplitter>().First(s => s.IsEffectivelyVisible && s.Bounds.Width > 0 && s.Bounds.Height > 0);
+                var missed = GrabbedAcross(gutter);
+                Check(missed is null, $"{theme}: the gutter takes the pointer across {ResizeEdges.GrabSize} px (#574; {missed})");
                 Screenshot($"smoke-test-rounded-corners-{theme}.png");
 
                 // A menu's popup: its 6 px corners, and what's under them where the popup is a window of its own.
