@@ -75,9 +75,19 @@ Workloads are per feature band. After installing an SDK of a band that has none,
 
 The .NET in WSL and on a remote machine (Connect, ADR 0050) is managed from the same window, with a machine picker (the maintainer's choice). The remote server's protocol already has what it needs (`process/spawn`, `fs/readDirectory`, `fs/delete`, and `server/hello`'s OS and architecture), so no new messages; WSL goes through `wsl.exe` as `WslDotnet` does. This comes in a second pull request, on the same abstraction (`IDotnetMachine`); the first covers this machine. `TODO(issue)`: WSL and remote machines in the SDK manager.
 
+### The layout (amended 2026-11-27)
+
+The first window was a declarative view: a section per folder with a table of SDKs and one of runtimes, each table with its own buttons, disabled until a row of that table was selected. The maintainer found it hard to read and chose layout B of `docs/design/controls/DotnetSdks.dc.html` (over cards by .NET version, A, and one tree grid, C), with these answers:
+
+- **A view of its own** (`DotnetSdksView`, `DotnetSdksViewModel`), as the package manager's: **Installed**, **Updates** and **Available** over one list grouped by .NET folder, the runtimes folded under their folder, chips for what needs the user (an update, a security update, out of support, in use, an old patch), and the selection's details: its folder and owner, support, feature band, what it brought or what brought it, what pins it.
+- **The details show the exact command first**, so **Install and Update run from their button without another question** (the maintainer's choice, over keeping the confirmation and over dropping Remove's too). **Remove still confirms**, listing the folders or the command and what stays; the details show the same under **What Remove does**, and a removal that's refused shows its reason in place of the button. The terminal still asks for a password where the folder's tool needs one.
+- **Several ways to install or update** (a distribution's package, or `dotnet-install` into `~/.dotnet`) are radio choices in the details, each with its command, the recommended one chosen; the button runs the chosen one (over the chooser dialog).
+- **No Update All**: each update runs on its own, with its offer to remove the old patch.
+- Only the buttons that apply show; they're disabled only while a change runs.
+
 ## Consequences
 
 - Adding another channel, updating a patch, and removing old SDKs and their runtimes are each one action, for every way .NET is installed, and nothing runs without the exact command or folder list shown first.
 - The manager is the IDE's first feature that reads Microsoft's release metadata at run time. It sends nothing but the request, and only when the window opens or Refresh is pressed.
 - The release metadata is the source of truth for which runtimes an SDK brought; an SDK not in it (a daily build) removes only `sdk/<version>`.
-- Tests: `DotnetReleasesTests` (the index and a channel's file, recorded and trimmed; the cache and its fallback), `DotnetInstallationsTests` (folders and owners on described machines), `DotnetSdkPlannerTests` (bands, updates, security, the removal set and every guard, package commands), `DotnetSdkManagerShellTests` (the window, Manage…, confirmations, runs through stand-ins), and the smoke step `setup.dotnetSdks` on a local copy of the metadata.
+- Tests: `DotnetReleasesTests` (the index and a channel's file, recorded and trimmed; the cache and its fallback), `DotnetInstallationsTests` (folders and owners on described machines), `DotnetSdkPlannerTests` (bands, updates, security, the removal set and every guard, package commands), `DotnetSdkManagerShellTests` (the lists, the details and their commands, the options, Remove's confirmation, runs through stand-ins, Manage…), and the smoke step `setup.dotnetSdks` on a local copy of the metadata.

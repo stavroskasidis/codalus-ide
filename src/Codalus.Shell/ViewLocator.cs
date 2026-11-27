@@ -83,6 +83,13 @@ public sealed class ViewLocator : IDataTemplate
         return host;
     }
 
+    /// <summary>Tools → .NET SDKs; a view restored with the layout reads the .NET folders, since the window's command didn't.</summary>
+    private static DotnetSdksView DotnetSdks(ShellHost.DotnetSdksContent sdks)
+    {
+        sdks.Shell.EnsureDotnetSdksRead();
+        return new DotnetSdksView { DataContext = sdks.Model };
+    }
+
     public bool Match(object? data) => data is ToolWindowDockable or ShellDocument;
 
     private static Control BuildManagementContent(object viewModel) => viewModel switch
@@ -122,7 +129,7 @@ public sealed class ViewLocator : IDataTemplate
         DeclarativeToolViewModel vm => new DeclarativeViewHost(vm.ViewId, vm.Plugins, activate: true),
         ShellHost.SourceControlProvidersContent scm => new ShellHost.SourceControlProvidersView(scm.Shell),
         ShellHost.ComponentsContent components => new ShellHost.ComponentsView(components.Shell),
-        ShellHost.DotnetSdksContent sdks => new ShellHost.DotnetSdksView(sdks.Shell),
+        ShellHost.DotnetSdksContent sdks => DotnetSdks(sdks),
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
         PropertiesWindowViewModel vm => new PropertiesWindowView { DataContext = vm },
         TestExplorerViewModel vm => new TestExplorerView { DataContext = vm },
