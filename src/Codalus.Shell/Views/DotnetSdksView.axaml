@@ -123,7 +123,7 @@
     <Grid ColumnDefinitions="2*,4,3*">
       <!-- The list. -->
       <Panel>
-        <TextBlock Classes="muted" Margin="16" Text="{l:T dotnetSdks.reading}" IsVisible="{Binding IsLoading}" />
+        <TextBlock Classes="muted" Margin="16" Text="{l:T dotnetSdks.reading}" TextWrapping="Wrap" IsVisible="{Binding IsLoading}" />
         <StackPanel Classes="emptyState" IsVisible="{Binding IsEmpty}">
           <controls:Icon Kind="check-circle" />
           <TextBlock x:Name="EmptyText" Text="{Binding EmptyText}" />
@@ -150,7 +150,7 @@
                   </Button>
                   <controls:Icon Grid.Column="1" Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Center" />
                   <DockPanel Grid.Column="2">
-                    <TextBlock DockPanel.Dock="Left" Text="{Binding Title}" VerticalAlignment="Center" />
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                     <TextBlock Classes="muted small" Margin="8,0,0,0" Text="{Binding Detail}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
                   </DockPanel>
                   <ItemsControl Grid.Column="3" Margin="8,0,0,0" ItemsSource="{Binding Chips}">
