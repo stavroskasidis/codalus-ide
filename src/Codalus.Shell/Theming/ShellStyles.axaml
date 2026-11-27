@@ -388,6 +388,29 @@
   <Style Selector="ProportionalStackPanelSplitter">
     <Setter Property="Thickness" Value="{DynamicResource Shell.Gutter}" />
     <Setter Property="Background" Value="{DynamicResource Shell.Gutter.Background}" />
+    <!-- Dock's template, the gutter, with the 8 px grab area over it (#574, Controls/ResizeEdges.cs); Dock clips it to the gutter. -->
+    <Setter Property="ClipToBounds" Value="False" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Background="{TemplateBinding Background}" />
+          <Border Name="PART_GrabArea" Background="Transparent" IsVisible="{TemplateBinding IsResizingEnabled}" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <!-- Fluent's GridSplitter template (an auto-hidden window's slide-out edge, the dividers in views), with the same grab area. -->
+  <Style Selector="GridSplitter">
+    <Setter Property="ClipToBounds" Value="False" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" />
+          <Border Name="PART_GrabArea" Background="Transparent" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
   </Style>
   <Style Selector="ToolChromeControl:active /template/ Grid#PART_Grip">
     <Setter Property="Background" Value="{DynamicResource Shell.Caption.Active}" />
