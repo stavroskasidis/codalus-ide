@@ -451,7 +451,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("editor.intelliSense", "0.5.0", "IntelliSense: signature help in the editor's colors with the overloads' chevrons, completion below it with kind icons, filters and the description, and Quick Info with a diagnostic's link and Fix", IntelliSenseStepAsync, "language.ready").ConfigureAwait(true);
 
-        await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
+        await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens and its usages popup, Peek Definition, the Document Outline and the navigation bar", async () =>
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);
             await WaitAsync(() => program.Insights.Hints.Any(h => h.Label == "name:"), "an inlay hint names Greet's parameter", 60).ConfigureAwait(true);
@@ -463,7 +463,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
             var classLine = greeter.Model.Text.GetLineByOffset(greeter.Model.Text.Text.IndexOf("class Greeter", StringComparison.Ordinal)).LineNumber;
-            await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
+            // The popup style (the default) reads usages; its count lists them in a popup under it.
+            await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("usage", StringComparison.Ordinal) == true, "CodeLens counts Greeter's usages", 60).ConfigureAwait(true);
+            var greeterView = shell.ActiveEditor!.View!;
+            Check(greeter.Insights.ClickLensTitle(classLine, "usage"), "Greeter's usages count is a link");
+            await WaitAsync(() => greeterView.LensResults is { IsOpen: true, Title: "Usages of 'Greeter'" } popup && popup.Items.Any(i => i.Detail?.StartsWith("Program.cs:", StringComparison.Ordinal) == true),
+                "the usages popup lists Program.cs's call", 60).ConfigureAwait(true);
+            greeterView.LensResults!.Close();
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
             await WaitAsync(() => shell.DocumentOutline.Rows.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);

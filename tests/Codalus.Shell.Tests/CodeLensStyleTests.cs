@@ -146,10 +146,12 @@ public class CodeLensStyleTests
     /// <summary>
     /// Clicks the first title that contains <paramref name="title"/> on the CodeLens row above <paramref name="line"/>.
     /// The row must have all its counts first: lenses resolve four at a time (M66), and one that lands before the title
-    /// moves it from under the point (a click on "1 implementation" ran the usages count).
+    /// moves it from under the point (a click on "1 implementation" ran the usages count). The row is scrolled into view
+    /// first: a title off the screen has no point (after Enter opened Square, IShape's row was above the view).
     /// </summary>
     private static async Task ClickTitleAsync(ShellFixture f, CodeEditorController editor, int line, string title)
     {
+        editor.Editor.ScrollTo(line - 1, 1);
         Avalonia.Point? at = null;
         await ShellFixture.PumpUntil(() => (at = editor.Insights.LensTitlePoint(line, title)) is not null, seconds: 60, describe: () => $"row '{editor.Insights.LensRowAbove(line)}'");
         var click = Avalonia.VisualExtensions.TranslatePoint(editor.Editor.TextArea.TextView, at!.Value, f.Window)!.Value;

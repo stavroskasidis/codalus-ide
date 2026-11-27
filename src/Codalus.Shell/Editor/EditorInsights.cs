@@ -573,6 +573,36 @@ public sealed class EditorInsights : IDisposable
     /// </summary>
     internal Point? LensTitlePoint(int line, string title)
     {
+        if (LensTitle(line, title) is not var (part, visualLine, column))
+        {
+            return null;
+        }
+
+        var view = _editor.TextArea.TextView;
+        var start = visualLine.GetVisualPosition(column, VisualYPosition.TextMiddle);
+        var next = visualLine.GetVisualPosition(column + 1, VisualYPosition.TextMiddle);
+        return new Point((start.X + next.X) / 2, start.Y) - view.ScrollOffset;
+    }
+
+    /// <summary>
+    /// Runs the first title that contains <paramref name="title"/> on the CodeLens row above a one-based line as its click
+    /// does, with the popup under the title; false when the row isn't built, has no such title or the title has no lens
+    /// (the smoke test, which can't send pointer events to the real window).
+    /// </summary>
+    internal bool ClickLensTitle(int line, string title)
+    {
+        if (LensTitle(line, title) is not var (part, visualLine, column) || part.Lens is not { } lens)
+        {
+            return false;
+        }
+
+        var bottom = visualLine.GetVisualPosition(column, VisualYPosition.LineBottom) - _editor.TextArea.TextView.ScrollOffset;
+        RunLens(lens, bottom);
+        return true;
+    }
+
+    private (LensPart Part, VisualLine VisualLine, int Column)? LensTitle(int line, string title)
+    {
         if (line < 2 || _generator.LensAbove(_editor.Document.GetLineByNumber(line)) is not { } row
             || row.Parts.FirstOrDefault(p => row.Text.AsSpan(p.Start, p.Length).Contains(title, StringComparison.Ordinal)) is not { } part)
         {
@@ -586,9 +616,7 @@ public sealed class EditorInsights : IDisposable
             return null;
         }
 
-        var start = visualLine.GetVisualPosition(element.TitlesColumn + part.Start, VisualYPosition.TextMiddle);
-        var next = visualLine.GetVisualPosition(element.TitlesColumn + part.Start + 1, VisualYPosition.TextMiddle);
-        return new Point((start.X + next.X) / 2, start.Y) - view.ScrollOffset;
+        return (part, visualLine, element.TitlesColumn + part.Start);
     }
 
     /// <summary>
