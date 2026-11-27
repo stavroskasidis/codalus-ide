@@ -4,8 +4,7 @@ Thanks for your interest in Codalus IDE. The MVP (milestones M0–M7) is done, a
 
 ## Ground rules
 
-- **License.** Contributions are accepted under the MIT license. You certify that you have the right to submit them (the [Developer Certificate of Origin](https://developercertificate.org/)); sign off your commits with `git commit -s`.
-  - `TODO(issue)`: the maintainer's own commits on `develop` don't carry a sign-off yet, and no check enforces it on pull requests. To decide: sign them off too (and add a DCO check), or keep the rule for outside contributions only.
+- **License.** Contributions are accepted under the MIT license. You certify that you have the right to submit them (the [Developer Certificate of Origin](https://developercertificate.org/)); sign off your commits with `git commit -s`. The rule is for outside contributions: the maintainer's own commits don't carry a sign-off (the maintainer's choice of 2026-11-27).
 - **Dependencies.** Every new dependency must use an OSI-approved license compatible with MIT. Check the license before adding a package, and record it in `THIRD-PARTY-NOTICES.md` in the same change. If a license is ambiguous, ask in the issue before opening a pull request.
 - **No Microsoft-proprietary components.** That rules out vsdbg, the C# Dev Kit, and the classic IDE's branding or logos in the product. Windows-only UI technologies (WinForms, WPF, WinUI) are out of scope.
 - **No telemetry that is on by default.** Crash reports stay on the user's machine and are opt-in. A process the IDE starts for itself (a host, `dotnet watch`, a build) goes through `ToolTelemetry` (`Codalus.Platform`, ADR 0098), so the tools' own telemetry is off; `ToolTelemetryTests` fails a new process start that doesn't, unless it's listed with why.
