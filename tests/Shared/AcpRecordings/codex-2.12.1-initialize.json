@@ -1,10 +1,10 @@
 {
-  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-25",
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-27",
   "protocolVersion": 1,
   "agentInfo": {
     "name": "@agentclientprotocol/codex-acp",
     "title": "Codex",
-    "version": "2.12.0"
+    "version": "2.12.1"
   },
   "agentCapabilities": {
     "auth": {
