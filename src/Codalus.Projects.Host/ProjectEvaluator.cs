@@ -26,6 +26,13 @@ internal sealed record EvaluatedProject(ProjectInfo Info, IReadOnlyList<string> 
 
     /// <summary>What a non-SDK-style .NET Framework project needs restored (M43a), or null for other projects.</summary>
     public NetFrameworkRestore? NetFrameworkRestore { get; init; }
+
+    /// <summary>
+    /// Whether the project was evaluated per framework: it lists several, or names even one in <c>TargetFrameworks</c>
+    /// (<see cref="ProjectEvaluator.IsCrossTargeting"/>). Its builds then name a <c>TargetFramework</c>, or they would be
+    /// MSBuild's outer, item-less build.
+    /// </summary>
+    public bool PerFramework { get; init; }
 }
 
 /// <summary>
@@ -128,7 +135,10 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var missingPacks = new SortedSet<string>(MissingWorkloadPacks(outer), StringComparer.OrdinalIgnoreCase);
             string? windowsPackageType = null;
 
-            if (frameworks.Length <= 1)
+            // A project with TargetFrameworks is evaluated per framework even when it lists one (a MAUI project's
+            // "net10.0-android" on Linux, its other platforms conditioned out): its outer evaluation has no items.
+            var perFramework = frameworks.Length > 1 || IsCrossTargeting(outer);
+            if (!perFramework)
             {
                 references.AddRange(References(outer, frameworks.FirstOrDefault() ?? string.Empty, assets));
                 items.AddRange(Items(outer));
@@ -197,6 +207,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var assetsStamp = assetsFile is not null && File.Exists(assetsFile) ? File.GetLastWriteTimeUtc(assetsFile) : DateTime.MinValue;
             return new EvaluatedProject(info, distinctImports, assetsFile)
             {
+                PerFramework = perFramework,
                 AssetsStamp = assetsStamp,
                 Fingerprint = fingerprint.Finish(distinctImports, assetsFile),
                 StaleImports = fingerprint.Stale,
@@ -332,6 +343,14 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
 
     private static EvaluatedProject Failed(string path, string name, string state, string error) =>
         new(new ProjectInfo(path, name, state, error, [], null, [], [], [], false), []);
+
+    /// <summary>
+    /// Whether an evaluation without a <c>TargetFramework</c> is MSBuild's outer, cross-targeting one
+    /// (<c>IsCrossTargetingBuild</c>'s own test): <c>TargetFrameworks</c> is set, however many it lists, and
+    /// <c>TargetFramework</c> isn't. The SDK adds default items (Compile globs…) only in a per-framework evaluation.
+    /// </summary>
+    public static bool IsCrossTargeting(Project project) =>
+        project.GetPropertyValue("TargetFramework").Length == 0 && TargetFrameworks(project).Length > 0;
 
     public static string[] TargetFrameworks(Project project)
     {
