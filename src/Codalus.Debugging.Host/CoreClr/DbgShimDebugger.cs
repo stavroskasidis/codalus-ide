@@ -290,6 +290,11 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
     public IClrProcess Attach(int processId)
     {
+        if (OperatingSystem.IsAndroid())
+        {
+            return AndroidRuntime.Attach(processId, justMyCode: true);
+        }
+
         System.Diagnostics.Process process;
         try
         {
@@ -300,7 +305,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
             throw new ClrException($"There's no process {processId.ToString(CultureInfo.InvariantCulture)}.");
         }
 
-        var (corDebug, runtime) = CorDebugOf(DbgShimLibrary.Shim, process);
+        var (corDebug, runtime) = CorDebugOf(process);
         var target = new CorDebugTarget(corDebug, VersionOf(runtime), justMyCode: true);
         try
         {
@@ -315,9 +320,10 @@ internal sealed class DbgShimDebugger : IClrDebugger
     }
 
     /// <summary>The ICorDebug of the runtime a running process loaded, and that runtime's path.</summary>
-    private static (CorDebug CorDebug, string Runtime) CorDebugOf(DbgShim shim, System.Diagnostics.Process process)
+    private static (CorDebug CorDebug, string Runtime) CorDebugOf(System.Diagnostics.Process process)
     {
         var processId = process.Id;
+        var shim = DbgShimLibrary.Shim;
         if (RuntimeLocator.StartsHeld)
         {
             return CorDebugByPath(shim, processId, process.ProcessName, ProgramOf(process));
@@ -400,7 +406,6 @@ internal sealed class DbgShimDebugger : IClrDebugger
     /// </summary>
     public IClrProcess AttachWaiting(NetFxDebugArguments arguments, Action<string, string> output)
     {
-        var shim = DbgShimLibrary.Shim;
         var wait = arguments.WaitFolder!;
         var timeout = arguments.WaitSeconds is > 0 and var seconds ? TimeSpan.FromSeconds(seconds) : WaitTimeout;
         var name = arguments.Program is { Length: > 0 } program ? Path.GetFileName(program) : "The app";
@@ -422,6 +427,23 @@ internal sealed class DbgShimDebugger : IClrDebugger
             Thread.Sleep(50);
         }
 
+        if (OperatingSystem.IsAndroid())
+        {
+            // On the device (ADR 0115): the app's own debugging library, and no OS process object to hold.
+            var attached = AndroidRuntime.Attach(pid, arguments.JustMyCode, name);
+            try
+            {
+                attached.Events.WaitToReadAsync().AsTask().Wait(RuntimeStartTimeout);
+                File.WriteAllText(Path.Combine(wait, "go"), string.Empty);
+                return attached;
+            }
+            catch
+            {
+                attached.Dispose();
+                throw;
+            }
+        }
+
         System.Diagnostics.Process process;
         try
         {
@@ -435,7 +457,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
         CorDebugTarget? target = null;
         try
         {
-            var (corDebug, runtime) = CorDebugOf(shim, process);
+            var (corDebug, runtime) = CorDebugOf(process);
             target = new CorDebugTarget(corDebug, VersionOf(runtime), arguments.JustMyCode);
             target.Attach(process);
             // As in LaunchHeld: the hook may go once the program is stopped for the debugger.

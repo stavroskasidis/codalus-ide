@@ -54,11 +54,12 @@ A device that can't be used yet says why:
 
 ### .NET 11 apps
 
-.NET 11 runs iOS and Mac Catalyst apps on CoreCLR, .NET's own runtime, which the Mono debugger can't debug.
+.NET 11 runs Android, iOS and Mac Catalyst apps on CoreCLR, .NET's own runtime, which the Mono debugger can't debug.
 
 - **In an iOS simulator, `F5` debugs the app with the Codalus debugger,** the one that debugs every other .NET program, with everything in [Debugging](debugging.md): conditional breakpoints, hit counts and logpoints, calls and operators in Watch, changing values, Set Next Statement. The app waits at its start until the debugger has attached, so breakpoints in its first page stop too. The Debug Console says "Waiting for the app to start…" while it builds and deploys. It needs Xcode's command line tools, and a Debug build (a Release build doesn't wait for the debugger).
-- **On Mac Catalyst, Android and iPhones** a CoreCLR app can't be debugged yet: `F5` says so at once. Set `<UseMonoRuntime>true</UseMonoRuntime>` in the project to debug it on Mono, as Microsoft's release notes suggest, or run it with `Ctrl+F5`.
-- Hot Reload and Edit and Continue aren't available in a simulator session yet, and neither are x64 simulator apps on Apple silicon.
+- **On an Android device or emulator, `F5` debugs the app with the Codalus debugger too,** which runs on the device, as your app's user. Codalus IDE copies it there the first time (about 45 MB, once per version of Codalus IDE) and into the app after each install, so the first `F5` on a device takes a little longer. The app waits at its start, as in a simulator, so breakpoints in its first page stop. It needs a running 64-bit device or emulator (arm64 or x86_64; `F5` starts a stopped emulator first), the project's `ApplicationId`, and a Debug build, which Android lets the debugger reach (`run-as`). A Release build doesn't wait: `F5` says so. Android may say the app "isn't responding" while it waits for the debugger or is stopped at a breakpoint: choose **Wait**.
+- **On Mac Catalyst and iPhones** a CoreCLR app can't be debugged yet: `F5` says so at once. Set `<UseMonoRuntime>true</UseMonoRuntime>` in the project to debug it on Mono, as Microsoft's release notes suggest, or run it with `Ctrl+F5`.
+- Hot Reload and Edit and Continue aren't available in these sessions yet, and neither are x64 simulator apps on Apple silicon, 32-bit Android devices, or apps in an Android work profile.
 
 ## Running on Windows
 
@@ -137,7 +138,7 @@ With the MAUI workload installed, File → New Project lists **.NET MAUI App**, 
 
 ## Not available yet
 
-- Debugging on iPhones and iPads, and debugging .NET 11 apps on CoreCLR outside iOS simulators (Mac Catalyst, Android).
+- Debugging on iPhones and iPads, and debugging .NET 11 apps on CoreCLR on Mac Catalyst.
 - A XAML previewer and XAML Hot Reload for MAUI: no open-source ones exist.
 - Changing an emulator's device profile after it's created (create a new one), and the log of a physical iPhone or iPad.
 - Running the Windows target from Linux and macOS (through a Windows machine), and breakpoints in a packaged Windows app's start-up code.

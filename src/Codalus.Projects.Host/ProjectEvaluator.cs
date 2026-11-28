@@ -319,11 +319,14 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
     }
 
     /// <summary>
-    /// Whether this evaluation's app runs on CoreCLR where its platform also has Mono (ADR 0114): the mobile workloads
-    /// set <c>UseMonoRuntime</c> to <c>false</c> then; other projects leave it unset.
+    /// Whether this evaluation's app runs on CoreCLR where its platform also has Mono (ADR 0114, ADR 0115): the iOS
+    /// and Mac Catalyst workloads set <c>UseMonoRuntime</c> to <c>false</c> then. The Android workload leaves that
+    /// property as the project has it and says its choice in <c>_AndroidRuntime</c> (<c>CoreCLR</c>, <c>MonoVM</c> or
+    /// <c>NativeAOT</c>). Other projects set neither.
     /// </summary>
     private static bool RunsOnCoreClrNotMono(Project project) =>
-        string.Equals(project.GetPropertyValue("UseMonoRuntime").Trim(), "false", StringComparison.OrdinalIgnoreCase);
+        string.Equals(project.GetPropertyValue("UseMonoRuntime").Trim(), "false", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(project.GetPropertyValue("_AndroidRuntime").Trim(), "CoreCLR", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The workload packs the SDK's workload resolver found missing for this evaluation (M20a).</summary>
     private static IEnumerable<string> MissingWorkloadPacks(Project project) =>

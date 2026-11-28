@@ -87,7 +87,7 @@ public sealed class MobileTests : IDisposable
     }
 
     [Fact]
-    public void A_CoreClr_app_is_debugged_in_a_simulator_through_the_startup_hook_and_nowhere_else_yet()
+    public void A_CoreClr_app_is_debugged_in_a_simulator_and_on_a_running_android_device_and_nowhere_else_yet()
     {
         // ADR 0114: .NET 11's mobile workloads set UseMonoRuntime to false; the Mono debugger would wait for a runtime
         // that never connects.
@@ -99,8 +99,12 @@ public sealed class MobileTests : IDisposable
         var simulator = new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true);
         Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", simulator));
         Assert.False(MobileTargets.DebugsCoreClr("net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true)));
-        Assert.False(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true)));
         Assert.False(MobileTargets.DebugsCoreClr("net11.0-maccatalyst", null));
+
+        // ADR 0115: on Android the debugger runs on the device, so it has to be up (F5 starts an emulator first).
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true)));
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("0a1b2c3d", "Pixel 8 Pro", MobilePlatform.Android, MobileDeviceKind.Device, true)));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("avd:Pixel_8", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, false)));
 
         // One property, in quotes: MSBuild's command line would otherwise read the second argument as a property.
         Assert.Equal(
@@ -134,6 +138,113 @@ public sealed class MobileTests : IDisposable
         {
             Directory.Delete(plan.Folder, recursive: true);
         }
+    }
+
+    [Fact]
+    public void A_CoreClr_android_app_is_started_held_by_dotnet_run_and_debugged_on_the_device_through_adb()
+    {
+        // ADR 0115: dotnet run's -e reaches the app's environment, and its startup hook is put into the app.
+        var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, n => n == "ANDROID_HOME" ? "/sdk" : null, _dir, p => p == Path.Combine("/sdk", "platform-tools", "adb")), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
+        var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-android") with { CoreClrFrameworks = ["net11.0-android"] };
+        var emulator = new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true);
+        var wait = AndroidDebugging.WaitFolder("com.contoso.app", "run1");
+        Assert.Equal("/data/data/com.contoso.app/cache/codalus-debug-run1", wait);
+        var plan = service.AndroidCoreClrDebugPlan("dotnet", project, "net11.0-android", emulator, "Debug", "/ide/Codalus.Debugging.StartupHook.dll", wait);
+        Assert.Equal(
+            ["run", "--project", project.Path, "-f", "net11.0-android", "-c", "Debug", "--device", "emulator-5554", "-p:AndroidSdkDirectory=/sdk",
+             "-e", "DOTNET_STARTUP_HOOKS=/ide/Codalus.Debugging.StartupHook.dll", "-e", "CODALUS_DEBUG_WAIT=" + wait, "-e", "CODALUS_DEBUG_WAIT_CREATE=1", "-e", "CODALUS_DEBUG_WAIT_SECONDS=900"],
+            plan.ArgumentList);
+
+        // The debugger starts as the app's user, with the app's temporary folder (its runtime's pipes are there).
+        var adapter = AndroidDebugging.Adapter("/sdk/platform-tools/adb", "emulator-5554", "com.contoso.app", "1.1.0-abc");
+        Assert.True(adapter.IsCodalus);
+        Assert.Equal(
+            ["-s", "emulator-5554", "shell", "-T", "run-as", "com.contoso.app", "env", "TMPDIR=/data/data/com.contoso.app/cache", "/data/data/com.contoso.app/code_cache/codalus-debugger-1.1.0-abc/codalus-debughost", "--clr-dap"],
+            adapter.Arguments);
+
+        Assert.Equal("android-arm64", AndroidDebugging.Platform("arm64-v8a\n"));
+        Assert.Equal("android-x64", AndroidDebugging.Platform("x86_64"));
+        Assert.Null(AndroidDebugging.Platform("armeabi-v7a"));
+        Assert.Null(AndroidDebugging.Platform("x86"));
+    }
+
+    [Fact]
+    public async Task The_debugger_is_pushed_to_the_device_once_per_build_and_copied_into_the_app_once_per_install()
+    {
+        var bundle = new Codalus.Workbench.Debugging.Remote.CodalusDebuggerBundle(Path.Combine(_dir, "bundle"), IsArchive: false, "1.1.0-abc");
+        var commands = new List<string>();
+        var inApp = false;
+        var staged = false;
+        var android = new AndroidDebugging((arguments, _, _) =>
+        {
+            var command = string.Join(' ', arguments);
+            commands.Add(command);
+            return Task.FromResult<(int, string)>(command switch
+            {
+                _ when command.EndsWith("code_cache/codalus-debugger-1.1.0-abc/bundle.id", StringComparison.Ordinal) => inApp ? (0, "bundle.id") : (1, "No such file"),
+                "-s emulator-5554 shell ls /data/local/tmp/codalus-debugger-1.1.0-abc/bundle.id" => staged ? (0, "bundle.id") : (1, "No such file"),
+                "-s emulator-5554 shell ls /data/local/tmp" => (0, "codalus-debugger-1.0.0-old\nother\n"),
+                _ => (0, string.Empty),
+            });
+        }, _dir);
+
+        // Neither on the device nor in the app: pushed (an older build's copy removed first), then copied in.
+        await android.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken);
+        Assert.Contains("-s emulator-5554 shell rm -rf /data/local/tmp/codalus-debugger-1.0.0-old", commands);
+        Assert.DoesNotContain(commands, c => c.Contains("rm -rf /data/local/tmp/other", StringComparison.Ordinal));
+        Assert.Contains($"-s emulator-5554 push {bundle.Path} /data/local/tmp/codalus-debugger-1.1.0-abc", commands);
+        Assert.Contains("-s emulator-5554 shell run-as com.contoso.app cp -r /data/local/tmp/codalus-debugger-1.1.0-abc/. /data/data/com.contoso.app/code_cache/codalus-debugger-1.1.0-abc/", commands);
+        Assert.Contains("-s emulator-5554 shell run-as com.contoso.app chmod 700 /data/data/com.contoso.app/code_cache/codalus-debugger-1.1.0-abc/codalus-debughost", commands);
+
+        // Installed again (code_cache emptied) with the build on the device: only copied in.
+        commands.Clear();
+        staged = true;
+        await android.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(commands, c => c.Contains(" push ", StringComparison.Ordinal));
+        Assert.Contains(commands, c => c.Contains(" cp -r ", StringComparison.Ordinal));
+
+        // In the app already: nothing to do.
+        commands.Clear();
+        inApp = true;
+        await android.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken);
+        Assert.Single(commands);
+
+        // A step that fails says adb's words.
+        inApp = staged = false;
+        var failing = new AndroidDebugging((arguments, _, _) => Task.FromResult<(int, string)>(arguments.Contains("push") ? (1, "adb: error: failed to copy: No space left on device") : arguments[^1].EndsWith("bundle.id", StringComparison.Ordinal) ? (1, "") : (0, "")), _dir);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => failing.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken));
+        Assert.Contains("No space left on device", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_app_reports_its_process_in_its_wait_folder_and_a_shipped_archive_is_unpacked_once()
+    {
+        var android = new AndroidDebugging((arguments, _, _) => Task.FromResult<(int, string)>(string.Join(' ', arguments) switch
+        {
+            "-s emulator-5554 shell run-as com.contoso.app cat /data/data/com.contoso.app/cache/codalus-debug-a/pid" => (0, "11458\n"),
+            "-s emulator-5554 shell pidof com.contoso.app" => (0, "11458\n"),
+            _ => (1, "run-as: unknown package: com.contoso.app"),
+        }), _dir);
+        Assert.Equal(11458, await android.ReportedProcessAsync("emulator-5554", "com.contoso.app", "/data/data/com.contoso.app/cache/codalus-debug-a", TestContext.Current.CancellationToken));
+        Assert.Null(await android.ReportedProcessAsync("emulator-5554", "com.contoso.app", "/data/data/com.contoso.app/cache/codalus-debug-b", TestContext.Current.CancellationToken));
+        Assert.Equal(11458, await android.RunningProcessAsync("emulator-5554", "com.contoso.app", TestContext.Current.CancellationToken));
+
+        // The archive a published install ships (remote/android-arm64/debugger.tar.gz): its top folder is codalus-debugger/.
+        var source = Directory.CreateDirectory(Path.Combine(_dir, "pack", "codalus-debugger")).FullName;
+        File.WriteAllText(Path.Combine(source, "codalus-debughost"), "host");
+        var archive = Path.Combine(_dir, "debugger.tar.gz");
+        using (var file = File.Create(archive))
+        using (var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionLevel.Fastest))
+        {
+            System.Formats.Tar.TarFile.CreateFromDirectory(Path.Combine(_dir, "pack"), gzip, includeBaseDirectory: false);
+        }
+
+        var bundle = new Codalus.Workbench.Debugging.Remote.CodalusDebuggerBundle(archive, IsArchive: true, "1.1.0-abc");
+        var unpacked = android.Unpack(bundle);
+        Assert.Equal("host", File.ReadAllText(Path.Combine(unpacked, "codalus-debughost")));
+        File.WriteAllText(Path.Combine(unpacked, "codalus-debughost"), "kept");
+        Assert.Equal(unpacked, android.Unpack(bundle));
+        Assert.Equal("kept", File.ReadAllText(Path.Combine(unpacked, "codalus-debughost")));
     }
 
     [Fact]

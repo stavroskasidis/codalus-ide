@@ -72,6 +72,56 @@ public sealed class WaitingLaunchTests(DebuggeeFixture fixture) : IClassFixture<
     }
 
     [Fact]
+    public async Task The_hook_makes_its_folder_when_told_to_and_reports_there()
+    {
+        // ADR 0115: an Android app's folder is in its own storage, which the IDE can't reach before the app is installed.
+        var hook = HeldLaunch.ResolveHook() ?? throw new InvalidOperationException("The startup hook isn't next to the tests.");
+        var parent = Directory.CreateTempSubdirectory("codalus-waiting-").FullName;
+        var wait = Path.Combine(parent, "made-by-the-hook");
+        Process? program = null;
+        try
+        {
+            var start = new ProcessStartInfo(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll]) { WorkingDirectory = fixture.Folder, RedirectStandardOutput = true, RedirectStandardError = true };
+            start.Environment["DOTNET_STARTUP_HOOKS"] = hook;
+            start.Environment[HeldLaunch.WaitVariable] = wait;
+            start.Environment[HeldLaunch.CreateVariable] = "1";
+            program = Process.Start(start)!;
+            _ = program.StandardOutput.ReadToEndAsync(Ct);
+            _ = program.StandardError.ReadToEndAsync(Ct);
+
+            var pid = Path.Combine(wait, "pid");
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+            while (!File.Exists(pid))
+            {
+                Assert.True(DateTime.UtcNow < deadline, "The program didn't report in the folder the hook was to make.");
+                Assert.False(program.HasExited, "The program ended without waiting.");
+                await Task.Delay(50, Ct);
+            }
+
+            Assert.Equal(program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), (await File.ReadAllTextAsync(pid, Ct)).Trim());
+
+            // Let go, the hook removes the folder it made.
+            await File.WriteAllTextAsync(Path.Combine(wait, "go"), string.Empty, Ct);
+            deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+            while (Directory.Exists(wait))
+            {
+                Assert.True(DateTime.UtcNow < deadline, "The hook didn't take the word.");
+                await Task.Delay(50, Ct);
+            }
+        }
+        finally
+        {
+            if (program is { HasExited: false })
+            {
+                Codalus.Platform.ProcessTree.Kill(program);
+            }
+
+            program?.Dispose();
+            Directory.Delete(parent, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task A_start_that_is_given_up_ends_the_wait()
     {
         var wait = Directory.CreateTempSubdirectory("codalus-waiting-").FullName;
