@@ -356,16 +356,7 @@ internal sealed class CorDebugTarget : IClrProcess
 
     public void Attach(System.Diagnostics.Process process)
     {
-        try
-        {
-            _process = _corDebug.DebugActiveProcess(process.Id, win32Attach: false);
-        }
-        catch (COMException ex)
-        {
-            throw new ClrException($"The debugger couldn't attach to {process.ProcessName} ({process.Id.ToString(CultureInfo.InvariantCulture)}): {ex.Message}", ex);
-        }
-
-        Id = process.Id;
+        Attach(process.Id, process.ProcessName);
         _os = process;
         try
         {
@@ -374,6 +365,21 @@ internal sealed class CorDebugTarget : IClrProcess
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
         }
+    }
+
+    /// <summary>Attaches by the process's id alone: where the OS's process isn't there to hold (on Android, ADR 0115), its exit code isn't read.</summary>
+    public void Attach(int processId, string name)
+    {
+        try
+        {
+            _process = _corDebug.DebugActiveProcess(processId, win32Attach: false);
+        }
+        catch (COMException ex)
+        {
+            throw new ClrException($"The debugger couldn't attach to {name} ({processId.ToString(CultureInfo.InvariantCulture)}): {ex.Message}", ex);
+        }
+
+        Id = processId;
     }
 
     /// <summary>The process, with its handle open now (its exit code is read after it ends).</summary>

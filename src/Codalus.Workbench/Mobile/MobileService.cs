@@ -393,7 +393,7 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
     /// <param name="hook">The debugger's startup hook (<c>Codalus.Debugging.StartupHook.dll</c>).</param>
     public (LaunchPlan Run, string WaitFolder, string Folder)? CoreClrDebugPlan(string dotnet, ProjectInfo project, string framework, MobileDevice? device, string? configuration, string hook)
     {
-        if (!MobileTargets.DebugsCoreClr(framework, device))
+        if (MobileTargets.PlatformOf(framework) != MobilePlatform.iOS || !MobileTargets.DebugsCoreClr(framework, device))
         {
             return null;
         }
@@ -405,6 +405,41 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
         var run = RunPlan(dotnet, project, framework, device, configuration);
         var arguments = run.ArgumentList!.Concat(MobileTargets.CoreClrDebugArguments(copy, wait)).ToList();
         return (run with { Arguments = string.Join(' ', arguments.Select(Quote)), ArgumentList = arguments }, wait, folder);
+    }
+
+    /// <summary>
+    /// The plan that builds, deploys and starts a CoreCLR app on a running Android device or emulator, held by the
+    /// debugger's startup hook in <paramref name="waitFolder"/> on the device (ADR 0115).
+    /// </summary>
+    public LaunchPlan AndroidCoreClrDebugPlan(string dotnet, ProjectInfo project, string framework, MobileDevice device, string? configuration, string hook, string waitFolder)
+    {
+        var locations = Android();
+        var arguments = MobileTargets.AndroidHeldRunArguments(project.Path, framework, device, configuration, locations, hook, waitFolder);
+        return new LaunchPlan(dotnet, string.Join(' ', arguments.Select(Quote)), Path.GetDirectoryName(project.Path)!, AndroidEnvironment(locations), null)
+        {
+            ArgumentList = arguments,
+        };
+    }
+
+    /// <summary>adb of the Android SDK the IDE found, run to its end within a limit; null when there's no adb.</summary>
+    public AdbRunner? Adb(Func<string, IReadOnlyList<string>, TimeSpan, CancellationToken, Task<(int, string)>> run)
+    {
+        if (Android().Adb is not { } adb)
+        {
+            return null;
+        }
+
+        return async (arguments, limit, ct) =>
+        {
+            try
+            {
+                return await run(adb, arguments, limit, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+            {
+                return (-1, ex.Message);
+            }
+        };
     }
 
     /// <summary>The plan that installs the Android SDK (and a JDK when none is found) through the workload's own target.</summary>

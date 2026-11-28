@@ -591,6 +591,19 @@ public sealed class DebugService : IAsyncDisposable
             [new DebugProcess(name, null, DebugProcess.Launched, null)],
             cancellationToken);
 
+    /// <summary>
+    /// The Codalus debugger of an app on an Android device or emulator (ADR 0115): <paramref name="adapter"/> starts it
+    /// there (through adb), and it waits for the app that reports in <paramref name="waitFolder"/>, a folder of the
+    /// device's. The sources and the symbol options are this machine's, as for a remote target.
+    /// </summary>
+    public Task LaunchWaitingAsync(string name, string waitFolder, DebugAdapterStartInfo adapter, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await DebugAdapter.StartAsync(adapter, ct, terminal: null, ExpressionCompiler).ConfigureAwait(false),
+            started => started.LaunchAsync(WaitingArguments(name, waitFolder) with { Symbols = null, SourcesOnClient = true }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
     /// <summary>The Codalus debugger's launch arguments for a program that reports in <paramref name="waitFolder"/>.</summary>
     internal NetFxDebugArguments WaitingArguments(string name, string waitFolder) =>
         new(name, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()) { WaitFolder = waitFolder };
