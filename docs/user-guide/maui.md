@@ -25,7 +25,7 @@ Help → Check Environment lists each workload the solution needs, the Android S
 
 ## Running on a device
 
-When the startup project is a MAUI app, the toolbar shows a **device** next to it. Click it to choose where the app runs:
+When the startup project is a MAUI app, the toolbar shows the **device** it runs on next to it, platform first: **Android: Pixel 9 Pro API 36**, **iOS: iPhone 17**. Its tooltip names the framework **Start** builds (`net10.0-android`). Click it to choose where the app runs. The list is grouped by platform, each group headed by the platform and its framework (**Android (net10.0-android)**, **iOS (net10.0-ios)**), the current platform first:
 - **Android:** connected phones and tablets (with USB debugging on), running emulators, and the virtual devices you've created. A virtual device that isn't running starts when you run the app on it.
 - **iOS** (on a Mac): simulators and connected iPhones and iPads.
 - **This Mac:** Mac Catalyst.

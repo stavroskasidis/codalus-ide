@@ -17,11 +17,26 @@ public sealed record QuickPickItem(string Label)
     public string? Icon { get; init; }
 
     public object? Tag { get; init; }
+
+    /// <summary>
+    /// The section the item is listed under (the device picker's platforms): while nothing is typed, a header row with
+    /// this text starts each run of items that share it; an empty one is a bare separator. Typing ranks the items alone.
+    /// </summary>
+    public string? Group { get; init; }
 }
 
 public sealed class QuickPickRow(QuickPickItem item, IReadOnlyList<int> highlights)
 {
+    /// <summary>A section's header row: shown, never selected or accepted.</summary>
+    public static QuickPickRow Header(string group) => new(new QuickPickItem(group), []) { IsHeader = true };
+
     public QuickPickItem Item { get; } = item;
+
+    public bool IsHeader { get; private init; }
+
+    public bool IsItem => !IsHeader;
+
+    public bool HasHeaderText => IsHeader && Item.Label.Length > 0;
 
     public string Label => Item.Label;
 
@@ -118,7 +133,7 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
         {
             if (SetField(ref _selectedIndex, value))
             {
-                _onHighlight?.Invoke(Selected?.Item);
+                _onHighlight?.Invoke(Selected is { IsHeader: false } row ? row.Item : null);
             }
         }
     }
@@ -188,9 +203,21 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
         _providerCts?.Dispose();
     }
 
-    public void Accept() => Close(Selected?.Item);
+    public void Accept()
+    {
+        if (Selected is not { IsHeader: true })
+        {
+            Close(Selected?.Item);
+        }
+    }
 
-    public void Accept(QuickPickRow row) => Close(row.Item);
+    public void Accept(QuickPickRow row)
+    {
+        if (!row.IsHeader)
+        {
+            Close(row.Item);
+        }
+    }
 
     public void Cancel() => Close(null);
 
@@ -201,10 +228,32 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
             return;
         }
 
-        SelectedIndex = Math.Clamp(_selectedIndex < 0 ? 0 : _selectedIndex + delta, 0, Rows.Count - 1);
+        SelectedIndex = ItemNear(Math.Clamp(_selectedIndex < 0 ? 0 : _selectedIndex + delta, 0, Rows.Count - 1), delta < 0 ? -1 : 1);
     }
 
-    public void MoveToEdge(bool last) => SelectedIndex = Rows.Count == 0 ? -1 : last ? Rows.Count - 1 : 0;
+    public void MoveToEdge(bool last) => SelectedIndex = Rows.Count == 0 ? -1 : last ? ItemNear(Rows.Count - 1, -1) : ItemNear(0, 1);
+
+    /// <summary>The item row at <paramref name="index"/>, or the nearest one past headers: toward <paramref name="direction"/> first.</summary>
+    private int ItemNear(int index, int direction)
+    {
+        for (var i = index; i >= 0 && i < Rows.Count; i += direction)
+        {
+            if (!Rows[i].IsHeader)
+            {
+                return i;
+            }
+        }
+
+        for (var i = index; i >= 0 && i < Rows.Count; i -= direction)
+        {
+            if (!Rows[i].IsHeader)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     private void Close(QuickPickItem? result)
     {
@@ -228,15 +277,34 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
         var query = _query.Trim();
         if (query.Length == 0)
         {
-            // In the given order; the active item shows even past the first rows.
-            List<QuickPickRow> rows = [.. _items.Take(MaxRows).Select(i => new QuickPickRow(i, []))];
+            // In the given order, with their groups' headers; the active item shows even past the first rows.
+            List<QuickPickRow> rows = [];
+            var active = activeIndex;
+            string? group = null;
+            for (var i = 0; i < _items.Count && i < MaxRows; i++)
+            {
+                var item = _items[i];
+                if (item.Group is { } next && next != group)
+                {
+                    rows.Add(QuickPickRow.Header(next));
+                }
+
+                group = item.Group;
+                if (i == activeIndex)
+                {
+                    active = rows.Count;
+                }
+
+                rows.Add(new QuickPickRow(item, []));
+            }
+
             if (activeIndex >= MaxRows && activeIndex < _items.Count)
             {
                 rows.Add(new QuickPickRow(_items[activeIndex], []));
-                activeIndex = rows.Count - 1;
+                active = rows.Count - 1;
             }
 
-            Show(rows, _items.Count, activeIndex);
+            Show(rows, _items.Count, active);
             return;
         }
 
@@ -251,11 +319,11 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
     private void Show(List<QuickPickRow> rows, int total, int selected)
     {
         Rows.Reset(rows);
-        _hidden = total - rows.Count;
+        _hidden = total - rows.Count(r => !r.IsHeader);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasMore));
         OnPropertyChanged(nameof(MoreText));
         _selectedIndex = -1;
-        SelectedIndex = rows.Count == 0 ? -1 : Math.Clamp(selected, 0, rows.Count - 1);
+        SelectedIndex = rows.Count == 0 ? -1 : ItemNear(Math.Clamp(selected, 0, rows.Count - 1), 1);
     }
 }

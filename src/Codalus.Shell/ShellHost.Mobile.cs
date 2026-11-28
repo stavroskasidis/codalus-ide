@@ -110,17 +110,34 @@ public sealed partial class ShellHost
         if (Runs.StartupProject is not { } startup || !Solutions.Projects.TryGetValue(startup, out var project) || !MobileTargets.IsMobile(project))
         {
             Workbench.Context.Set("mobileStartup", false);
-            Toolbar.SetDevice(null);
+            Toolbar.SetDevice(null, null);
             return;
         }
 
         Workbench.Context.Set("mobileStartup", true);
         var framework = MobileRunFramework(project);
         var platform = MobileTargets.PlatformOf(framework);
-        Toolbar.SetDevice(framework is null ? Localizer.Get("msg.mobile.noTarget", "No target here")
-            : Mobile.DeviceFor(platform) is { } device ? device.Name
-            : platform == MobilePlatform.Android ? Localizer.Get("msg.mobile.noAndroidDevice", "No Android device") : MobileTargets.Title(platform));
+        if (framework is null)
+        {
+            var none = Localizer.Get("msg.mobile.noTarget", "No target here");
+            Toolbar.SetDevice(none, none);
+            return;
+        }
+
+        var device = Mobile.DeviceFor(platform);
+        Toolbar.SetDevice(
+            device is not null ? ToolbarDeviceLabel(device)
+            : platform == MobilePlatform.Android ? Localizer.Get("msg.mobile.noAndroidDevice", "No Android device") : MobileTargets.Title(platform),
+            Localizer.Format("msg.mobile.deviceTip", "Start runs and debugs {0} ({1}) on {2}", project.Name, framework, device?.Label ?? MobileTargets.Title(platform)));
     }
+
+    /// <summary>
+    /// The toolbar's device: its platform first ("Android: Pixel 9", "iOS: iPhone 17"), since Start builds that
+    /// platform's framework; this Mac and this PC say it in their names.
+    /// </summary>
+    internal static string ToolbarDeviceLabel(MobileDevice device) => device.Kind is MobileDeviceKind.ThisMac or MobileDeviceKind.ThisPc
+        ? device.Name
+        : Localizer.Format("msg.mobile.toolbarDevice", "{0}: {1}", MobileTargets.Title(device.Platform), device.Name);
 
     public async Task RefreshDevicesAsync()
     {
@@ -178,8 +195,9 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// The device picker's items for <paramref name="project"/> on <paramref name="host"/>: the devices of the platforms
-    /// this machine runs, the current platform's first. A Windows framework off Windows lists "Windows Machine" as
-    /// Windows only (D31, M44), so the target is visible but not chosen.
+    /// this machine runs, grouped under each platform and the framework it builds ("Android (net10.0-android)"), the
+    /// current platform's first. A Windows framework off Windows lists "Windows Machine" as Windows only (D31, M44), so
+    /// the target is visible but not chosen.
     /// </summary>
     internal List<QuickPickItem> DevicePickerItems(ProjectInfo project, Codalus.Platform.PlatformKind host)
     {
@@ -189,18 +207,30 @@ public sealed partial class ShellHost
         foreach (var device in Mobile.Devices.Where(d => platforms.Contains(d.Platform)).OrderBy(d => d.Platform != current).ThenBy(d => d.Platform).ThenByDescending(d => d.IsRunning))
         {
             var chosen = Mobile.DeviceFor(device.Platform)?.Id == device.Id && device.Platform == current;
-            items.Add(new QuickPickItem(device.Label) { Tag = device, Icon = device.Kind == MobileDeviceKind.ThisPc ? "window" : "phone", Detail = device.Problem ?? (chosen ? Localizer.Get("msg.mobile.current", "current") : null) });
+            items.Add(new QuickPickItem(device.Label)
+            {
+                Tag = device,
+                Icon = device.Kind == MobileDeviceKind.ThisPc ? "window" : "phone",
+                Detail = device.Problem ?? (chosen ? Localizer.Get("msg.mobile.current", "current") : null),
+                Group = PlatformGroup(project, device.Platform),
+            });
         }
 
         if (host != Codalus.Platform.PlatformKind.Windows && MobileTargets.FrameworkFor(project, MobilePlatform.Windows) is { } windows)
         {
             var problem = Localizer.Format("msg.mobile.windowsOnly", "Windows only: {0} runs on Windows (from this OS, a Windows machine as a target comes later).", windows);
-            items.Add(new QuickPickItem(MobileTargets.WindowsMachine.Label) { Tag = MobileTargets.WindowsMachine with { Problem = problem }, Icon = "window", Detail = problem });
+            items.Add(new QuickPickItem(MobileTargets.WindowsMachine.Label) { Tag = MobileTargets.WindowsMachine with { Problem = problem }, Icon = "window", Detail = problem, Group = PlatformGroup(project, MobilePlatform.Windows) });
         }
 
-        items.Add(new QuickPickItem(Localizer.Get("msg.mobile.openDevices", "Open the Devices window")) { Tag = "devices" });
+        items.Add(new QuickPickItem(Localizer.Get("msg.mobile.openDevices", "Open the Devices window")) { Tag = "devices", Group = string.Empty });
         return items;
     }
+
+    /// <summary>A device picker group's header: the platform and the framework a run on it builds.</summary>
+    private static string PlatformGroup(ProjectInfo project, MobilePlatform platform) =>
+        MobileTargets.FrameworkFor(project, platform) is { } framework
+            ? Localizer.Format("msg.mobile.platformGroup", "{0} ({1})", MobileTargets.Title(platform), framework)
+            : MobileTargets.Title(platform);
 
     public void ShowDevices()
     {

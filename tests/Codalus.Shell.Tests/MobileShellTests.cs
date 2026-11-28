@@ -149,7 +149,8 @@ public sealed class MobileShellTests
         }
 
         await f.Shell.RefreshDevicesAsync();
-        await ShellFixture.PumpUntil(() => f.Shell.Toolbar.DeviceLabel == "Pixel 8 API 35");
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbar.DeviceLabel == "Android: Pixel 8 API 35");
+        Assert.Contains("TodoApp (net10.0-android)", f.Shell.Toolbar.DeviceToolTip, StringComparison.Ordinal);
         Assert.Equal(2, f.Shell.DevicesWindow.Devices.Count(d => d.Device.Platform == MobilePlatform.Android)); // and This Mac on macOS
         Assert.Contains(f.Shell.DevicesWindow.Devices, d => d.IsTarget && d.Device.Id == "emulator-5554");
 
@@ -174,5 +175,43 @@ public sealed class MobileShellTests
         Assert.Contains("-p:AndroidSdkDirectory=" + sdk, command, StringComparison.Ordinal);
         Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.StartsWith("Could not start", StringComparison.Ordinal));
         f.Shell.StopRunning();
+    }
+
+    [AvaloniaFact]
+    public async Task The_device_picker_groups_devices_under_their_platform_and_the_toolbar_names_it()
+    {
+        await using var f = ShellFixture.Create();
+        var app = new Codalus.Projects.Protocol.ProjectInfo("/src/TodoApp/TodoApp.csproj", "TodoApp", Codalus.Projects.Protocol.ProjectStates.Loaded, null, ["net10.0-android", "net10.0-ios"], "Exe", [], [], [], true) { UsesMaui = true };
+
+        // Stand-in tools on a Mac: an Android emulator that isn't running and two iOS simulators, one booted.
+        var sdk = Path.Combine(f.UserData, "android-sdk");
+        string[] files = [Path.Combine(sdk, "platform-tools", "adb"), Path.Combine(sdk, "emulator", "emulator")];
+        const string Simulators = """
+            {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-2":[
+              {"udid":"SIM-1","name":"iPhone 17","state":"Booted","isAvailable":true},
+              {"udid":"SIM-2","name":"iPad (A16)","state":"Shutdown","isAvailable":true}]}}
+            """;
+        Task<(int, string)> Run(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken ct) =>
+            Task.FromResult<(int, string)>((Path.GetFileNameWithoutExtension(program) + " " + string.Join(' ', arguments)) switch
+            {
+                "adb devices -l" => (0, "List of devices attached\n"),
+                "emulator -list-avds" => (0, "Pixel_9_Pro_API_36\n"),
+                "xcrun simctl list devices available --json" => (0, Simulators),
+                _ => (1, string.Empty),
+            });
+        var toolchain = new AndroidToolchain(PlatformKind.MacOS, n => n == "ANDROID_HOME" ? sdk : null, f.UserData, files.Contains);
+        f.Shell.UseMobileService(new MobileService(PlatformKind.MacOS, toolchain, Run, (_, _, _) => false, f.Shell.Workbench.Settings));
+        await f.Shell.RefreshDevicesAsync();
+
+        // Each device is listed under its platform and the framework a run on it builds; Android (the current) first.
+        var items = f.Shell.DevicePickerItems(app, PlatformKind.MacOS);
+        Assert.Equal(
+            ["Android (net10.0-android): Pixel 9 Pro API 36 (emulator, not running)", "iOS (net10.0-ios): iPhone 17 (iOS 27.2, simulator)", "iOS (net10.0-ios): iPad (A16) (iOS 27.2, simulator, shut down)", ": Open the Devices window"],
+            items.Select(i => i.Group + ": " + i.Label));
+
+        // The toolbar says the platform before the device's name; this Mac says it in its name.
+        Assert.Equal("Android: Pixel 9 Pro API 36", ShellHost.ToolbarDeviceLabel(Assert.IsType<MobileDevice>(items[0].Tag)));
+        Assert.Equal("iOS: iPhone 17", ShellHost.ToolbarDeviceLabel(Assert.IsType<MobileDevice>(items[1].Tag)));
+        Assert.Equal("This Mac", ShellHost.ToolbarDeviceLabel(f.Shell.Mobile.Devices.Single(d => d.Kind == MobileDeviceKind.ThisMac)));
     }
 }
