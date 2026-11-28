@@ -71,8 +71,9 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
     }
 
     /// <summary>
-    /// The <c>dotnet</c> that runs hosts: the one running this server (a framework-dependent build), then
-    /// <c>DOTNET_ROOT</c>, <c>~/.dotnet</c>, the PATH, and the usual install folders.
+    /// The <c>dotnet</c> that runs hosts: the one running this server (a framework-dependent build); for the
+    /// self-contained server, the first of <c>DOTNET_ROOT</c>, <c>~/.dotnet</c>, the PATH and the usual install folders
+    /// that has the runtime the bundle's hosts ask for, else the first that exists (<see cref="DotnetMuxerLookup"/>).
     /// </summary>
     internal static readonly Lazy<string?> Dotnet = new(() =>
     {
@@ -82,22 +83,10 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
             return self;
         }
 
-        List<string> candidates = [];
-        if (Environment.GetEnvironmentVariable("DOTNET_ROOT") is { Length: > 0 } root)
-        {
-            candidates.Add(Path.Combine(root, exe));
-        }
-
-        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", exe));
-        if (PseudoTerminal.ResolveExecutable("dotnet") is { } onPath)
-        {
-            candidates.Add(onPath);
-        }
-
-        candidates.AddRange(OperatingSystem.IsWindows()
-            ? [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", exe)]
-            : ["/usr/share/dotnet/dotnet", "/usr/lib/dotnet/dotnet", "/usr/local/share/dotnet/dotnet", "/opt/homebrew/opt/dotnet/libexec/dotnet"]);
-        return candidates.FirstOrDefault(File.Exists);
+        // The bundle: server/ (this folder) next to buildhost/, lshost/, markuphost/ (RemoteServerBundle).
+        var bundle = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
+        var lookup = new DotnetMuxerLookup { OnPath = () => PseudoTerminal.ResolveExecutable("dotnet") };
+        return lookup.Find(DotnetMuxerLookup.HostFrameworks(bundle, Environment.GetEnvironmentVariable, DotnetMuxerLookup.OwnRuntime()));
     });
 
     private static string? DotnetVersion(string dotnet)

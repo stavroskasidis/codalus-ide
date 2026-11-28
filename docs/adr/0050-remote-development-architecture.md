@@ -1,6 +1,6 @@
 # 0050. Remote development architecture
 
-- **Status:** accepted (M21a, 2026-10-12; the maintainer's standing go-ahead for the milestones)
+- **Status:** accepted (M21a, 2026-10-12; the maintainer's standing go-ahead for the milestones), amended 2026-11-28 (the self-contained server's `dotnet` has the hosts' runtime; the framework-dependent server's start script picks a `dotnet` with the server's runtime)
 - **Date:** 2026-10-12
 - **Deciders:** maintainer
 
@@ -78,7 +78,7 @@ Neither of the last two exists, so a feature that isn't remote-aware fails at on
 - A published install carries `remote/server/`: the server built framework-dependent, so it runs on any OS with .NET 10.
 - It also carries `remote/<rid>/` for `$(DaedalusServerRids)` (default `linux-x64;linux-arm64`): the server self-contained, single-file and trimmed (about 16 MB). It starts without .NET on the target, so the terminal and the files work even there.
 - The copied bundle uses the platform's self-contained server when the install has one, and the framework-dependent one otherwise.
-- **The hosts stay framework-dependent** and run on the target's `dotnet`. The build host must load the target's SDK and roll forward with it (ADR 0025), and a .NET workspace needs that SDK anyway. The server finds `dotnet` itself: its own host, `DOTNET_ROOT`, `~/.dotnet`, the PATH, the usual folders. It reports it in `hello`, and a target without one gets a warning that projects won't load.
+- **The hosts stay framework-dependent** and run on the target's `dotnet`. The build host must load the target's SDK and roll forward with it (ADR 0025), and a .NET workspace needs that SDK anyway. The server finds `dotnet` itself: its own host, `DOTNET_ROOT`, `~/.dotnet`, the PATH, the usual folders. *Amended 2026-11-28:* the self-contained server takes the first of these whose root (the muxer's folder, its links resolved) has a `Microsoft.NETCore.App` that the hosts' `runtimeconfig.json` files in the bundle resolve to, by the host's rules (ADR 0080: `HostRuntimeCheck.InstalledVersions`, `FrameworkResolver.Resolve`), or the server's own runtime with `rollForward` Major when the bundle has none; it keeps the order, and falls back to the first that exists, so a host started there names what's missing (`DotnetMuxerLookup`). Before, a `DOTNET_ROOT` or `~/.dotnet` with only an older .NET won over the PATH's right one, and every host exited with "You must install or update .NET". It reports it in `hello`, and a target without one gets a warning that projects won't load.
 - The server starts after `~/.profile` (its output discarded), with `~/.dotnet` on the PATH.
   - *Amended 2026-11-28:* the framework-dependent server runs on the first `dotnet` that has the runtime it asks for: on the `PATH` in order (`~/.dotnet` last), then `DOTNET_ROOT` and the usual folders (`RemoteServerBundle.StartScript`, `InstalledServer.Runtime`). Homebrew's .NET 10 first on a Mac's `PATH` ran a server built for .NET 11 that `~/.dotnet` had. When none has it, a line says what it needs and where it looked, then the `PATH`'s first `dotnet` starts it as before. The local server's launch is ADR 0080's amendment of this date.
 - In development and tests, `DAEDALUS_SERVER` points at the framework-dependent build.
