@@ -14,7 +14,8 @@ namespace Codalus.Shell.Editor;
 
 /// <summary>
 /// A miniature of the document beside the editor: two pixels per line, words drawn as blocks in their token colors
-/// (where the language service has colored them, otherwise the text color), with the visible area shaded. When the
+/// (where the language service, or a diff's grammar, has colored them, otherwise the text color), the lines its source
+/// marks (a diff's added and removed lines) on a band with a stripe at the left edge, and the visible area shaded. When the
 /// document is taller than the minimap, the minimap scrolls along with the editor. A click centers the editor on the
 /// line clicked; the visible area drags like a scroll bar's thumb. Only the lines shown are drawn, so cost doesn't grow
 /// with the document.
@@ -27,17 +28,17 @@ public sealed class Minimap : Control
     private const int MaxColumns = 120;
 
     private readonly TextEditor _editor;
-    private readonly SemanticColorizer _colorizer;
+    private readonly IMinimapColors _colors;
     private readonly DispatcherTimer _redraw;
     private bool _dragging;
 
     /// <summary>Where the pointer holds the visible area while dragging (from its top), or null until it's known.</summary>
     private double? _grab;
 
-    public Minimap(TextEditor editor, SemanticColorizer colorizer)
+    public Minimap(TextEditor editor, IMinimapColors colors)
     {
         _editor = editor;
-        _colorizer = colorizer;
+        _colors = colors;
         Width = 96;
         ClipToBounds = true;
         Cursor = new Cursor(StandardCursorType.Arrow);
@@ -55,13 +56,61 @@ public sealed class Minimap : Control
 
     public static readonly StyledProperty<IBrush> ForegroundProperty = AvaloniaProperty.Register<Minimap, IBrush>(nameof(Foreground), Brushes.Gray);
 
-    static Minimap() => AffectsRender<Minimap>(ForegroundProperty);
+    /// <summary>The band under an added line (a diff's <c>Shell.Diff.Added.Line</c>).</summary>
+    public static readonly StyledProperty<IBrush?> AddedLineProperty = AvaloniaProperty.Register<Minimap, IBrush?>(nameof(AddedLine));
+
+    /// <summary>The band under a removed line (a diff's <c>Shell.Diff.Removed.Line</c>).</summary>
+    public static readonly StyledProperty<IBrush?> RemovedLineProperty = AvaloniaProperty.Register<Minimap, IBrush?>(nameof(RemovedLine));
+
+    /// <summary>
+    /// The stripe at the left edge of an added line (<c>Shell.Diff.Added</c>): the mark that shows in every theme, on
+    /// High contrast's black bands too.
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> AddedMarkProperty = AvaloniaProperty.Register<Minimap, IBrush?>(nameof(AddedMark));
+
+    /// <summary>The stripe at the left edge of a removed line (<c>Shell.Diff.Removed</c>).</summary>
+    public static readonly StyledProperty<IBrush?> RemovedMarkProperty = AvaloniaProperty.Register<Minimap, IBrush?>(nameof(RemovedMark));
+
+    /// <summary>The width of a marked line's stripe.</summary>
+    public const double MarkWidth = 3;
+
+    static Minimap() => AffectsRender<Minimap>(ForegroundProperty, AddedLineProperty, RemovedLineProperty, AddedMarkProperty, RemovedMarkProperty);
 
     public IBrush Foreground
     {
         get => GetValue(ForegroundProperty);
         set => SetValue(ForegroundProperty, value);
     }
+
+    public IBrush? AddedLine
+    {
+        get => GetValue(AddedLineProperty);
+        set => SetValue(AddedLineProperty, value);
+    }
+
+    public IBrush? RemovedLine
+    {
+        get => GetValue(RemovedLineProperty);
+        set => SetValue(RemovedLineProperty, value);
+    }
+
+    public IBrush? AddedMark
+    {
+        get => GetValue(AddedMarkProperty);
+        set => SetValue(AddedMarkProperty, value);
+    }
+
+    public IBrush? RemovedMark
+    {
+        get => GetValue(RemovedMarkProperty);
+        set => SetValue(RemovedMarkProperty, value);
+    }
+
+    /// <summary>
+    /// Draws the minimap again from its source: what it drew of each line is kept until the text or the source's
+    /// <see cref="IMinimapColors.Version"/> changes, so a source calls this after its version did.
+    /// </summary>
+    public void Refresh() => ScheduleRedraw();
 
     public IBrush ViewportBrush { get; set; } = new ImmutableSolidColorBrush(0x30808080);
 
@@ -113,8 +162,8 @@ public sealed class Minimap : Control
         }
     }
 
-    /// <summary>The words of a line drawn: columns and token type (-1: the text color).</summary>
-    private readonly record struct Word(int Start, int Length, int Type);
+    /// <summary>The words of a line drawn: columns and color (null: the text color).</summary>
+    private readonly record struct Word(int Start, int Length, IBrush? Brush);
 
     /// <summary>
     /// The words of the lines last drawn (zero-based), kept while the text and its tokens stay the same: scrolling reads
@@ -130,7 +179,7 @@ public sealed class Minimap : Control
     /// shapes for the compositor to rasterize.
     /// </summary>
     private WriteableBitmap? _bitmap;
-    private readonly Dictionary<int, uint> _colors = [];
+    private readonly Dictionary<IBrush, uint> _drawn = [];
 
     /// <summary>The lines whose words were read (tests: scrolling reads only the lines it brings in).</summary>
     internal int LinesRead { get; private set; }
@@ -171,14 +220,18 @@ public sealed class Minimap : Control
     private unsafe void Paint(WriteableBitmap bitmap, double scale)
     {
         // The text's version changes with every edit and is another document's when the document is.
-        if (_wordsOf.Text != Document.Version || _wordsOf.Tokens != _colorizer.Version)
+        if (_wordsOf.Text != Document.Version || _wordsOf.Tokens != _colors.Version)
         {
-            _wordsOf = (Document.Version, _colorizer.Version);
+            _wordsOf = (Document.Version, _colors.Version);
             _words.Clear();
         }
 
-        _colors.Clear();
+        _drawn.Clear();
         var foreground = Foreground is ISolidColorBrush solid ? Premultiplied(solid.Color, 0.6) : Premultiplied(Colors.Gray, 0.6);
+        var addedLine = Solid(AddedLine);
+        var removedLine = Solid(RemovedLine);
+        var addedMark = Solid(AddedMark);
+        var removedMark = Solid(RemovedMark);
         var first = FirstLine;
         var last = Math.Min(Document.LineCount, first + Capacity);
         using var buffer = bitmap.Lock();
@@ -196,9 +249,28 @@ public sealed class Minimap : Control
             shown[line] = words;
             var top = (line - first) * LineHeight * scale;
             var bottom = top + ((LineHeight - 0.5) * scale);
+            if (_colors.MarkOf(line) is var mark and not MinimapMark.None)
+            {
+                // The band takes the line's whole height, its gap too, so a run of changed lines reads as one block. Its
+                // edges are on whole pixels: at 125% a line is 2.5 px, and half-covered rows shared by two lines' bands
+                // left a lighter seam between them.
+                var (band, stripe) = mark == MinimapMark.Added ? (addedLine, addedMark) : (removedLine, removedMark);
+                var bandTop = Math.Round(top);
+                var bandBottom = Math.Round(top + (LineHeight * scale));
+                if (band != 0)
+                {
+                    Fill(pixels, stride, buffer.Size, 0, buffer.Size.Width, bandTop, bandBottom, band);
+                }
+
+                if (stripe != 0)
+                {
+                    Fill(pixels, stride, buffer.Size, 0, Math.Round(MarkWidth * scale), bandTop, bandBottom, stripe);
+                }
+            }
+
             foreach (var word in words)
             {
-                var color = word.Type < 0 ? foreground : TokenColor(word.Type, foreground);
+                var color = word.Brush is null ? foreground : WordColor(word.Brush, foreground);
                 Fill(pixels, stride, buffer.Size, ((word.Start * CharWidth) + 4) * scale, ((word.Start + word.Length) * CharWidth + 4) * scale, top, bottom, color);
             }
         }
@@ -229,23 +301,26 @@ public sealed class Minimap : Control
 
             if (column > start)
             {
-                words.Add(new Word(start, column - start, _colorizer.TokenAt(line, start)));
+                words.Add(new Word(start, column - start, _colors.WordBrush(line, start)));
             }
         }
 
         return [.. words];
     }
 
-    /// <summary>A token type's color, as drawn: the theme's, or the text color for a type the theme doesn't color.</summary>
-    private uint TokenColor(int type, uint foreground)
+    /// <summary>A word's color, as drawn: its brush's, or the text color for a brush that isn't a solid color.</summary>
+    private uint WordColor(IBrush brush, uint foreground)
     {
-        if (!_colors.TryGetValue(type, out var color))
+        if (!_drawn.TryGetValue(brush, out var color))
         {
-            _colors[type] = color = _colorizer.Theme.Token(type) is ISolidColorBrush token ? Premultiplied(token.Color, 0.8) : foreground;
+            _drawn[brush] = color = brush is ISolidColorBrush token ? Premultiplied(token.Color, 0.8) : foreground;
         }
 
         return color;
     }
+
+    /// <summary>A band's or a stripe's color, as drawn (0: none).</summary>
+    private static uint Solid(IBrush? brush) => brush is ISolidColorBrush solid ? Premultiplied(solid.Color, solid.Opacity) : 0;
 
     private static uint Premultiplied(Color color, double opacity)
     {
@@ -258,7 +333,9 @@ public sealed class Minimap : Control
 
     /// <summary>
     /// Fills a rectangle in device pixels, its edges' pixels in proportion to how much of them it covers, as a vector
-    /// rectangle is drawn (words never overlap: whitespace and the gap between lines part them).
+    /// rectangle is drawn, over what's drawn there already (a marked line's band and stripe, under its words). Words
+    /// never overlap each other (whitespace and the gap between lines part them), but they do lie on bands: written
+    /// over instead of blended, a word's soft edges and its 80% color let the background through holes in the band.
     /// </summary>
     private static void Fill(Span<uint> pixels, int stride, PixelSize size, double left, double right, double top, double bottom, uint color)
     {
@@ -271,13 +348,22 @@ public sealed class Minimap : Control
             for (var x = (int)left; x < right; x++)
             {
                 var coverage = rowCoverage * (Math.Min(right, x + 1) - Math.Max(left, x));
-                row[x] = coverage >= 0.999 ? color : Scale(color, coverage);
+                var source = coverage >= 0.999 ? color : Scale(color, coverage);
+                row[x] = row[x] == 0 || source >> 24 == 0xFF ? source : Over(source, row[x]);
             }
         }
     }
 
     private static uint Scale(uint color, double coverage) =>
         Pack((color >> 24) / 255.0 * coverage, ((color >> 16) & 0xFF) / 255.0 * coverage, ((color >> 8) & 0xFF) / 255.0 * coverage, (color & 0xFF) / 255.0 * coverage);
+
+    /// <summary>A premultiplied color drawn over another (source over).</summary>
+    internal static uint Over(uint source, uint destination)
+    {
+        var keep = 255 - (source >> 24);
+        uint Channel(int shift) => Math.Min(255u, ((source >> shift) & 0xFF) + ((((destination >> shift) & 0xFF) * keep) + 127) / 255);
+        return (Channel(24) << 24) | (Channel(16) << 16) | (Channel(8) << 8) | Channel(0);
+    }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {

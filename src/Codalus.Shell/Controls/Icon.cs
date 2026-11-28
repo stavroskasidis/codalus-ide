@@ -408,6 +408,7 @@ public static class IconSet
         ["phone-log"] = "phone_vertical_scroll_20_regular",
         ["simulator"] = "phone_tablet_20_regular",
         ["package-download"] = "cube_arrow_curve_down_20_regular",
+        ["archive"] = "archive_16_regular",
 
         // AI Chat (M34h, docs/design/controls/AiChat.dc.html): a new chat, sending a question, and a code block's Insert
         // at Cursor and Apply….

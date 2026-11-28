@@ -89,7 +89,7 @@ public sealed class MobileTests : IDisposable
     [Fact]
     public void A_CoreClr_app_is_debugged_in_a_simulator_and_on_a_running_android_device_and_nowhere_else_yet()
     {
-        // ADR 0114: .NET 11's mobile workloads set UseMonoRuntime to false; the Mono debugger would wait for a runtime
+        // ADR 0115: .NET 11's mobile workloads set UseMonoRuntime to false; the Mono debugger would wait for a runtime
         // that never connects.
         var project = Project("/work/App/App.csproj", maui: true, "net11.0-android", "net11.0-ios", "net10.0-ios") with { CoreClrFrameworks = ["net11.0-android", "net11.0-ios"] };
         Assert.True(MobileTargets.RunsOnCoreClr(project, "net11.0-ios"));
@@ -101,7 +101,7 @@ public sealed class MobileTests : IDisposable
         Assert.False(MobileTargets.DebugsCoreClr("net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true)));
         Assert.False(MobileTargets.DebugsCoreClr("net11.0-maccatalyst", null));
 
-        // ADR 0115: on Android the debugger runs on the device, so it has to be up (F5 starts an emulator first).
+        // ADR 0116: on Android the debugger runs on the device, so it has to be up (F5 starts an emulator first).
         Assert.True(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true)));
         Assert.True(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("0a1b2c3d", "Pixel 8 Pro", MobilePlatform.Android, MobileDeviceKind.Device, true)));
         Assert.False(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("avd:Pixel_8", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, false)));
@@ -143,7 +143,7 @@ public sealed class MobileTests : IDisposable
     [Fact]
     public void A_CoreClr_android_app_is_started_held_by_dotnet_run_and_debugged_on_the_device_through_adb()
     {
-        // ADR 0115: dotnet run's -e reaches the app's environment, and its startup hook is put into the app.
+        // ADR 0116: dotnet run's -e reaches the app's environment, and its startup hook is put into the app.
         var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, n => n == "ANDROID_HOME" ? "/sdk" : null, _dir, p => p == Path.Combine("/sdk", "platform-tools", "adb")), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
         var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-android") with { CoreClrFrameworks = ["net11.0-android"] };
         var emulator = new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true);

@@ -135,7 +135,28 @@ public sealed partial class DialogView : UserControl
         }
     }
 
-    private void OnOpened(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+    /// <summary>A request opened (on the UI thread: <see cref="DialogViewModel.ShowAsync"/>).</summary>
+    private void OnOpened(object? sender, EventArgs e)
+    {
+        LayOutAfresh();
+        Dispatcher.UIThread.Post(FocusFirst, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Lays the frame out again from scratch for a new request. The layer hides the dialog between requests, and a layout
+    /// pass that runs while it is hidden (the last request's buttons and rows cleared) can leave a panel's arrange marked
+    /// valid with its children's old sizes: the footer kept the width of the last request's buttons, and a wider set ran
+    /// off the frame's edge, Save, Don't Save and Cancel after OK and Cancel showing only Save and part of Don't Save (#572).
+    /// </summary>
+    private void LayOutAfresh()
+    {
+        foreach (var layoutable in Frame.GetSelfAndVisualDescendants().OfType<Avalonia.Layout.Layoutable>())
+        {
+            layoutable.InvalidateMeasure();
+        }
+    }
+
+    private void FocusFirst()
     {
         if (_viewModel is { HasInput: true } vm)
         {
@@ -153,7 +174,7 @@ public sealed partial class DialogView : UserControl
         {
             this.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("accent"))?.Focus(NavigationMethod.Tab);
         }
-    }, DispatcherPriority.Loaded);
+    }
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {

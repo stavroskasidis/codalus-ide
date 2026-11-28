@@ -16,7 +16,7 @@ internal interface IClrDebugger
 
     /// <summary>
     /// Attaches to the program someone else starts with the startup hook, once it reports in
-    /// <see cref="NetFxDebugArguments.WaitFolder"/> (ADR 0114); CoreCLR's debugger only.
+    /// <see cref="NetFxDebugArguments.WaitFolder"/> (ADR 0115); CoreCLR's debugger only.
     /// </summary>
     IClrProcess AttachWaiting(NetFxDebugArguments arguments, Action<string, string> output) =>
         throw new DapRequestException($"The {Runtime} debugger doesn't wait for a program that something else starts.");

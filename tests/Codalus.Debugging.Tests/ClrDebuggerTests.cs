@@ -261,14 +261,16 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
                 && log.Contains("[clr] continue after CreateThread", StringComparison.Ordinal)
                 && !log.Contains("the session didn't handle", StringComparison.Ordinal), "The adapter's log:\n" + log);
 
-            // Each of the session's continues follows an exception (the program throws and catches one), never a module,
-            // a thread or a log message.
+            // Each of the session's continues follows an exception handed to it (the program throws and catches one: its
+            // first-chance and user first-chance stages), never a module, a thread or a log message. The line before is
+            // the stage's own: a thread can end between the two stages (Linux CI, run 46055339275), and its continue
+            // came between the first stage's line and the second's continue when only the callback's continues were said.
             string? before = null;
             foreach (var line in log.Split('\n').Select(l => l.Trim()).Where(l => l.StartsWith("[clr] ", StringComparison.Ordinal)))
             {
                 if (line == "[clr] continue (the session's)")
                 {
-                    Assert.True(before?.StartsWith("[clr] continue after Exception", StringComparison.Ordinal) == true, $"A continue of the session's after '{before}'. The adapter's log:\n{log}");
+                    Assert.True(before?.StartsWith("[clr] to the session: Exception", StringComparison.Ordinal) == true, $"A continue of the session's after '{before}'. The adapter's log:\n{log}");
                 }
                 else
                 {

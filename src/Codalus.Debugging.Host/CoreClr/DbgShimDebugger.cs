@@ -370,7 +370,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
     /// <summary>
     /// The ICorDebug of the runtime at <paramref name="runtime"/> in a running process. An app in an iOS simulator or a
-    /// Mac Catalyst app (ADR 0114) gets its debugging libraries from copies macOS loads; and a process whose temporary
+    /// Mac Catalyst app (ADR 0115) gets its debugging libraries from copies macOS loads; and a process whose temporary
     /// folder isn't this one's (such an app's container, a sandbox's) is looked for there, where its runtime made the
     /// debugger's pipes.
     /// </summary>
@@ -397,7 +397,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
     internal static readonly TimeSpan WaitTimeout = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// A launch of a program someone else starts (ADR 0114: a mobile app that the platform's <c>Run</c> target builds,
+    /// A launch of a program someone else starts (ADR 0115: a mobile app that the platform's <c>Run</c> target builds,
     /// installs and starts in a simulator or on this Mac), with the startup hook and
     /// <see cref="NetFxDebugArguments.WaitFolder"/> as its <c>CODALUS_DEBUG_WAIT</c>: the hook reports the process id
     /// there before <c>Main</c> and waits; the debugger attaches by the runtime's path and lets the hook go once the
@@ -429,7 +429,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
         if (OperatingSystem.IsAndroid())
         {
-            // On the device (ADR 0115): the app's own debugging library, and no OS process object to hold.
+            // On the device (ADR 0116): the app's own debugging library, and no OS process object to hold.
             var attached = AndroidRuntime.Attach(pid, arguments.JustMyCode, name);
             try
             {

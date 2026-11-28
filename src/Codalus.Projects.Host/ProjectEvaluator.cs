@@ -319,7 +319,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
     }
 
     /// <summary>
-    /// Whether this evaluation's app runs on CoreCLR where its platform also has Mono (ADR 0114, ADR 0115): the iOS
+    /// Whether this evaluation's app runs on CoreCLR where its platform also has Mono (ADR 0115, ADR 0116): the iOS
     /// and Mac Catalyst workloads set <c>UseMonoRuntime</c> to <c>false</c> then. The Android workload leaves that
     /// property as the project has it and says its choice in <c>_AndroidRuntime</c> (<c>CoreCLR</c>, <c>MonoVM</c> or
     /// <c>NativeAOT</c>). Other projects set neither.

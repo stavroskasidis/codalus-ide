@@ -5,7 +5,7 @@ using Codalus.Debugging.Host.CoreClr;
 namespace Codalus.Debugging.Tests;
 
 /// <summary>
-/// ADR 0115, on every OS: what the Codalus debugger on an Android device reads without dbgshim. The runtime's base
+/// ADR 0116, on every OS: what the Codalus debugger on an Android device reads without dbgshim. The runtime's base
 /// address from <c>/proc/&lt;pid&gt;/maps</c>, which the debugging library's export takes, and the slots through which
 /// a library calls an import (the debugging libraries' <c>kill</c>, which Android refuses for the null signal), in a
 /// small ELF64 library written here.

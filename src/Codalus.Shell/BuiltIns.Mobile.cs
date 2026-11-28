@@ -47,6 +47,13 @@ internal static partial class BuiltIns
         Add("mobile.refreshDevices", "Refresh Devices", shell.RefreshDevicesAsync);
         Add("mobile.installAndroidSdk", "Install the Android SDK…", shell.InstallAndroidDependenciesAsync, "solutionOpen");
 
+        // A MAUI app's Publish (ADR 0114): its archives, and Distribute.
+        Add("mobile.archiveManager", "Archive Manager", () =>
+        {
+            shell.OpenArchiveManager();
+            return Task.CompletedTask;
+        }, "mobileProjects && solutionTrusted");
+
         // The native tools (ADR 0104).
         Add("android.deviceManager", "Android Device Manager", () =>
         {
@@ -86,6 +93,7 @@ internal static partial class BuiltIns
         {
             new(DebugTargetsMenu, "mobile.selectDevice", shell) { Group = "3-mobile", Order = 1, When = WhenClause.Parse("mobileStartup") },
             new(DebugTargetsMenu, "mobile.installAndroidSdk", shell) { Group = "3-mobile", Order = 2, When = WhenClause.Parse("mobileProjects") },
+            new(MenuLocations.MenuBar("build"), "mobile.archiveManager", shell) { Group = "2-project", Order = 10, When = WhenClause.Parse("mobileProjects") },
 
             // Tools → Android ▸, as the classic IDE has it.
             MenuItemRule.ForSubmenu(tools, ToolsAndroidMenu, "Android", shell) with { Group = "1-mobile", Order = 1 },

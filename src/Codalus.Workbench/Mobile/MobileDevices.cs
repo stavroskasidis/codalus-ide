@@ -187,9 +187,39 @@ public sealed record SigningIdentity(string Hash, string Name)
     public string? Team => Name.LastIndexOf('(') is var open and >= 0 && Name.EndsWith(')') ? Name[(open + 1)..^1] : null;
 }
 
+/// <summary>What a provisioning profile signs for (ADR 0114): read from the devices it lists and its entitlements.</summary>
+public enum ProvisioningKind
+{
+    /// <summary>Lists devices and allows a debugger (<c>get-task-allow</c>).</summary>
+    Development,
+
+    /// <summary>Lists devices without a debugger: ad hoc (iOS's "Release Testing").</summary>
+    AdHoc,
+
+    /// <summary>Lists no devices: the App Store (and TestFlight).</summary>
+    AppStore,
+
+    /// <summary>Provisions all devices: an enterprise's in-house distribution.</summary>
+    Enterprise,
+
+    /// <summary>A Mac's Developer ID distribution outside the Mac App Store.</summary>
+    DeveloperId,
+}
+
 /// <summary>An installed provisioning profile.</summary>
 public sealed record ProvisioningProfile(string Uuid, string Name, string? Team, string? ApplicationId, DateTimeOffset? Expires, string Path)
 {
+    public ProvisioningKind Kind { get; init; } = ProvisioningKind.Development;
+
+    /// <summary>The platforms it lists (<c>iOS</c>, <c>OSX</c>); empty when it lists none.</summary>
+    public IReadOnlyList<string> Platforms { get; init; } = [];
+
+    /// <summary>Whether it signs apps for <paramref name="platform"/> (Mac Catalyst apps take the Mac's profiles; one listing no platform signs any).</summary>
+    public bool IsFor(MobilePlatform platform) =>
+        Platforms.Count == 0
+        || (platform == MobilePlatform.iOS && Platforms.Contains("iOS", StringComparer.OrdinalIgnoreCase))
+        || (platform == MobilePlatform.MacCatalyst && Platforms.Contains("OSX", StringComparer.OrdinalIgnoreCase));
+
     public bool IsExpired(DateTimeOffset now) => Expires is { } expires && expires < now;
 
     /// <summary>Whether it covers <paramref name="bundleId"/> (its application identifier, after the team prefix, may end with <c>*</c>).</summary>
@@ -250,54 +280,28 @@ public static class AppleSigning
         var text = Encoding.Latin1.GetString(contents);
         var start = text.IndexOf("<?xml", StringComparison.Ordinal);
         var end = text.IndexOf("</plist>", StringComparison.Ordinal);
-        if (start < 0 || end < start)
+        if (start < 0 || end < start
+            || PropertyList.ParseDictionary(Encoding.UTF8.GetString(contents, start, end + "</plist>".Length - start)) is not { } values
+            || values.GetValueOrDefault("UUID") is not string uuid)
         {
             return null;
         }
 
-        try
+        var entitlements = values.GetValueOrDefault("Entitlements") as IReadOnlyDictionary<string, object>;
+        var applicationId = entitlements?.GetValueOrDefault("application-identifier") as string
+            ?? entitlements?.GetValueOrDefault("com.apple.application-identifier") as string;
+        var team = (values.GetValueOrDefault("TeamIdentifier") as IReadOnlyList<object>)?.OfType<string>().FirstOrDefault();
+        var platforms = (values.GetValueOrDefault("Platform") as IReadOnlyList<object>)?.OfType<string>().ToList() ?? [];
+        var kind = values.GetValueOrDefault("ProvisionsAllDevices") is true
+                ? (platforms.Contains("OSX", StringComparer.OrdinalIgnoreCase) ? ProvisioningKind.DeveloperId : ProvisioningKind.Enterprise)
+            : values.ContainsKey("ProvisionedDevices")
+                ? (entitlements?.GetValueOrDefault("get-task-allow") is true || entitlements?.GetValueOrDefault("com.apple.security.get-task-allow") is true ? ProvisioningKind.Development : ProvisioningKind.AdHoc)
+            : ProvisioningKind.AppStore;
+        return new ProvisioningProfile(uuid, values.GetValueOrDefault("Name") as string ?? uuid, team, applicationId, values.GetValueOrDefault("ExpirationDate") as DateTimeOffset?, path)
         {
-            var plist = XDocument.Parse(Encoding.UTF8.GetString(contents, start, end + "</plist>".Length - start));
-            if (plist.Root?.Element("dict") is not { } dict)
-            {
-                return null;
-            }
-
-            var values = Dictionary(dict);
-            var entitlements = values.GetValueOrDefault("Entitlements") as XElement;
-            var applicationId = entitlements is null ? null : (Dictionary(entitlements).GetValueOrDefault("application-identifier") as XElement)?.Value;
-            var team = (values.GetValueOrDefault("TeamIdentifier") as XElement)?.Elements("string").FirstOrDefault()?.Value;
-            DateTimeOffset? expires = (values.GetValueOrDefault("ExpirationDate") as XElement)?.Value is { } date
-                && DateTimeOffset.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
-            var uuid = (values.GetValueOrDefault("UUID") as XElement)?.Value;
-            var name = (values.GetValueOrDefault("Name") as XElement)?.Value;
-            return uuid is null ? null : new ProvisioningProfile(uuid, name ?? uuid, team, applicationId, expires, path);
-        }
-        catch (System.Xml.XmlException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>A plist <c>&lt;dict&gt;</c>'s keys and their value elements.</summary>
-    private static Dictionary<string, object> Dictionary(XElement dict)
-    {
-        var result = new Dictionary<string, object>(StringComparer.Ordinal);
-        string? key = null;
-        foreach (var element in dict.Elements())
-        {
-            if (element.Name.LocalName == "key")
-            {
-                key = element.Value;
-            }
-            else if (key is not null)
-            {
-                result[key] = element;
-                key = null;
-            }
-        }
-
-        return result;
+            Kind = kind,
+            Platforms = platforms,
+        };
     }
 
     /// <summary>The profiles in the usual folders.</summary>

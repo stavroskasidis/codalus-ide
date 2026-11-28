@@ -192,7 +192,7 @@ public sealed record ProjectInfo(
     public string? WindowsPackageType { get; init; }
 
     /// <summary>
-    /// The target frameworks whose apps run on CoreCLR where Mono used to be the runtime (ADR 0114): those whose
+    /// The target frameworks whose apps run on CoreCLR where Mono used to be the runtime (ADR 0115): those whose
     /// <c>UseMonoRuntime</c> evaluates to <c>false</c>, as .NET 11's Android, iOS and Mac Catalyst workloads set it by
     /// default. The Mono debugger can't debug them. Empty for other projects, which don't set the property.
     /// </summary>

@@ -12,7 +12,7 @@ namespace Codalus.Shell;
 /// </summary>
 public sealed partial class ShellHost
 {
-    /// <summary>Opens a project's Publish page (its profiles; a folder profile is made when it has none).</summary>
+    /// <summary>Opens a project's Publish page (its profiles; a folder profile is made when it has none); a MAUI app's opens the Archive Manager.</summary>
     public PublishViewModel? OpenPublish(string? argument = null)
     {
         if (!RequireTrustedSolution("Publishing") || RequireProject(argument, "publish") is not { } project)
@@ -23,6 +23,13 @@ public sealed partial class ShellHost
         if (!Solutions.Projects.TryGetValue(project, out var info) || info.IsComposeProject || info.TargetFrameworks.Length == 0)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.publishing.selectAnApplicationProjectToPublish", "Select an application project to publish."), TimeSpan.FromSeconds(4));
+            return null;
+        }
+
+        // A MAUI app publishes through archives, signed per channel (ADR 0114), not to a folder.
+        if (Codalus.Workbench.Mobile.MobileTargets.IsMobile(info))
+        {
+            OpenArchiveManager(project);
             return null;
         }
 

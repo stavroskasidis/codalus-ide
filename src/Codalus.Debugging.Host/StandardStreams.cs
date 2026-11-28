@@ -4,7 +4,7 @@ using Microsoft.Win32.SafeHandles;
 namespace Codalus.Debugging.Host;
 
 /// <summary>
-/// The process's standard input, output and error as their file descriptors (ADR 0115). On Android .NET's console is
+/// The process's standard input, output and error as their file descriptors (ADR 0116). On Android .NET's console is
 /// the system log (<c>logcat</c>) and has no input, while the debugger there is started by adb's shell, whose
 /// standard streams are the IDE's DAP connection and its log.
 /// </summary>

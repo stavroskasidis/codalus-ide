@@ -5,7 +5,7 @@ using System.Text;
 namespace Codalus.Debugging.Host.CoreClr;
 
 /// <summary>
-/// Redirects a function a loaded 64-bit ELF library imports (ADR 0115): the slot the library calls it through (its
+/// Redirects a function a loaded 64-bit ELF library imports (ADR 0116): the slot the library calls it through (its
 /// procedure linkage's, or its global offset table's) is found from the library's dynamic section as the loader mapped
 /// it, and rewritten. The loader made those slots read-only once it had filled them, so the page is made writable for
 /// the write and read-only again after.

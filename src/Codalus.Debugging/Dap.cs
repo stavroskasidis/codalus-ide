@@ -186,7 +186,7 @@ public sealed record NetFxDebugArguments(
     public bool SourcesOnClient { get; init; }
 
     /// <summary>
-    /// A launch of a program that something else starts (ADR 0114: a mobile app on CoreCLR, which the platform's
+    /// A launch of a program that something else starts (ADR 0115: a mobile app on CoreCLR, which the platform's
     /// <c>Run</c> target builds, installs and starts): the folder that program got as <c>CODALUS_DEBUG_WAIT</c>, with
     /// the startup hook. The Codalus debugger waits for the process id the hook writes there, attaches, and lets the
     /// hook go. <see cref="Program"/> is only its name then.

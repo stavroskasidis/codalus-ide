@@ -36,7 +36,7 @@
   </PropertyGroup>
 
   <!--
-    The bundle for Android (ADR 0115): built for linux-bionic-<arch> (its app host and host libraries), on the Android
+    The bundle for Android (ADR 0116): built for linux-bionic-<arch> (its app host and host libraries), on the Android
     runtime pack's runtime (Microsoft.NETCore.App.Runtime.android-<arch>), which the app being debugged runs on too:
     the linux-bionic pack's CoreCLR crashed at its start on an Android 16 emulator, its first call to JIT-compiled
     code. The pack is swapped before trimming, so what is trimmed is what runs. eng/get-codalus-debugger.sh names it

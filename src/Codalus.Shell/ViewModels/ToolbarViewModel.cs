@@ -39,6 +39,7 @@ public sealed class ToolbarViewModel : ObservableObject
     private StartupProjectChoice? _startup;
     private string _startLabel = "Start";
     private string? _deviceLabel;
+    private string? _deviceToolTip;
     private bool _hasSolution;
     private string? _solutionName;
     private bool _isDebugging;
@@ -267,7 +268,10 @@ public sealed class ToolbarViewModel : ObservableObject
         }
     }
 
-    /// <summary>The device a mobile startup project runs on (M20a): its name, or null when the startup project isn't one.</summary>
+    /// <summary>
+    /// The device a mobile startup project runs on (M20a): its platform and name ("Android: Pixel 9"), or null when the
+    /// startup project isn't one.
+    /// </summary>
     public string? DeviceLabel
     {
         get => _deviceLabel;
@@ -284,7 +288,18 @@ public sealed class ToolbarViewModel : ObservableObject
 
     public ICommand SelectDeviceCommand => _command("mobile.selectDevice");
 
-    public void SetDevice(string? label) => DeviceLabel = label;
+    /// <summary>The device button's tooltip: which project and framework Start runs on the device.</summary>
+    public string? DeviceToolTip
+    {
+        get => _deviceToolTip;
+        private set => SetField(ref _deviceToolTip, value);
+    }
+
+    public void SetDevice(string? label, string? toolTip)
+    {
+        DeviceLabel = label;
+        DeviceToolTip = toolTip;
+    }
 
     /// <summary>A Start's progress, from the click until its program runs or its debug session starts; null when it's over.</summary>
     public void SetLaunching(string? status)

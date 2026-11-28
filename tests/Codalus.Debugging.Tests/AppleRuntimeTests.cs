@@ -7,7 +7,7 @@ using Codalus.Debugging.Host.NetFx;
 namespace Codalus.Debugging.Tests;
 
 /// <summary>
-/// ADR 0114: what attaching to a CoreCLR app in an iOS simulator needs beyond a desktop attach. The platform a Mach-O
+/// ADR 0115: what attaching to a CoreCLR app in an iOS simulator needs beyond a desktop attach. The platform a Mach-O
 /// library was built for, read from its header; a process's temporary folder, read from its environment; and the
 /// copies of the runtime's debugging libraries that macOS loads, made once with Xcode's tools (stand-ins here: the
 /// real ones need a simulator's runtime, and are checked by hand on a Mac).

@@ -12,7 +12,7 @@ namespace Codalus.Debugging.Host.CoreClr;
 
 /// <summary>
 /// What attaching to a CoreCLR app in an iOS simulator or a Mac Catalyst app needs on top of a desktop program's
-/// attach (ADR 0114). Such an app is a process of this Mac, and its runtime answers the same debugger transport, but:
+/// attach (ADR 0115). Such an app is a process of this Mac, and its runtime answers the same debugger transport, but:
 /// <list type="bullet">
 /// <item>its runtime's debugging libraries (<c>libmscordbi</c>, <c>libmscordaccore</c>, in the app's bundle) are built
 /// for its platform, which dyld refuses to load into a macOS process: <see cref="DebugLibraries"/> makes copies marked

@@ -384,7 +384,7 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
     }
 
     /// <summary>
-    /// The plan that builds, deploys and starts a CoreCLR app in an iOS simulator for the Codalus debugger (ADR 0114),
+    /// The plan that builds, deploys and starts a CoreCLR app in an iOS simulator for the Codalus debugger (ADR 0115),
     /// and the folder its startup hook reports in; null when such an app can't be debugged on the device yet
     /// (<see cref="MobileTargets.DebugsCoreClr"/>). The hook is copied next to that folder, under a new temporary
     /// folder (<c>Folder</c>, the caller's to remove when the session ends): the app reads it from there, and the
@@ -409,7 +409,7 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
 
     /// <summary>
     /// The plan that builds, deploys and starts a CoreCLR app on a running Android device or emulator, held by the
-    /// debugger's startup hook in <paramref name="waitFolder"/> on the device (ADR 0115).
+    /// debugger's startup hook in <paramref name="waitFolder"/> on the device (ADR 0116).
     /// </summary>
     public LaunchPlan AndroidCoreClrDebugPlan(string dotnet, ProjectInfo project, string framework, MobileDevice device, string? configuration, string hook, string waitFolder)
     {

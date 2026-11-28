@@ -25,7 +25,7 @@ Help → Check Environment lists each workload the solution needs, the Android S
 
 ## Running on a device
 
-When the startup project is a MAUI app, the toolbar shows a **device** next to it. Click it to choose where the app runs:
+When the startup project is a MAUI app, the toolbar shows the **device** it runs on next to it, platform first: **Android: Pixel 9 Pro API 36**, **iOS: iPhone 17**. Its tooltip names the framework **Start** builds (`net10.0-android`). Click it to choose where the app runs. The list is grouped by platform, each group headed by the platform and its framework (**Android (net10.0-android)**, **iOS (net10.0-ios)**), the current platform first:
 - **Android:** connected phones and tablets (with USB debugging on), running emulators, and the virtual devices you've created. A virtual device that isn't running starts when you run the app on it.
 - **iOS** (on a Mac): simulators and connected iPhones and iPads.
 - **This Mac:** Mac Catalyst.
@@ -123,6 +123,47 @@ Errors show in red and warnings in yellow. The window keeps the last 50,000 entr
 
 On a Mac, Tools → iOS → **Open Simulator** opens Xcode's Simulator app, and **Open Xcode** opens Xcode. Xcode's Devices and Simulators window has no command to open it from outside, so open it from Xcode's Window menu.
 
+## Publishing: archives and distribution
+
+**Build → Publish** on a MAUI app (or **Build → Archive Manager**) opens the **Archive Manager** instead of the folder publish page other projects get. Publishing a MAUI app takes two steps, as in the classic IDE:
+1. **Archive** builds the app once in Release for one platform.
+2. **Distribute** signs that archive for a channel. You can distribute one archive to several channels, or to the same channel again.
+
+### Archiving
+
+Choose the platform, check the **Version** (`ApplicationDisplayVersion`) and the **Build number** (`ApplicationVersion`), then click **Archive**. Stores refuse a build number they've seen before. When this version already has an archive for the platform, **Increment the build number** is checked, and the new number is written into the project file before the build: it shows in Git Changes, ready to commit. The build's output is in Output → Build and its errors are in the Error List.
+
+| Platform | What Archive makes | Where it's kept |
+|---|---|---|
+| Android | An App Bundle (`.aab`) and an `.apk`, signed with the debug key | `archives/` in Codalus IDE's data folder |
+| iOS (on a Mac) | An Xcode archive (`.xcarchive`) for devices (`ios-arm64`) | Xcode's archives folder, so Xcode's Organizer lists it too |
+| Mac Catalyst (on a Mac) | An Xcode archive of the Mac app | Xcode's archives folder |
+| Windows (on Windows) | An unsigned `.msix` when the app is packaged (`WindowsPackageType` `MSIX`), else the self-contained unpackaged app | `archives/` in Codalus IDE's data folder |
+
+The list shows every archive of the solution's MAUI apps: the IDE's, and Xcode's for the same bundle id. **Show in file manager** and **Delete** act on the selected one. Deleting an Xcode archive removes it from Xcode's Organizer too.
+
+### Distributing
+
+Select an archive, choose a **channel**, choose how it's signed, then click **Distribute**. The signed file goes into a `Distribution` folder beside the archive, and a notification offers **Open Folder** and the store's **Open Upload Page**. Codalus IDE doesn't upload anything and keeps no store credentials: you upload the file in the Play Console, Transporter (or App Store Connect), or Partner Center.
+
+| Platform | Channels | Signed with |
+|---|---|---|
+| Android | **Google Play** (a signed `.aab`), **Ad Hoc** (a signed `.apk`) | Your signing key: `jarsigner` signs the bundle (the debug key's signature is removed first), `apksigner` signs the APK |
+| iOS | **App Store Connect**, **Ad Hoc**, **Enterprise**, **Development** (an `.ipa`) | A certificate in your keychain and an installed provisioning profile, through `xcodebuild -exportArchive` |
+| Mac Catalyst | **App Store Connect** (a `.pkg`), **Developer ID**, **Development** | The same, with an installer certificate for the Mac App Store |
+| Windows | **Sideload** (a signed `.msix`, or the unpackaged app's `.zip`), **Microsoft Store** (an unsigned `.msixupload`: the Store signs it) | A code-signing certificate, through the Windows SDK's `signtool` |
+
+### Signing keys and certificates
+
+**Android signing keys** are yours, not the project's: Codalus IDE keeps each keystore's path and alias in `signing.json` in its data folder, never in the repository, and its passwords in the OS credential store (Credential Manager, Keychain, libsecret). The passwords reach `keytool`, `jarsigner` and `apksigner` through their environment, never on a command line.
+- **Create…** makes a new upload key with the JDK's `keytool`: RSA 2048 in a PKCS12 keystore, valid for 30 years by default (Google Play asks for more than 25). Back the file up with its password: Google Play needs the same upload key for every update unless you ask Google to reset it.
+- **Import…** adds a keystore you already have (`.keystore`, `.jks`) once `keytool` opens it with the password and finds the alias. A key password can differ from the keystore's.
+- **Remove** forgets a key and its passwords. The keystore file stays where it is.
+
+**Apple certificates and profiles** come from this Mac: the keychain's identities (`security find-identity`) and the installed provisioning profiles. Codalus IDE lists only those that fit the channel: an Apple Distribution certificate and an App Store profile for App Store Connect, an ad hoc profile for Ad Hoc, a Developer ID certificate for Developer ID, and so on. A profile must cover the app's bundle id and not be expired. Codalus IDE doesn't sign in to your Apple account. If nothing fits, create the certificate or profile on the Apple Developer site, or let Xcode do it in Xcode → Settings → Accounts, then click **Refresh**.
+
+**Windows certificates** are the code-signing certificates in your certificate store, or `.pfx` files you add with **Import .pfx…** (their password in the credential store). An MSIX signs only with a certificate whose subject is the package's publisher (`Identity/@Publisher` in `Package.appxmanifest`), so only those are listed. **Create Test Certificate** makes a self-signed one with that subject in your store, and Distribute puts its `.cer` beside the package. A machine that installs the package needs that certificate in Trusted People first. Test certificates are for testing: sign packages you share with a certificate from a certificate authority.
+
 ## Editing MAUI XAML
 
 `.xaml` files in a MAUI project get the same editing as [Avalonia's XAML](avalonia.md#editing-xaml), with MAUI's controls and your own:
@@ -142,3 +183,4 @@ With the MAUI workload installed, File → New Project lists **.NET MAUI App**, 
 - A XAML previewer and XAML Hot Reload for MAUI: no open-source ones exist.
 - Changing an emulator's device profile after it's created (create a new one), and the log of a physical iPhone or iPad.
 - Running the Windows target from Linux and macOS (through a Windows machine), and breakpoints in a packaged Windows app's start-up code.
+- Uploading to the stores from the IDE, notarizing a Developer ID app, signing an app's extensions with their own profiles, and timestamping a Windows signature.

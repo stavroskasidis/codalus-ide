@@ -577,7 +577,7 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Debugs a program that something else starts with the startup hook (ADR 0114: a CoreCLR app that the iOS SDK's
+    /// Debugs a program that something else starts with the startup hook (ADR 0115: a CoreCLR app that the iOS SDK's
     /// <c>Run</c> target builds, installs and starts in a simulator): the Codalus debugger waits for the hook to report
     /// in <paramref name="waitFolder"/>, the program's <c>CODALUS_DEBUG_WAIT</c>, attaches and lets it go. Stopping the
     /// session ends the program. Throws when the debugger isn't installed, the program never reports, or
@@ -592,7 +592,7 @@ public sealed class DebugService : IAsyncDisposable
             cancellationToken);
 
     /// <summary>
-    /// The Codalus debugger of an app on an Android device or emulator (ADR 0115): <paramref name="adapter"/> starts it
+    /// The Codalus debugger of an app on an Android device or emulator (ADR 0116): <paramref name="adapter"/> starts it
     /// there (through adb), and it waits for the app that reports in <paramref name="waitFolder"/>, a folder of the
     /// device's. The sources and the symbol options are this machine's, as for a remote target.
     /// </summary>

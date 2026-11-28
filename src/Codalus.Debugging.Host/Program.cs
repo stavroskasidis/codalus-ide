@@ -18,7 +18,7 @@ if (args.Contains("--activate-app"))
     return AppActivation.Run(args, Console.Out, Console.Error);
 }
 
-// On Android (ADR 0115) the runtime's console is the system log, and it has no standard input: the adapter's streams
+// On Android (ADR 0116) the runtime's console is the system log, and it has no standard input: the adapter's streams
 // are its file descriptors, as adb's shell gives them.
 var (stdin, stdout) = OperatingSystem.IsAndroid() ? StandardStreams.Open() : (Console.OpenStandardInput(), Console.OpenStandardOutput());
 Console.SetOut(Console.Error);

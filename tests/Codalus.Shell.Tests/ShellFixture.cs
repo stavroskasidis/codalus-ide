@@ -281,6 +281,23 @@ internal sealed class ShellFixture : IAsyncDisposable
     }
 
     /// <summary>
+    /// A left click raised on the headless window itself, as an OS raises one: nothing else runs before or after it. Use it
+    /// for a double-click. Avalonia.Headless's own MouseDown and MouseUp extensions run the dispatcher's jobs and force up to
+    /// ten render ticks before and after each event (12.1.6's HeadlessWindowExtensions.RunJobsOnImpl), and the window stamps
+    /// an event with its stopwatch as it's raised, so whatever the first click starts pushes the second press later: 238 ms
+    /// apart on an idle Linux session, 693 ms on Linux CI (run 45758630133), past the 500 ms double-click time, and the two
+    /// presses count one click each. An OS stamps a press when it happens, so a slow frame doesn't split a user's
+    /// double-click. The window's input interface is internal.
+    /// </summary>
+    public static void RawClick(TopLevel window, Point point, RawInputModifiers modifiers = RawInputModifiers.None)
+    {
+        var headless = typeof(AvaloniaHeadlessPlatform).Assembly.GetType("Avalonia.Headless.IHeadlessWindow", throwOnError: true)!;
+        var impl = window.PlatformImpl ?? throw new ObjectDisposedException(window.GetType().Name);
+        headless.GetMethod("MouseDown")!.Invoke(impl, [point, MouseButton.Left, modifiers]);
+        headless.GetMethod("MouseUp")!.Invoke(impl, [point, MouseButton.Left, modifiers]);
+    }
+
+    /// <summary>
     /// Runs pending dispatcher work and layout, then renders a frame with all of it. Call it before hit testing:
     /// <c>InputHitTest</c> reads the compositor's last rendered frame, not the layout, and after <see cref="Pump"/> that
     /// frame can still be the one before the last layout change (its commit waits for the previous one, and the headless

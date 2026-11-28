@@ -133,13 +133,13 @@
       remote/<rid>/debugger.tar.gz  the Codalus debugger's bundle for that platform (M58b, ADR 0094): codalus-debughost
                                   self-contained and trimmed, as it is copied to SSH, container and WSL targets to
                                   debug there; debugger.id names its build. Also for android-arm64 and
-                                  android-x64 ($(CodalusAndroidDebuggerRids), ADR 0115): copied into an app on an
+                                  android-x64 ($(CodalusAndroidDebuggerRids), ADR 0116): copied into an app on an
                                   Android device or emulator to debug it on CoreCLR
   -->
   <PropertyGroup>
     <!-- The remote platforms that get a self-contained server in a published install (empty: none; remote machines then need .NET). -->
     <CodalusServerRids Condition="'$(CodalusServerRids)' == ''">linux-x64;linux-arm64</CodalusServerRids>
-    <!-- The Android platforms that get the Codalus debugger's bundle (ADR 0115; empty: none, and CoreCLR apps there aren't debugged). -->
+    <!-- The Android platforms that get the Codalus debugger's bundle (ADR 0116; empty: none, and CoreCLR apps there aren't debugged). -->
     <CodalusAndroidDebuggerRids Condition="'$(CodalusAndroidDebuggerRids)' == ''">android-arm64;android-x64</CodalusAndroidDebuggerRids>
   </PropertyGroup>
 

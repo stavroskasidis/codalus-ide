@@ -1,16 +1,16 @@
-# 0115. Debugging CoreCLR apps on Android
+# 0116. Debugging CoreCLR apps on Android
 
 - **Status:** accepted (2026-11-28; the maintainer's report of 2026-11-24, and their ask for the debugger itself rather than a message)
 - **Date:** 2026-11-28
 - **Deciders:** maintainer
-- **Amends:** [ADR 0114](0114-debugging-coreclr-apps-in-ios-simulators.md) (its Android finding, and the platforms F5 debugs on CoreCLR), [ADR 0065](0065-mono-debugger-adapter.md) (mobile debugging through the Mono adapter)
+- **Amends:** [ADR 0115](0115-debugging-coreclr-apps-in-ios-simulators.md) (its Android finding, and the platforms F5 debugs on CoreCLR), [ADR 0065](0065-mono-debugger-adapter.md) (mobile debugging through the Mono adapter)
 - **Builds on:** [ADR 0086](0086-a-managed-coreclr-debugger.md) and [ADR 0094](0094-the-codalus-debugger-by-default.md) (the Codalus debugger, its startup hook, its bundles for other machines)
 
 ## Context
 
-The maintainer's report: F5 on a new .NET 11 MAUI app on an Android emulator ran the app, and no breakpoint ever stopped. The Debug Console said "Waiting for the Mono runtime to connect to 127.0.0.1:…" and kept saying it, as on iOS before ADR 0114.
+The maintainer's report: F5 on a new .NET 11 MAUI app on an Android emulator ran the app, and no breakpoint ever stopped. The Debug Console said "Waiting for the Mono runtime to connect to 127.0.0.1:…" and kept saying it, as on iOS before ADR 0115.
 
-ADR 0114 found .NET 11's iOS apps on CoreCLR through `UseMonoRuntime`, and thought Android kept Mono because that property evaluates to nothing there. It doesn't keep Mono. The Android SDK says its runtime in `_AndroidRuntime`, and `UseMonoRuntime` only chooses Mono when it is `true`.
+ADR 0115 found .NET 11's iOS apps on CoreCLR through `UseMonoRuntime`, and thought Android kept Mono because that property evaluates to nothing there. It doesn't keep Mono. The Android SDK says its runtime in `_AndroidRuntime`, and `UseMonoRuntime` only chooses Mono when it is `true`.
 
 What a spike on the Mac found (Apple silicon, macOS 27.2, .NET 11.0.0, the Android SDK 37.2.31, an arm64 Android 16 emulator, a new .NET 11 MAUI app's Debug build):
 
@@ -54,7 +54,7 @@ What a spike on the Mac found (Apple silicon, macOS 27.2, .NET 11.0.0, the Andro
 
 ## Decision
 
-1. **Android apps on CoreCLR are found.** `ProjectInfo.CoreClrFrameworks` lists a framework whose evaluation has `_AndroidRuntime` equal to `CoreCLR`, as well as one whose `UseMonoRuntime` is `false` (ADR 0114). An Android app on Mono (`MonoVM`) or NativeAOT isn't listed.
+1. **Android apps on CoreCLR are found.** `ProjectInfo.CoreClrFrameworks` lists a framework whose evaluation has `_AndroidRuntime` equal to `CoreCLR`, as well as one whose `UseMonoRuntime` is `false` (ADR 0115). An Android app on Mono (`MonoVM`) or NativeAOT isn't listed.
 2. **F5 debugs it with the Codalus debugger on the device or emulator,** never the Mono adapter. The device has to be running (F5 starts an emulator first, as for a run) and 64-bit (arm64 or x86_64). Elsewhere a message says why at once.
 3. **The debugger's bundle for Android.**
    - `android-arm64` and `android-x64` are built for `linux-bionic-<arch>`, on the Android runtime pack. The host's project swaps the runtime pack before trimming, so what is trimmed is what runs, and adds the bionic pack's `libhostfxr.so` and `libhostpolicy.so`.
@@ -77,7 +77,7 @@ What a spike on the Mac found (Apple silicon, macOS 27.2, .NET 11.0.0, the Andro
      - `-e CODALUS_DEBUG_WAIT=<the app's cache>/codalus-debug-<run>`, a new folder each run
      - `-e CODALUS_DEBUG_WAIT_CREATE=1`, so that the hook makes the folder (the IDE can't before the install)
      - `-e CODALUS_DEBUG_WAIT_SECONDS=900`
-   - The IDE asks the device for the folder's `pid` each second (`run-as … cat`). Once the app has reported, it copies the debugger in, starts it, and launches with `waitFolder` (ADR 0114's wait). The hook goes on once the breakpoints are set.
+   - The IDE asks the device for the folder's `pid` each second (`run-as … cat`). Once the app has reported, it copies the debugger in, starts it, and launches with `waitFolder` (ADR 0115's wait). The hook goes on once the breakpoints are set.
    - The sources are this machine's (`sourcesOnClient`, as for remote targets: the app's PDBs name this machine's paths). The symbol options stay here.
    - A run that ends before the app reported cancels the session. An app that has run for 30 seconds without reporting gets a message: a Release build, or one with startup hooks off, isn't debugged.
    - Stopping the session ends the app, which ends the run.

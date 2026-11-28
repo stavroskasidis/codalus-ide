@@ -6,7 +6,7 @@ using Codalus.Debugging.Host.NetFx;
 namespace Codalus.Debugging.Host.CoreClr;
 
 /// <summary>
-/// The debugging API of an Android app's CoreCLR (ADR 0115), for the debugger running on the device or in the emulator
+/// The debugging API of an Android app's CoreCLR (ADR 0116), for the debugger running on the device or in the emulator
 /// as the app's own user (<c>run-as</c>). There is no dbgshim for Android, so this does its two jobs: the runtime is
 /// the <c>libcoreclr.so</c> the process maps, and its ICorDebug comes from the <c>libmscordbi.so</c> next to it (a Debug
 /// build's package has it, with <c>libmscordaccore.so</c>), through its own export (the one Microsoft's guide for

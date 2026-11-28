@@ -60,14 +60,28 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => shapes.Insights.Margin.Items.ContainsKey(areaLine), seconds: 60, describe: () => $"margin {shapes.Insights.Margin.Items.Count}");
 
         // As at a file's open: the margin's glyphs needed with the hints (a refresh with them in range asks only the hints).
+        // The first update after it has both: shown as each came, the hints' update came first, without the glyphs. Other
+        // updates may follow and aren't counted: this file has no hints, so the view asks again after an empty answer and
+        // after new diagnostics (a third update within the half second this test waited, macOS CI, run 46109617792), and
+        // each of those asks for the glyphs with the hints too.
         var before = shapes.Insights.ViewportUpdates;
+        bool? glyphsInFirstUpdate = null;
+        void OnUpdated(object? sender, EventArgs e)
+        {
+            // Updated also follows the lenses and the symbols: only the viewport's updates count them.
+            if (shapes.Insights.ViewportUpdates > before)
+            {
+                glyphsInFirstUpdate ??= !shapes.Insights.Margin.NeedsRange(areaLine, areaLine);
+            }
+        }
+
+        shapes.Insights.Updated += OnUpdated;
         shapes.Insights.Margin.Invalidate();
         shapes.Insights.Refresh();
         await ShellFixture.PumpUntil(() => shapes.Insights.ViewportUpdates > before, seconds: 30);
-        await Task.Delay(500, TestContext.Current.CancellationToken);
-        ShellFixture.Pump();
+        shapes.Insights.Updated -= OnUpdated;
 
-        Assert.Equal(before + 1, shapes.Insights.ViewportUpdates);
+        Assert.True(glyphsInFirstUpdate, "the first update after the refresh came without the inheritance glyphs");
         Assert.True(shapes.Insights.Margin.Items.ContainsKey(areaLine));
     }
 

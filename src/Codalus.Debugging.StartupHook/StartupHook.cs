@@ -10,7 +10,7 @@ using System.Threading;
 /// the IDE starts the program there itself and attaches: before <c>Main</c>, this hook writes the process id to
 /// <c>$CODALUS_DEBUG_WAIT/pid</c> and waits for <c>$CODALUS_DEBUG_WAIT/go</c>, which the IDE writes once the debugger
 /// has attached and set the breakpoints. After <c>CODALUS_DEBUG_WAIT_SECONDS</c> (120) it goes on without it.
-/// With <c>CODALUS_DEBUG_WAIT_CREATE</c> set to <c>1</c> it makes the folder first (an Android app, ADR 0115: the folder
+/// With <c>CODALUS_DEBUG_WAIT_CREATE</c> set to <c>1</c> it makes the folder first (an Android app, ADR 0116: the folder
 /// is in the app's own storage, which the IDE can't reach before the build installed it, and the app starts right after).
 /// The variables are cleared, so the program's own child processes don't wait.
 /// Programs the Codalus debugger launches get it too, for <see cref="HotReloadAgent"/> (ADR 0090), and <c>dotnet watch</c>

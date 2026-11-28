@@ -3,9 +3,9 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Projects.Tests;
 
 /// <summary>
-/// ADR 0114: a project says which of its target frameworks run on CoreCLR where Mono used to be the runtime
+/// ADR 0115: a project says which of its target frameworks run on CoreCLR where Mono used to be the runtime
 /// (<c>UseMonoRuntime</c> evaluated to <c>false</c>, as .NET 11's iOS workload sets it, or <c>_AndroidRuntime</c> to
-/// <c>CoreCLR</c>, as its Android workload does: ADR 0115), per framework. Projects that set neither, and frameworks
+/// <c>CoreCLR</c>, as its Android workload does: ADR 0116), per framework. Projects that set neither, and frameworks
 /// that keep Mono, aren't listed. The properties are set here by the project itself, so no workload is needed.
 /// </summary>
 public sealed class CoreClrFrameworksTests : IAsyncLifetime

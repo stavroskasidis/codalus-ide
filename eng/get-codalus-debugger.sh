@@ -8,7 +8,7 @@
 # Usage: eng/get-codalus-debugger.sh [rid…]     default: this machine's; any of linux-x64, linux-arm64, osx-arm64, the
 #        two a package offers as components: osx-x64 (x64 programs on Apple silicon) and win-x86 (32-bit .NET
 #        Framework programs), and android-arm64 and android-x64 (CoreCLR apps on Android devices and emulators, ADR
-#        0115: built for linux-bionic on Android's runtime pack). A bundle builds on any OS.
+#        0116: built for linux-bionic on Android's runtime pack). A bundle builds on any OS.
 # It builds in .work/debugger-build (its own obj and bin: the solution's aren't touched), and does nothing for a bundle
 # that is already built from the same sources (bundle.id).
 set -euo pipefail

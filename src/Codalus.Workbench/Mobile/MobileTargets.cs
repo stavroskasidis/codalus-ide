@@ -261,18 +261,18 @@ public static class MobileTargets
     }
 
     /// <summary>
-    /// Whether <paramref name="framework"/>'s app runs on CoreCLR, which the Mono debugger can't debug (ADR 0114, ADR
-    /// 0115): .NET 11's default on Android, iOS and Mac Catalyst (<see cref="ProjectInfo.CoreClrFrameworks"/>).
+    /// Whether <paramref name="framework"/>'s app runs on CoreCLR, which the Mono debugger can't debug (ADR 0115, ADR
+    /// 0116): .NET 11's default on Android, iOS and Mac Catalyst (<see cref="ProjectInfo.CoreClrFrameworks"/>).
     /// </summary>
     public static bool RunsOnCoreClr(ProjectInfo project, string framework) =>
         project.CoreClrFrameworks.Contains(framework, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether a CoreCLR app of <paramref name="framework"/> can be debugged on <paramref name="device"/>: in an iOS
-    /// simulator, where the app is a process of this Mac that the Codalus debugger attaches to (ADR 0114), and on a
-    /// running Android device or emulator, where the debugger runs as the app's user (ADR 0115). Not yet on an iPhone,
+    /// simulator, where the app is a process of this Mac that the Codalus debugger attaches to (ADR 0115), and on a
+    /// running Android device or emulator, where the debugger runs as the app's user (ADR 0116). Not yet on an iPhone,
     /// or on Mac Catalyst (its Debug builds are trimmed and sandboxed, which the startup hook doesn't survive).
-    /// TODO(issue): Mac Catalyst and iPhones on CoreCLR (ADR 0114).
+    /// TODO(issue): Mac Catalyst and iPhones on CoreCLR (ADR 0115).
     /// </summary>
     public static bool DebugsCoreClr(string framework, MobileDevice? device) => PlatformOf(framework) switch
     {
@@ -283,7 +283,7 @@ public static class MobileTargets
 
     /// <summary>
     /// The arguments of <c>dotnet</c> that build, deploy and start a CoreCLR app on a running Android device or emulator,
-    /// held for the Codalus debugger (ADR 0115): <c>dotnet run</c>, whose <c>-e</c> the Android SDK writes into the app's
+    /// held for the Codalus debugger (ADR 0116): <c>dotnet run</c>, whose <c>-e</c> the Android SDK writes into the app's
     /// environment, and which puts the startup hook (<paramref name="hook"/>, a file here) into the app, as it does for
     /// <c>dotnet watch</c>'s. <c>dotnet build -t:Run</c> has no way to give the app an environment. The device is
     /// <c>--device</c>'s serial; the SDK and JDK the IDE found are passed as for a run.
@@ -314,7 +314,7 @@ public static class MobileTargets
     }
 
     /// <summary>
-    /// The run's extra arguments for debugging a CoreCLR app in an iOS simulator (ADR 0114): the app starts with the
+    /// The run's extra arguments for debugging a CoreCLR app in an iOS simulator (ADR 0115): the app starts with the
     /// debugger's startup hook (<paramref name="hook"/>) and <paramref name="waitFolder"/> as its
     /// <c>CODALUS_DEBUG_WAIT</c>, where the hook reports the process and waits for the Codalus debugger. The iOS SDK's
     /// <c>Run</c> target takes mlaunch's arguments as a <c>;</c>-separated property, which MSBuild's command line reads

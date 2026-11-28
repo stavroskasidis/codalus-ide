@@ -11,7 +11,7 @@ namespace Codalus.Workbench.Mobile;
 public delegate Task<(int ExitCode, string Output)> AdbRunner(IReadOnlyList<string> arguments, TimeSpan limit, CancellationToken cancellationToken);
 
 /// <summary>
-/// The Codalus debugger on an Android device or emulator (ADR 0115), for apps that run on CoreCLR. An app there is a
+/// The Codalus debugger on an Android device or emulator (ADR 0116), for apps that run on CoreCLR. An app there is a
 /// process of the device's own Linux system, so the debugger runs there too: its bundle for the device's ABI
 /// (<c>android-arm64</c>, <c>android-x64</c>) is pushed to <c>/data/local/tmp</c> once per build of it, copied into the
 /// app's own storage (<c>code_cache</c>, which Android empties when the app is installed again), and started there as

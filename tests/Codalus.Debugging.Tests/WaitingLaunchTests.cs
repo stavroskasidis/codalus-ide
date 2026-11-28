@@ -4,7 +4,7 @@ using Codalus.Workbench.Debugging;
 namespace Codalus.Debugging.Tests;
 
 /// <summary>
-/// ADR 0114, on every OS: the Codalus debugger's launch of a program that something else starts (a CoreCLR app that the
+/// ADR 0115, on every OS: the Codalus debugger's launch of a program that something else starts (a CoreCLR app that the
 /// iOS SDK's <c>Run</c> target starts in a simulator), against a console program this test starts with the startup hook
 /// and the folder it reports in. The debugger waits for the hook's word, attaches before <c>Main</c> and lets the hook
 /// go; stopping the session ends the program; a start that is given up, or never comes, ends the wait with what
@@ -74,7 +74,7 @@ public sealed class WaitingLaunchTests(DebuggeeFixture fixture) : IClassFixture<
     [Fact]
     public async Task The_hook_makes_its_folder_when_told_to_and_reports_there()
     {
-        // ADR 0115: an Android app's folder is in its own storage, which the IDE can't reach before the app is installed.
+        // ADR 0116: an Android app's folder is in its own storage, which the IDE can't reach before the app is installed.
         var hook = HeldLaunch.ResolveHook() ?? throw new InvalidOperationException("The startup hook isn't next to the tests.");
         var parent = Directory.CreateTempSubdirectory("codalus-waiting-").FullName;
         var wait = Path.Combine(parent, "made-by-the-hook");

@@ -210,13 +210,13 @@ public sealed class BrowserDebugTests : IDisposable
         // given. The profile's path is quoted for the shell: a stand-in flatpak prints the arguments it gets.
         Assert.Equal("/usr/bin/chromium", new Browser(Browsers.Chromium, "/usr/bin/chromium").Executable(Path.Combine(_site, "native")));
         var flatpak = Path.Combine(_site, "flatpak-stand-in");
-        File.WriteAllText(flatpak, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\n");
-        File.SetUnixFileMode(flatpak, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        // The scripts this test runs are written by StandInScript: one written here and started at once could be "Text
+        // file busy", held open by a process another test started meanwhile (Linux, a local validation run, 2026-11-28; #209).
+        StandInScript.Write(flatpak, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\n");
         var profile = Path.Combine(_site, "it's a profile");
         Directory.CreateDirectory(profile);
         var launcher = Path.Combine(profile, "launcher.sh");
-        File.WriteAllText(launcher, Browsers.FlatpakLauncher(flatpak, "com.microsoft.Edge", profile));
-        File.SetUnixFileMode(launcher, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        StandInScript.Write(launcher, Browsers.FlatpakLauncher(flatpak, "com.microsoft.Edge", profile));
         var start = new System.Diagnostics.ProcessStartInfo(launcher) { RedirectStandardOutput = true, UseShellExecute = false, ArgumentList = { "--user-data-dir=" + profile, "about:blank" } };
         using var process = System.Diagnostics.Process.Start(start)!;
         var output = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
@@ -224,7 +224,7 @@ public sealed class BrowserDebugTests : IDisposable
         Assert.Equal(["run", "--filesystem=" + profile, "com.microsoft.Edge", "--user-data-dir=" + profile, "about:blank"], output.Split('\n', StringSplitOptions.RemoveEmptyEntries));
 
         // A page opened from a file: its folder, read-only.
-        File.WriteAllText(launcher, Browsers.FlatpakLauncher(flatpak, "com.microsoft.Edge", profile, _site));
+        StandInScript.Write(launcher, Browsers.FlatpakLauncher(flatpak, "com.microsoft.Edge", profile, _site));
         using var withPage = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(launcher) { RedirectStandardOutput = true, UseShellExecute = false })!;
         var pageOutput = await withPage.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
         await withPage.WaitForExitAsync(TestContext.Current.CancellationToken);
