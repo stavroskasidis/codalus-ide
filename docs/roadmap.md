@@ -3337,7 +3337,7 @@ The "Codalus" column uses these terms:
 | Debugging tests | M8 (done) |
 | Solution Explorer's Debug ▸ (Start New Instance, Step Into New Instance, Start Without Debugging); starting a project into the running session; Terminate Process and Detach Process | 1.1 (#547, [ADR 0109](adr/0109-start-new-instance-and-programs-joining-a-session.md): every kind of program joins, attaches too; a session whose web app runs under `dotnet watch` takes no other) |
 | Blazor WebAssembly and JavaScript debugging | M16 |
-| Android and iOS debugging | M20 (M20b done: the Mono debugger adapter, ADR 0065; CoreCLR apps in iOS simulators with the Codalus debugger, ADR 0115, and on Android devices and emulators, ADR 0116; iPhones, and CoreCLR on Mac Catalyst, are gaps) |
+| Android and iOS debugging | M20 (M20b done: the Mono debugger adapter, ADR 0065; CoreCLR apps in iOS simulators with the Codalus debugger, ADR 0115, on Android devices and emulators, ADR 0116, and on iPhones and iPads with the debugger in the app, ADR 0117; Mono apps on iPhones, and CoreCLR on Mac Catalyst, are gaps) |
 | Graphics (DirectX) debugging, GPU usage | Non-goal |
 
 ### Testing

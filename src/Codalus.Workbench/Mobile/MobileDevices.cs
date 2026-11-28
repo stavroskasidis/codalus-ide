@@ -169,6 +169,7 @@ public static class MobileDevices
                 {
                     OsVersion = Get(properties, "osVersionNumber"),
                     Problem = paired ? null : "Pair the device with this Mac: trust it when it asks, then open it in Xcode once.",
+                    TunnelAddress = Get(connection, "tunnelState") is null or "connected" ? Get(connection, "tunnelIPAddress") : null,
                 });
             }
         }

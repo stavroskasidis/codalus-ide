@@ -87,7 +87,7 @@ public sealed class MobileTests : IDisposable
     }
 
     [Fact]
-    public void A_CoreClr_app_is_debugged_in_a_simulator_and_on_a_running_android_device_and_nowhere_else_yet()
+    public void A_CoreClr_app_is_debugged_in_a_simulator_on_an_iphone_and_on_a_running_android_device_and_nowhere_else_yet()
     {
         // ADR 0115: .NET 11's mobile workloads set UseMonoRuntime to false; the Mono debugger would wait for a runtime
         // that never connects.
@@ -98,7 +98,7 @@ public sealed class MobileTests : IDisposable
 
         var simulator = new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true);
         Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", simulator));
-        Assert.False(MobileTargets.DebugsCoreClr("net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true)));
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true))); // the in-app debugger, ADR 0117
         Assert.False(MobileTargets.DebugsCoreClr("net11.0-maccatalyst", null));
 
         // ADR 0116: on Android the debugger runs on the device, so it has to be up (F5 starts an emulator first).
@@ -110,6 +110,88 @@ public sealed class MobileTests : IDisposable
         Assert.Equal(
             ["-p:MlaunchAdditionalArgumentsProperty=\"--setenv=DOTNET_STARTUP_HOOKS=/tmp/d/Hook.dll;--setenv=CODALUS_DEBUG_WAIT=/tmp/d/wait\""],
             MobileTargets.CoreClrDebugArguments("/tmp/d/Hook.dll", "/tmp/d/wait"));
+    }
+
+    [Fact]
+    public void F5_on_an_iphone_builds_the_in_app_debugger_into_folders_of_its_own_and_launches_it_as_a_profiler()
+    {
+        // ADR 0117: a paired iPhone or iPad debugs a CoreCLR app; an unpaired one doesn't.
+        var phone = new MobileDevice("00008110-001", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true);
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", phone));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-ios", phone with { Problem = "Pair the device" }));
+
+        var framework = Path.Combine(_dir, "CodalusDebugger.framework");
+        var targets = IosDeviceDebugging.WriteTargets(Path.Combine(_dir, "targets"));
+        Assert.Contains("<NativeReference Include=\"$(CodalusInAppDebuggerFramework)\" Kind=\"Framework\" />", File.ReadAllText(targets), StringComparison.Ordinal);
+        var written = File.GetLastWriteTimeUtc(targets);
+        Assert.Equal(targets, IosDeviceDebugging.WriteTargets(Path.Combine(_dir, "targets")));
+        Assert.Equal(written, File.GetLastWriteTimeUtc(targets)); // the same file, not written again
+
+        // F5's build has folders of its own: the app of the user's own builds and of Ctrl+F5 stays as it was.
+        Assert.Equal(
+            [
+                "-p:IntermediateOutputPath=obj/Debug/codalus-device/",
+                "-p:OutputPath=bin/Debug/codalus-device/",
+                "-p:CustomAfterMicrosoftCommonTargets=" + targets,
+                "-p:CodalusInAppDebuggerFramework=" + framework,
+                "-p:MlaunchAdditionalArgumentsProperty=\"--setenv=DOTNET_ENABLE_PROFILING=1;--setenv=DOTNET_PROFILER=" + Codalus.Debugging.InAppDebugger.ProfilerClassId
+                    + ";--setenv=DOTNET_PROFILER_PATH=@executable_path/Frameworks/CodalusDebugger.framework/CodalusDebugger;--setenv=CODALUS_DEBUG_PORT=50123\"",
+            ],
+            IosDeviceDebugging.RunArguments(framework, targets, 50123, configuration: null));
+        Assert.StartsWith("-p:IntermediateOutputPath=obj/Release/", IosDeviceDebugging.RunArguments(framework, targets, 1, "Release")[0], StringComparison.Ordinal);
+
+        var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, _ => null, _dir), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
+        var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-ios") with { CoreClrFrameworks = ["net11.0-ios"] };
+        var plan = service.IosDevicePlan("dotnet", project, "net11.0-ios", phone, "Debug", framework, Path.Combine(_dir, "targets"), 50123);
+        Assert.Contains("-p:_DeviceName=00008110-001", plan.ArgumentList!);
+        Assert.Contains("-p:RuntimeIdentifier=ios-arm64", plan.ArgumentList!);
+        Assert.Contains("-p:CodalusInAppDebuggerFramework=" + framework, plan.ArgumentList!);
+
+        Assert.InRange(IosDeviceDebugging.PickPort(), 49152, 65535);
+    }
+
+    [Fact]
+    public async Task The_in_app_debugger_is_the_variables_the_shipped_archive_unpacked_once_or_a_checkouts_build()
+    {
+        string Framework(string folder)
+        {
+            var framework = Directory.CreateDirectory(Path.Combine(folder, "CodalusDebugger.framework")).FullName;
+            File.WriteAllText(Path.Combine(framework, "CodalusDebugger"), "library");
+            return framework;
+        }
+
+        var cache = Path.Combine(_dir, "cache");
+        var none = Directory.CreateDirectory(Path.Combine(_dir, "none")).FullName;
+        Assert.Null(IosDeviceDebugging.Framework(cache, none, _ => null));
+
+        // The variable's folder.
+        var given = Framework(Path.Combine(_dir, "given"));
+        Assert.Equal(given, IosDeviceDebugging.Framework(cache, none, v => v == IosDeviceDebugging.FrameworkVariable ? Path.Combine(_dir, "given") : null));
+
+        // A published install: the archive next to the shell, unpacked into the cache, once per build of it.
+        var install = Directory.CreateDirectory(Path.Combine(_dir, "install")).FullName;
+        var shipped = Directory.CreateDirectory(Path.Combine(install, "remote", "ios-arm64")).FullName;
+        Framework(Path.Combine(_dir, "stage"));
+        await using (var archive = File.Create(Path.Combine(shipped, IosDeviceDebugging.Archive)))
+        await using (var gzip = new System.IO.Compression.GZipStream(archive, System.IO.Compression.CompressionLevel.Fastest))
+        {
+            await System.Formats.Tar.TarFile.CreateFromDirectoryAsync(Path.Combine(_dir, "stage"), gzip, includeBaseDirectory: false, Ct);
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(shipped, IosDeviceDebugging.ArchiveId), "1.1.0-abc\n", Ct);
+        var unpacked = IosDeviceDebugging.Framework(cache, install, _ => null);
+        Assert.Equal(Path.Combine(cache, "1.1.0-abc", "CodalusDebugger.framework"), unpacked);
+        Assert.Equal("library", await File.ReadAllTextAsync(Path.Combine(unpacked!, "CodalusDebugger"), Ct));
+        File.Delete(Path.Combine(shipped, IosDeviceDebugging.Archive));
+        await File.WriteAllTextAsync(Path.Combine(shipped, IosDeviceDebugging.Archive), "not read again", Ct);
+        Assert.Equal(unpacked, IosDeviceDebugging.Framework(cache, install, _ => null));
+
+        // A source checkout: .work/codalus-debugger-ios-arm64 at the repository's root.
+        var checkout = Directory.CreateDirectory(Path.Combine(_dir, "checkout")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(checkout, "Codalus.slnx"), "<Solution />", Ct);
+        var built = Framework(Path.Combine(checkout, ".work", "codalus-debugger-ios-arm64"));
+        var bin = Directory.CreateDirectory(Path.Combine(checkout, "src", "bin")).FullName;
+        Assert.Equal(built, IosDeviceDebugging.Framework(cache, bin, _ => null));
     }
 
     [Fact]
@@ -288,13 +370,17 @@ public sealed class MobileTests : IDisposable
 
         var phones = MobileDevices.ParseAppleDevices("""
             {"result":{"devices":[
-              {"identifier":"X","deviceProperties":{"name":"Jane's iPhone","osVersionNumber":"18.1"},"hardwareProperties":{"udid":"00008110-001","platform":"iOS","deviceType":"iPhone"},"connectionProperties":{"pairingState":"paired"}},
+              {"identifier":"X","deviceProperties":{"name":"Jane's iPhone","osVersionNumber":"18.1"},"hardwareProperties":{"udid":"00008110-001","platform":"iOS","deviceType":"iPhone"},"connectionProperties":{"pairingState":"paired","tunnelIPAddress":"fdb0:1:2::1","tunnelState":"connected"}},
               {"identifier":"Y","deviceProperties":{"name":"Living Room"},"hardwareProperties":{"udid":"TV1","platform":"tvOS"}},
-              {"identifier":"Z","deviceProperties":{"name":"New iPad"},"hardwareProperties":{"udid":"00008027-002","platform":"iOS"},"connectionProperties":{"pairingState":"unpaired"}}]}}
+              {"identifier":"Z","deviceProperties":{"name":"New iPad"},"hardwareProperties":{"udid":"00008027-002","platform":"iOS"},"connectionProperties":{"pairingState":"unpaired","tunnelIPAddress":"fdb0:3:4::1","tunnelState":"disconnected"}}]}}
             """);
         Assert.Equal(["Jane's iPhone", "New iPad"], phones.Select(p => p.Name));
         Assert.True(phones[0].IsUsable);
         Assert.Contains("Pair the device", phones[1].Problem, StringComparison.Ordinal);
+
+        // Where the in-app debugger is reached (ADR 0117): the tunnel's address, while the tunnel is up.
+        Assert.Equal("fdb0:1:2::1", phones[0].TunnelAddress);
+        Assert.Null(phones[1].TunnelAddress);
     }
 
     [Fact]

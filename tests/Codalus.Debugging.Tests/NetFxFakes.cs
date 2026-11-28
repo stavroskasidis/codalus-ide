@@ -26,6 +26,15 @@ internal sealed class FakeDebugger(FakeProcess process) : IClrDebugger
         Attached = processId;
         return process;
     }
+
+    /// <summary>The in-app debugger's launch (ADR 0117), when there was one.</summary>
+    public NetFxDebugArguments? InProcess { get; private set; }
+
+    public IClrProcess AttachInProcess(NetFxDebugArguments arguments)
+    {
+        InProcess = arguments;
+        return process;
+    }
 }
 
 internal sealed class FakeModule(string path) : IClrModule

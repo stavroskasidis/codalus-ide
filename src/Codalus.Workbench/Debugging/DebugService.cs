@@ -604,6 +604,23 @@ public sealed class DebugService : IAsyncDisposable
             [new DebugProcess(name, null, DebugProcess.Launched, null)],
             cancellationToken);
 
+    /// <summary>
+    /// Debugs an app with the in-app debugger in it (ADR 0117: on an iPhone or iPad), over <paramref name="connection"/>
+    /// to it: the session is the Codalus debugger's, its launch attaches to the app's own process, and the app's
+    /// sources are this machine's. Stopping the session ends the app. Throws when the launch fails.
+    /// </summary>
+    public Task LaunchInAppAsync(string name, InAppConnection connection, string device, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await DebugAdapter.StartAsync(connection.Adapter(device), ct, terminal: null, ExpressionCompiler).ConfigureAwait(false),
+            adapter => adapter.LaunchAsync(InAppArguments(name), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
+    /// <summary>The in-app debugger's launch arguments for the app <paramref name="name"/>.</summary>
+    internal NetFxDebugArguments InAppArguments(string name) =>
+        new(name, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()) { InProcess = true, SourcesOnClient = true };
+
     /// <summary>The Codalus debugger's launch arguments for a program that reports in <paramref name="waitFolder"/>.</summary>
     internal NetFxDebugArguments WaitingArguments(string name, string waitFolder) =>
         new(name, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()) { WaitFolder = waitFolder };

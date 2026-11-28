@@ -393,7 +393,8 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
     /// <param name="hook">The debugger's startup hook (<c>Codalus.Debugging.StartupHook.dll</c>).</param>
     public (LaunchPlan Run, string WaitFolder, string Folder)? CoreClrDebugPlan(string dotnet, ProjectInfo project, string framework, MobileDevice? device, string? configuration, string hook)
     {
-        if (MobileTargets.PlatformOf(framework) != MobilePlatform.iOS || !MobileTargets.DebugsCoreClr(framework, device))
+        // A simulator's app is a process of this Mac, held by the startup hook; an iPhone's takes the in-app debugger (IosDevicePlan).
+        if (MobileTargets.PlatformOf(framework) != MobilePlatform.iOS || device is not { Kind: MobileDeviceKind.Simulator })
         {
             return null;
         }
@@ -441,6 +442,27 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
             }
         };
     }
+
+    /// <summary>
+    /// The plan that builds, installs and starts a CoreCLR app on an iPhone or iPad with the in-app debugger in it
+    /// (ADR 0117): the device's run with F5's own build folders, the in-app debugger's framework (<paramref name="debugger"/>)
+    /// and the app's environment for it, serving on <paramref name="port"/>.
+    /// </summary>
+    /// <param name="targetsFolder">Where the IDE's targets file for the build is written.</param>
+    public LaunchPlan IosDevicePlan(string dotnet, ProjectInfo project, string framework, MobileDevice device, string? configuration, string debugger, string targetsFolder, int port)
+    {
+        var run = RunPlan(dotnet, project, framework, device, configuration);
+        var targets = IosDeviceDebugging.WriteTargets(targetsFolder);
+        var arguments = run.ArgumentList!.Concat(IosDeviceDebugging.RunArguments(debugger, targets, port, configuration)).ToList();
+        return run with { Arguments = string.Join(' ', arguments.Select(Quote)), ArgumentList = arguments };
+    }
+
+    /// <summary>
+    /// The address of this Mac's tunnel to the iPhone or iPad <paramref name="udid"/> (ADR 0117), read again from
+    /// devicectl (the tunnel comes up with an install); null when it has none, or isn't connected.
+    /// </summary>
+    public async Task<string?> TunnelAddressAsync(string udid, CancellationToken cancellationToken) =>
+        (await AppleDevicesAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault(d => d.Id == udid && d.Kind == MobileDeviceKind.Device)?.TunnelAddress;
 
     /// <summary>The plan that installs the Android SDK (and a JDK when none is found) through the workload's own target.</summary>
     public LaunchPlan InstallAndroidDependenciesPlan(string dotnet, ProjectInfo project)

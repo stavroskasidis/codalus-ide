@@ -195,6 +195,13 @@ public sealed record NetFxDebugArguments(
 
     /// <summary>How long to wait for that program to report, in seconds; 15 minutes when null (a build and a deploy).</summary>
     public int? WaitSeconds { get; init; }
+
+    /// <summary>
+    /// The debugger runs inside the program it debugs (ADR 0117: an app on an iPhone or iPad, where no other process can
+    /// be started): the launch attaches to the debugger's own process. <see cref="Program"/> is only its name, and
+    /// stopping the session ends it.
+    /// </summary>
+    public bool InProcess { get; init; }
 }
 
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>

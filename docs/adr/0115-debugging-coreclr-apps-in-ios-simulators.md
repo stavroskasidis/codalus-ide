@@ -4,7 +4,7 @@
 - **Date:** 2026-11-24
 - **Deciders:** maintainer
 - **Amends:** [ADR 0065](0065-mono-debugger-adapter.md) (mobile debugging through the Mono adapter: its gap "CoreCLR on mobile"), [ADR 0064](0064-maui-devices-and-mobile-runs.md) (the run command on iOS and Mac Catalyst)
-- **Amended by:** [ADR 0116](0116-debugging-coreclr-apps-on-android.md) (2026-11-28: Android apps run on CoreCLR too, found by `_AndroidRuntime`, and the Codalus debugger debugs them on the device or emulator)
+- **Amended by:** [ADR 0117](0117-debugging-coreclr-apps-on-iphones-and-ipads.md) (2026-11-28: iPhones and iPads, with the debugger in the app), [ADR 0116](0116-debugging-coreclr-apps-on-android.md) (2026-11-28: Android apps run on CoreCLR too, found by `_AndroidRuntime`, and the Codalus debugger debugs them on the device or emulator)
 - **Builds on:** [ADR 0086](0086-a-managed-coreclr-debugger.md) and [ADR 0094](0094-the-codalus-debugger-by-default.md) (the Codalus debugger, its startup hook and held start)
 
 ## Context
