@@ -1,4 +1,8 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Codalus.Projects.Protocol;
 using Codalus.Shell.ViewModels;
 
@@ -67,7 +71,7 @@ public sealed class SaveChangesDialogTests
         Assert.Equal(["Untitled"], SaveChangesTree.Rows(null, [], [("Untitled", null)]).Select(Row));
     }
 
-    [Fact]
+    [AvaloniaFact]
     public async Task Rows_without_a_check_box_are_not_counted_or_returned()
     {
         var dialog = new DialogViewModel();
@@ -124,6 +128,48 @@ public sealed class SaveChangesDialogTests
         f.Shell.Dialogs.Accept(); // Save
         await ShellFixture.PumpUntil(() => !f.Shell.Editors.Contains(editor));
         Assert.Equal("more notes\n", File.ReadAllText(file));
+    }
+
+    /// <summary>
+    /// #572: after a dialog with fewer buttons (here OK and Cancel), the save-changes dialog's footer kept their width and
+    /// its buttons ran off the frame, Cancel hidden and Don't Save cut at its right edge (reported at 150%, but at any scale).
+    /// Every button is laid out at its own width, inside the footer.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public async Task After_a_dialog_with_fewer_buttons_every_button_is_inside_the_frame(double scaling)
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.SetRenderScaling(scaling);
+        var (_, editor) = await OpenEditedAsync(f, "notes.txt");
+
+        var rename = f.Shell.Dialogs.ShowAsync(new DialogRequest("Rename", "New name:", ["OK", "Cancel"]) { Input = "notes.txt" });
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        ShellFixture.Pump();
+        f.Shell.Dialogs.Cancel();
+        await rename;
+        ShellFixture.Pump();
+
+        f.Shell.Layout.CloseDocument(editor);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.Buttons.Count == 3);
+        ShellFixture.Pump();
+        ShellFixture.Pump();
+
+        var view = f.Window.GetVisualDescendants().OfType<Views.DialogView>().Single();
+        var footer = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("dialogFooter"));
+        var buttons = footer.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("dialog")).ToList();
+        Assert.Equal(f.Shell.Dialogs.Buttons.Select(b => b.Label), buttons.Select(b => b.Content as string));
+        var inside = footer.Bounds.Width - footer.Padding.Right;
+        foreach (var button in buttons)
+        {
+            var left = button.TranslatePoint(default, footer)!.Value.X;
+            Assert.True(button.Bounds.Width >= button.DesiredSize.Width - 0.01, $"{button.Content} is {button.Bounds.Width} px wide, not the {button.DesiredSize.Width} it needs");
+            Assert.True(left + button.Bounds.Width <= inside + 0.01, $"{button.Content} ends at {left + button.Bounds.Width}, past the footer's {inside}");
+        }
+
+        f.Shell.Dialogs.Cancel();
+        ShellFixture.Pump();
     }
 
     [AvaloniaFact]
