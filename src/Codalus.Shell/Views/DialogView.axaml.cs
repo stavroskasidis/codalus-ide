@@ -4,7 +4,6 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
@@ -136,13 +135,10 @@ public sealed partial class DialogView : UserControl
         }
     }
 
-    /// <summary>
-    /// A request opened. It can open off the UI thread (a workbench service's callback, the remote debugger's consent to
-    /// copy it): the layout is redone on the UI thread, at once when this is it.
-    /// </summary>
+    /// <summary>A request opened (on the UI thread: <see cref="DialogViewModel.ShowAsync"/>).</summary>
     private void OnOpened(object? sender, EventArgs e)
     {
-        Ui.Post(LayOutAfresh);
+        LayOutAfresh();
         Dispatcher.UIThread.Post(FocusFirst, DispatcherPriority.Loaded);
     }
 

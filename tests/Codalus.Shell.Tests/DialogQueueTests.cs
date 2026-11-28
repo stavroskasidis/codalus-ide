@@ -8,9 +8,10 @@ using Codalus.Shell.Views;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// The dialog queue: a dialog asked for off the UI thread opens and lays out as one asked for on it, and one that fails
-/// doesn't fail the dialogs after it (PR #577's first run: the remote debugger's consent to copy it was asked from its
-/// service's thread, laying the dialog out there threw, and each of the smoke test's 40 dialogs after it threw the same).
+/// The dialog queue: a dialog asked for off the UI thread is set up and shown on it, and one that fails doesn't fail the
+/// dialogs after it. PR #577's first run: the remote debugger's consent to copy it was asked from its service's thread,
+/// laying the dialog out there threw, and each of the smoke test's 40 dialogs after it threw the same. Its second: with
+/// only the layout moved to the UI thread, the buttons changed on the asking thread were laid out twice.
 /// </summary>
 public sealed class DialogQueueTests
 {
@@ -28,11 +29,28 @@ public sealed class DialogQueueTests
         await first;
         ShellFixture.Pump();
 
+        // Every change the view sees happens on the UI thread: changed from the asking thread, the buttons were laid out twice
+        // (PR #577's CI, run 46090778794: Copy, Cancel, Copy, Cancel).
+        var offThread = new List<string>();
+        void Check(string what)
+        {
+            if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                lock (offThread)
+                {
+                    offThread.Add(what);
+                }
+            }
+        }
+
+        f.Shell.Dialogs.Buttons.CollectionChanged += (_, e) => Check($"Buttons {e.Action}");
+        f.Shell.Dialogs.Opened += (_, _) => Check("Opened");
         var shown = await Task.Factory.StartNew(() => f.Shell.Dialogs.ShowAsync(request), TestContext.Current.CancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, describe: () => $"the dialog: {(shown.IsFaulted ? shown.Exception!.InnerException!.ToString() : "not open")}");
         ShellFixture.Pump();
         ShellFixture.Pump();
         Assert.False(shown.IsCompleted, $"the dialog's task ended as it opened: {shown.Exception?.InnerException}");
+        Assert.Empty(offThread);
 
         var view = f.Window.GetVisualDescendants().OfType<DialogView>().Single();
         var footer = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("dialogFooter"));

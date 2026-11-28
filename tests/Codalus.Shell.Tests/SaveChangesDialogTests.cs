@@ -71,7 +71,7 @@ public sealed class SaveChangesDialogTests
         Assert.Equal(["Untitled"], SaveChangesTree.Rows(null, [], [("Untitled", null)]).Select(Row));
     }
 
-    [Fact]
+    [AvaloniaFact]
     public async Task Rows_without_a_check_box_are_not_counted_or_returned()
     {
         var dialog = new DialogViewModel();

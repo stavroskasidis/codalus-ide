@@ -446,9 +446,19 @@ public sealed class DialogViewModel : ObservableObject
 
     public event EventHandler? Closed;
 
-    /// <summary>Shows <paramref name="request"/> once earlier dialogs have closed (UI thread only).</summary>
+    /// <summary>
+    /// Shows <paramref name="request"/> once earlier dialogs have closed. Asked for off the UI thread (a service's callback
+    /// after its own awaits, as the remote debugger's consent to copy it), it is queued and shown from the UI thread: the
+    /// dialog's buttons and rows are bound to its view, and changed from another thread they were laid out twice (PR #577's
+    /// CI: Copy, Cancel, Copy, Cancel) or the layout threw.
+    /// </summary>
     public Task<DialogResult> ShowAsync(DialogRequest request)
     {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            return Ui.RunAsync(() => ShowAsync(request)).Unwrap();
+        }
+
         var previous = _queue;
         var shown = ShowAfterAsync(previous, request);
         _queue = shown;
