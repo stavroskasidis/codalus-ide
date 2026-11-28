@@ -288,6 +288,14 @@ internal sealed class DbgShimDebugger : IClrDebugger
         }
     }
 
+    /// <summary>
+    /// Attaches to the process this debugger runs in (ADR 0117): on an iPhone or iPad, where it is a library in the app.
+    /// </summary>
+    public IClrProcess AttachInProcess(NetFxDebugArguments arguments) =>
+        OperatingSystem.IsIOS() || OperatingSystem.IsTvOS()
+            ? IosDeviceRuntime.AttachToSelf(arguments.JustMyCode, arguments.Program)
+            : throw new ClrException("The debugger runs inside the app it debugs only on an iPhone or iPad.");
+
     public IClrProcess Attach(int processId)
     {
         if (OperatingSystem.IsAndroid())

@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The in-app debugger (ADR 0117): the Codalus debugger compiled ahead of time (NativeAOT) into a library for iOS
+    devices, which F5 puts into a CoreCLR app's Debug build as CodalusDebugger.framework and CoreCLR loads as a profiler.
+    It is the debug companion host's CoreCLR adapter (its sources, not a copy) with an entry point of its own. Building
+    it needs macOS and Xcode (the iOS linker and SDK), so it isn't in Codalus.slnx: eng/get-codalus-debugger.sh ios-arm64
+    builds it in a source checkout, and the shell's publish on macOS ships it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+    <PublishAot>true</PublishAot>
+    <!-- The iOS SDK compiles only apps ahead of time; a library for iOS takes NativeAOT from the runtime pack. -->
+    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+    <NativeLib>Shared</NativeLib>
+    <AssemblyName>CodalusDebugger</AssemblyName>
+    <RootNamespace>Codalus.Debugging.Host</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <!--
+      IL3000: the launcher's own path (LaunchedProgram), which a library in an app never starts. IL2104: Mono.Cecil
+      (Windows PDBs), whose trim warnings are its reflection over its own types.
+    -->
+    <NoWarn>$(NoWarn);IL3000;IL2104</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Codalus.Debugging.Host\**\*.cs" Exclude="..\Codalus.Debugging.Host\Program.cs;..\Codalus.Debugging.Host\bin\**;..\Codalus.Debugging.Host\obj\**" LinkBase="Host" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
+    <ProjectReference Include="..\ThirdParty\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" />
+    <PackageReference Include="ClrDebug" />
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+
+  <!--
+    The framework, as an app's bundle takes one: the library as Frameworks/CodalusDebugger.framework/CodalusDebugger, with
+    its install name there and an Info.plist. The app's build signs it with the app.
+  -->
+  <Target Name="CodalusDebuggerFramework" AfterTargets="Publish">
+    <PropertyGroup>
+      <_CodalusFramework>$([MSBuild]::NormalizeDirectory('$(PublishDir)', 'CodalusDebugger.framework'))</_CodalusFramework>
+    </PropertyGroup>
+    <MakeDir Directories="$(_CodalusFramework)" />
+    <Copy SourceFiles="$(PublishDir)libCodalusDebugger.dylib" DestinationFiles="$(_CodalusFramework)CodalusDebugger" />
+    <Exec Command="xcrun install_name_tool -id @rpath/CodalusDebugger.framework/CodalusDebugger &quot;$(_CodalusFramework)CodalusDebugger&quot;" />
+    <WriteLinesToFile File="$(_CodalusFramework)Info.plist" Overwrite="true" Lines="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;;&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;;&lt;plist version=&quot;1.0&quot;&gt;&lt;dict&gt;;&lt;key&gt;CFBundleExecutable&lt;/key&gt;&lt;string&gt;CodalusDebugger&lt;/string&gt;;&lt;key&gt;CFBundleIdentifier&lt;/key&gt;&lt;string&gt;dev.codalus.debugger&lt;/string&gt;;&lt;key&gt;CFBundleName&lt;/key&gt;&lt;string&gt;CodalusDebugger&lt;/string&gt;;&lt;key&gt;CFBundlePackageType&lt;/key&gt;&lt;string&gt;FMWK&lt;/string&gt;;&lt;key&gt;CFBundleShortVersionString&lt;/key&gt;&lt;string&gt;1.0&lt;/string&gt;;&lt;key&gt;CFBundleVersion&lt;/key&gt;&lt;string&gt;1&lt;/string&gt;;&lt;key&gt;CFBundleSupportedPlatforms&lt;/key&gt;&lt;array&gt;&lt;string&gt;iPhoneOS&lt;/string&gt;&lt;/array&gt;;&lt;key&gt;MinimumOSVersion&lt;/key&gt;&lt;string&gt;15.0&lt;/string&gt;;&lt;/dict&gt;&lt;/plist&gt;" />
+  </Target>
+</Project>

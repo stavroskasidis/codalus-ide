@@ -45,6 +45,12 @@ public sealed record MobileDevice(string Id, string Name, MobilePlatform Platfor
     public string? Problem { get; init; }
 
     /// <summary>An Android emulator's virtual device name.</summary>
+    /// <summary>
+    /// A connected iPhone's or iPad's address on this Mac's tunnel to it (devicectl's <c>tunnelIPAddress</c>, ADR 0117):
+    /// where the in-app debugger's port is reached. Null when the tunnel isn't up, and for other devices.
+    /// </summary>
+    public string? TunnelAddress { get; init; }
+
     public string? Avd { get; init; }
 
     public bool IsUsable => Problem is null;
@@ -269,14 +275,14 @@ public static class MobileTargets
 
     /// <summary>
     /// Whether a CoreCLR app of <paramref name="framework"/> can be debugged on <paramref name="device"/>: in an iOS
-    /// simulator, where the app is a process of this Mac that the Codalus debugger attaches to (ADR 0115), and on a
-    /// running Android device or emulator, where the debugger runs as the app's user (ADR 0116). Not yet on an iPhone,
-    /// or on Mac Catalyst (its Debug builds are trimmed and sandboxed, which the startup hook doesn't survive).
-    /// TODO(issue): Mac Catalyst and iPhones on CoreCLR (ADR 0115).
+    /// simulator, where the app is a process of this Mac that the Codalus debugger attaches to (ADR 0115); on a paired
+    /// iPhone or iPad, where the debugger goes into the app (ADR 0117); and on a running Android device or emulator,
+    /// where the debugger runs as the app's user (ADR 0116). Not yet on Mac Catalyst (its Debug builds are trimmed and
+    /// sandboxed, which the startup hook doesn't survive). TODO(issue): Mac Catalyst on CoreCLR (ADR 0115).
     /// </summary>
     public static bool DebugsCoreClr(string framework, MobileDevice? device) => PlatformOf(framework) switch
     {
-        MobilePlatform.iOS => device is { Kind: MobileDeviceKind.Simulator },
+        MobilePlatform.iOS => device is { Kind: MobileDeviceKind.Simulator } or { Kind: MobileDeviceKind.Device, IsUsable: true },
         MobilePlatform.Android => device is { IsRunning: true },
         _ => false,
     };

@@ -464,8 +464,9 @@ public sealed partial class ShellHost
     /// Debugs an app that runs on CoreCLR (.NET 11's default on mobile, ADR 0115), which the Mono debugger can't: in an
     /// iOS simulator the app is a process of this Mac, started by the run with the debugger's startup hook, and the
     /// Codalus debugger attaches to it once the hook reports. On Android the debugger runs on the device (ADR 0116,
-    /// <see cref="DebugCoreClrOnAndroidAsync"/>). Elsewhere (an iPhone, Mac Catalyst) it says at once that it can't
-    /// yet, instead of waiting for a Mono runtime that never connects.
+    /// <see cref="DebugCoreClrOnAndroidAsync"/>), and on an iPhone or iPad it goes into the app (ADR 0117,
+    /// <see cref="DebugCoreClrOnIosDeviceAsync"/>). Elsewhere (Mac Catalyst) it says at once that it can't yet, instead
+    /// of waiting for a Mono runtime that never connects.
     /// </summary>
     private async Task DebugCoreClrOnDeviceAsync(ProjectInfo project, string framework, MobileDevice? device)
     {
@@ -473,6 +474,12 @@ public sealed partial class ShellHost
         if (platform == MobilePlatform.Android && device is not null && MobileTargets.DebugsCoreClr(framework, device))
         {
             await DebugCoreClrOnAndroidAsync(project, framework, device).ConfigureAwait(true);
+            return;
+        }
+
+        if (platform == MobilePlatform.iOS && device is { Kind: MobileDeviceKind.Device } && MobileTargets.DebugsCoreClr(framework, device))
+        {
+            await DebugCoreClrOnIosDeviceAsync(project, framework, device).ConfigureAwait(true);
             return;
         }
 
@@ -536,6 +543,70 @@ public sealed partial class ShellHost
             // The app has the hook loaded by now, or never will: the copy and the wait folder go when the run ends.
             var folder = plan.Folder;
             _ = program.Exited.ContinueWith(_ => RemoveDebugFolder(folder), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>How long F5 waits for an iPhone's or iPad's app to answer: a build, an install and the launch.</summary>
+    private static readonly TimeSpan s_iosConnectWait = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Debugs a CoreCLR app on an iPhone or iPad (ADR 0117). iOS starts no other process for an app, so F5's build puts
+    /// the in-app debugger into it (a framework, in build folders of F5's own: the app of the user's own builds stays as
+    /// it was), and the run launches it with the environment that has CoreCLR load it as a profiler and serve DAP on a
+    /// port. The app's start waits for the IDE, which connects over this Mac's tunnel to the device and sets the
+    /// breakpoints. Stopping the session ends the app.
+    /// </summary>
+    private async Task DebugCoreClrOnIosDeviceAsync(ProjectInfo project, string framework, MobileDevice device)
+    {
+        var cache = Path.Combine(Path.GetTempPath(), "codalus-in-app-debugger");
+        if (IosDeviceDebugging.Framework(cache) is not { } debugger)
+        {
+            Workbench.Notifications.Error(Localizer.Get("msg.mobile.noInAppDebugger", "The debugger for iPhones and iPads (CodalusDebugger.framework) wasn't found with Codalus IDE."));
+            return;
+        }
+
+        var port = IosDeviceDebugging.PickPort();
+        LaunchPlan plan;
+        RunningProgram program;
+        try
+        {
+            plan = Mobile.IosDevicePlan(EnvironmentCheck.FindDotnet() ?? "dotnet", project, framework, device, Solutions.Solution?.Active?.Configuration, debugger, cache, port);
+            program = Runs.StartPlan(project.Path, project.Name, plan);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.build.couldNotStart", "Could not start {0}: {1}", project.Name, ex.Message));
+            return;
+        }
+
+        var name = $"{project.Name} ({device.Name})";
+        program.Channel?.AppendLine(Localizer.Format("msg.mobile.debugging", "Building and deploying {0} ({1}) to {2} for debugging…", project.Name, framework, device.Label));
+        if (program.Channel is { } channel)
+        {
+            Workbench.Output.Show(channel);
+        }
+
+        // A run that ends before the app answered (a build error, a failed install or signing) ends the wait.
+        using var failed = new CancellationTokenSource();
+        var connected = false;
+        _ = program.Exited.ContinueWith(_ => { if (!Volatile.Read(ref connected)) { failed.Cancel(); } }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+        DebugLog.Clear();
+        DebugLog.AppendLine($"> {name}: the Codalus debugger, in the app (port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+        DebugLog.AppendLine(Localizer.Get("msg.mobile.waitingForApp", "Waiting for the app to start…"));
+        try
+        {
+            var connection = await Codalus.Debugging.InAppConnection.ConnectAsync(ct => Mobile.TunnelAddressAsync(device.Id, ct), port, TimeSpan.FromSeconds(1), s_iosConnectWait, failed.Token).ConfigureAwait(true);
+            Volatile.Write(ref connected, true);
+            await Debugger.LaunchInAppAsync(name, connection, device.Name, failed.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (failed.IsCancellationRequested)
+        {
+            Workbench.Notifications.Warning(Localizer.Format("msg.mobile.runFailed", "{0} didn't start, so debugging didn't either. Its Run output has the details.", project.Name));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception or IOException or System.Net.Sockets.SocketException or Codalus.Debugging.DapException or Codalus.Debugging.DapConnectionLostException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.mobile.couldNotDebug", "Could not debug {0}: {1}", project.Name, ex.Message));
+            program.Stop();
         }
     }
 
