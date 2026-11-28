@@ -1258,7 +1258,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
-        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, the Devices window lists the Android toolchain, and the Android tools open", MauiStepAsync).ConfigureAwait(true);
+        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, the Devices window lists the Android toolchain, the Android tools open, and Publish opens its Archive Manager", MauiStepAsync).ConfigureAwait(true);
 
         // M40a: WinForms and WPF (ADR 0071, D31: Windows only).
         const string desktopTitle = "The WPF app opens, its XAML completes binding paths from d:DataContext, and it builds and runs";
@@ -2668,6 +2668,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.DeviceLogWindow.StopFollowing();
         shell.Layout.CloseToolWindow(DeviceLogViewModel.ToolWindowId);
         shell.Layout.CloseToolWindow(AndroidDeviceManagerViewModel.ToolWindowId);
+
+        // Publish on the MAUI app is the Archive Manager (ADR 0114), with the project's versions and its platforms. No
+        // archive is built: the runners have no MAUI workloads.
+        Check(shell.OpenPublish(app) is null, "Publish on a MAUI app doesn't open the folder publish page");
+        var archives = shell.OpenArchiveManager(app);
+        Check(archives is not null, "the Archive Manager opens");
+        await WaitAsync(() => archives!.DisplayVersion == "1.0" && archives.Version == "1" && archives.Platforms.Any(p => p.Value == Codalus.Workbench.Mobile.MobilePlatform.Android), "the Archive Manager shows the app's version, build number and Android", 120).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("maui-archives.png");
+        if (shell.Layout.FindDocument<SolutionManagementDocument>("archives") is { } page)
+        {
+            shell.Layout.CloseDocument(page);
+        }
+
         await SoftWaitAsync(() => shell.Solutions.RestoreState is "succeeded" or "failed", 300).ConfigureAwait(true);
         DismissRestoreFailureWithoutMauiWorkloads();
     }

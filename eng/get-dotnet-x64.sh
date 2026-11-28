@@ -19,7 +19,11 @@ fi
 
 # The runtime of the SDK the repository builds with (the fixtures' own target), then the older ones.
 major="$(sed -n 's/.*"version": *"\([0-9]*\)\..*/\1/p' "$repo/global.json" | head -1)"
-current="$(dotnet --list-runtimes | sed -n "s/^Microsoft\.NETCore\.App \($major\.[^ ]*\) .*/\1/p" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+# A release wins over the previews and release candidates installed beside it: the SDK's programs target the release, and
+# sort's last resort puts "11.0.0-rc.3…" after "11.0.0" (a Mac with both got the candidate, and net11.0 programs didn't start).
+runtimes="$(dotnet --list-runtimes | sed -n "s/^Microsoft\.NETCore\.App \($major\.[^ ]*\) .*/\1/p" | sort -t. -k1,1n -k2,2n -k3,3n)"
+current="$(printf '%s\n' "$runtimes" | grep -v -- - | tail -1 || true)"
+[ -n "$current" ] || current="$(printf '%s\n' "$runtimes" | tail -1)"
 if [ -z "$current" ]; then
   echo "error: no Microsoft.NETCore.App $major runtime is installed (dotnet --list-runtimes)." >&2
   exit 1

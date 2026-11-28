@@ -273,6 +273,7 @@ public static class CommandIcons
         ["phone-log"] = Green,
         ["simulator"] = Green,
         ["package-download"] = Blue,
+        ["archive"] = Orange,
         ["method"] = Purple,
         ["solution"] = Purple,
         ["warning"] = Yellow,
@@ -678,6 +679,7 @@ public static class CommandIcons
         // .NET MAUI's native tools (ADR 0104).
         ["android.deviceManager"] = new("phone-settings"),
         ["android.sdkManager"] = new("package-download"),
+        ["mobile.archiveManager"] = new("archive"),
         ["android.adbPrompt"] = new("terminal"),
         ["mobile.deviceLog"] = new("phone-log"),
         ["ios.openSimulator"] = new("simulator"),

@@ -54,3 +54,11 @@ public sealed partial class PublishView : LoadingView
 
     public override void FocusPrimary() => ProfileBox.Focus();
 }
+
+/// <summary>The Archive Manager (ADR 0114).</summary>
+public sealed partial class ArchiveManagerView : LoadingView
+{
+    public ArchiveManagerView() => InitializeComponent();
+
+    public override void FocusPrimary() => ArchiveList.Focus();
+}
