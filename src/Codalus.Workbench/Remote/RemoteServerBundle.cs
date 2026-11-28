@@ -14,7 +14,15 @@ public sealed record BundlePart(string Name, string Source);
 /// <param name="Folder">The bundle's folder there (absolute).</param>
 /// <param name="Platform">A runtime identifier (<c>linux-x64</c>, <c>osx-arm64</c>…), or null for one we don't know.</param>
 /// <param name="WslDistribution">The distribution's name when the machine is WSL (<c>WSL_DISTRO_NAME</c>).</param>
-public sealed record InstalledServer(string Folder, string? Platform, bool SelfContained, string? WslDistribution, bool Copied);
+public sealed record InstalledServer(string Folder, string? Platform, bool SelfContained, string? WslDistribution, bool Copied)
+{
+    /// <summary>
+    /// The <c>Microsoft.NETCore.App</c> version a framework-dependent server asks for (its runtimeconfig.json): the start
+    /// script runs it on a <c>dotnet</c> that has it (<see cref="RemoteServerBundle.StartScript"/>). Null for a
+    /// self-contained one.
+    /// </summary>
+    public string? Runtime { get; init; }
+}
 
 /// <summary>
 /// The version-locked server bundle (M21, ADR 0050): <c>server/</c> (self-contained for the remote platform when this
@@ -89,10 +97,11 @@ public sealed class RemoteServerBundle(string cacheFolder, string version, IRead
         var server = serverFolder(platform) ?? throw new InvalidOperationException(
             "The remote server (codalus-server) isn't part of this installation: remote/ next to the shell is missing.");
         var selfContained = File.Exists(Path.Combine(server, "codalus-server")) && !File.Exists(Path.Combine(server, "codalus-server.dll"));
+        var runtime = selfContained ? null : ServerRuntime(server);
         var archive = await ArchiveAsync([new BundlePart("server", server), .. hosts], progress, cancellationToken).ConfigureAwait(false);
         if (fields.GetValueOrDefault("bundle") == archive.Sha256)
         {
-            return new InstalledServer(folder, platform, selfContained, wsl, Copied: false);
+            return new InstalledServer(folder, platform, selfContained, wsl, Copied: false) { Runtime = runtime };
         }
 
         progress?.Report($"Copying the Codalus server ({archive.Size / (1024 * 1024)} MB) to {target.Display}…");
@@ -105,7 +114,7 @@ public sealed class RemoteServerBundle(string cacheFolder, string version, IRead
         }
 
         return answer.StartsWith("ok ", StringComparison.Ordinal)
-            ? new InstalledServer(answer[3..], platform, selfContained, wsl, Copied: true)
+            ? new InstalledServer(answer[3..], platform, selfContained, wsl, Copied: true) { Runtime = runtime }
             : throw new InvalidOperationException($"Couldn't install the server on {target.Display} (it needs tar, gzip and sha256sum or shasum): {RemoteShell.Trim(install.Error + install.Output)}");
     }
 
@@ -128,16 +137,46 @@ public sealed class RemoteServerBundle(string cacheFolder, string version, IRead
     /// with <paramref name="mode"/>'s arguments (<c>--stdio</c> by default, or <c>--relay</c> with a session id and a
     /// grace period: words without spaces or quotes).
     /// </summary>
-    public static string StartScript(string folder, IReadOnlyList<string>? mode = null)
+    /// <param name="runtime">
+    /// The <c>Microsoft.NETCore.App</c> version the framework-dependent server asks for (<see cref="InstalledServer.Runtime"/>):
+    /// the dll runs on the first <c>dotnet</c> that has it or a later one (the server rolls forward to a later major),
+    /// looking on <c>PATH</c> in order (<c>~/.dotnet</c> last), then in <c>DOTNET_ROOT</c> and the usual install folders,
+    /// not just on the first <c>dotnet</c> on <c>PATH</c>: Homebrew's .NET 10 first on a Mac's <c>PATH</c> can't run a
+    /// server built for .NET 11 that <c>~/.dotnet</c> has. When none has it, the first <c>dotnet</c> on <c>PATH</c>
+    /// starts it, after a line that says what it needs and where it looked; null: the first <c>dotnet</c> on <c>PATH</c>.
+    /// </param>
+    public static string StartScript(string folder, IReadOnlyList<string>? mode = null, string? runtime = null)
     {
         var arguments = string.Join(' ', mode ?? ["--stdio"]);
-        return $$"""
+        var choose = runtime is not null && Rpc.FrameworkVersion.TryParse(runtime, out var version)
+            ? $$"""
+                r="{{version.Text}}"
+                codalus_runs() { "$1" --list-runtimes 2>/dev/null | awk -v w="$r" 'function c(v, a) { sub(/-.*/, "", v); split(v, a, "."); return sprintf("%09d.%09d.%09d", a[1], a[2], a[3]) } $1 == "Microsoft.NETCore.App" && (c($2) > c(w) || (c($2) == c(w) && ($2 !~ /-/ || w ~ /-/))) { f = 1 } END { exit !f }'; }
+                IFS=:; set -f
+                for p in $PATH "$DOTNET_ROOT" /usr/local/share/dotnet /usr/share/dotnet /usr/lib/dotnet /opt/homebrew/opt/dotnet/libexec; do
+                  if [ -n "$p" ] && [ -x "$p/dotnet" ] && codalus_runs "$p/dotnet"; then x="$p/dotnet"; break; fi
+                done
+                unset IFS; set +f
+                [ "$x" = dotnet ] && echo "codalus-server needs the .NET runtime Microsoft.NETCore.App $r or later, which no dotnet has on PATH ($PATH), in DOTNET_ROOT (${DOTNET_ROOT:-not set}) or in /usr/local/share/dotnet, /usr/share/dotnet, /usr/lib/dotnet or /opt/homebrew/opt/dotnet/libexec." >&2
+
+                """
+            : string.Empty;
+        return ($$"""
             [ -f "$HOME/.profile" ] && . "$HOME/.profile" >/dev/null 2>&1 </dev/null
             PATH="$PATH:$HOME/.dotnet"; export PATH
             d="{{folder}}"
-            if [ -f "$d/server/codalus-server.dll" ]; then exec dotnet "$d/server/codalus-server.dll" {{arguments}}; else exec "$d/server/codalus-server" {{arguments}}; fi
-            """.Replace("\r\n", "\n", StringComparison.Ordinal);
+            [ -f "$d/server/codalus-server.dll" ] || exec "$d/server/codalus-server" {{arguments}}
+            x=dotnet
+
+            """ + choose + $$"""
+            exec "$x" "$d/server/codalus-server.dll" {{arguments}}
+            """).Replace("\r\n", "\n", StringComparison.Ordinal);
     }
+
+    /// <summary>The <c>Microsoft.NETCore.App</c> version a framework-dependent server in <paramref name="folder"/> asks for; null when its runtimeconfig.json doesn't say.</summary>
+    internal static string? ServerRuntime(string folder) =>
+        Rpc.RuntimeConfig.Read(Path.Combine(folder, "codalus-server.runtimeconfig.json"), _ => null)?.Frameworks
+            .FirstOrDefault(f => f.Name == Rpc.FrameworkReference.NetCoreApp)?.Version.Text;
 
     /// <summary>The bundle's archive (cached by its files' names, sizes and times) and its SHA-256.</summary>
     public async Task<(string Path, string Sha256, long Size)> ArchiveAsync(IReadOnlyList<BundlePart> parts, IProgress<string>? progress, CancellationToken cancellationToken)

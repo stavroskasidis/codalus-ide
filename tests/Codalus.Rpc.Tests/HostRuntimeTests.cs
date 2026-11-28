@@ -335,6 +335,79 @@ public sealed class HostRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void A_dll_through_the_bare_muxer_runs_on_the_first_root_with_its_runtime_not_the_first_dotnet_on_the_path()
+    {
+        // The maintainer's Mac (smoke, develop 607dc3a2): Homebrew's dotnet, with only .NET 10, first on the PATH, and
+        // ~/.dotnet with .NET 11. The hosts (app hosts, DOTNET_ROOT) ran on ~/.dotnet; codalus-server.dll on Homebrew's.
+        var exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        var homebrew = Muxer(FakeRoot("homebrew", "10.0.8"));
+        var user = Muxer(FakeRoot("user-dotnet", "10.0.8", "11.0.0"));
+        var other = Muxer(FakeRoot("other", "9.0.9"));
+        var dll = Path.Combine(_dir, "remote", "server", "codalus-server.dll");
+        WriteConfig(Path.GetDirectoryName(dll)!, "codalus-server", "11.0.0", "Major");
+        var launch = ProcessLaunchInfo.FromPath(dll, "--stdio");
+        var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant();
+        DotnetRootResolver Machine(string? dotnetRoot, params string[] path) => new()
+        {
+            ProcessEnvironment = n => n switch
+            {
+                "PATH" => string.Join(Path.PathSeparator, path),
+                "DOTNET_ROOT" => dotnetRoot,
+                _ => null, // no DOTNET_ROOT_<ARCH>, CODALUS_SKIP_RUNTIME_CHECK or DOTNET_ROLL_FORWARD of this machine's
+            },
+            // Nothing outside the fake roots: the registered and the default location are this machine's.
+            FileExists = p => p.StartsWith(_dir, StringComparison.Ordinal) && File.Exists(p),
+            ReadFirstLine = _ => null,
+            WindowsRegisteredLocation = _ => null,
+        };
+
+        // The hosts' root (DOTNET_ROOT, as the shell sets it) has .NET 11: its muxer, not Homebrew's first on the PATH.
+        Assert.Equal(Path.Combine(user, exe), HostRuntimeCheck.Prepare(launch, Machine(user, homebrew, user)).FileName);
+        Assert.Equal([dll, "--stdio"], HostRuntimeCheck.Prepare(launch, Machine(user, homebrew)).Arguments);
+        // No DOTNET_ROOT: the first dotnet on the PATH that has it, however many come before.
+        Assert.Equal(Path.Combine(user, exe), HostRuntimeCheck.Prepare(launch, Machine(null, homebrew, other, user)).FileName);
+        // The hosts' root without it (DOTNET_ROOT at Homebrew's): the PATH's .NET 11 still runs it.
+        Assert.Equal(Path.Combine(user, exe), HostRuntimeCheck.Prepare(launch, Machine(homebrew, user)).FileName);
+        // An app host's DOTNET_ROOT_<ARCH> wins over DOTNET_ROOT for the hosts, so here too.
+        Assert.Equal(Path.Combine(user, exe), HostRuntimeCheck.Prepare(launch with { Environment = new Dictionary<string, string> { ["DOTNET_ROOT_" + arch] = user } }, Machine(homebrew, homebrew)).FileName);
+
+        // Nowhere: not started, and the error says which runtime and every root it looked in.
+        var error = Assert.Throws<HostRuntimeMissingException>(() => HostRuntimeCheck.Prepare(launch, Machine(other, homebrew, other)));
+        Assert.Equal(
+            $"codalus-server needs the .NET runtime Microsoft.NETCore.App 11.0.0 (rollForward Major), which isn't installed in {other} (found: 9.0.9) or {homebrew} (found: 10.0.8).",
+            error.Message);
+        Assert.Equal(other, error.Result.DotnetRoot);
+        Assert.Equal([homebrew], error.Result.Elsewhere.Select(e => e.DotnetRoot));
+
+        // A dotnet on the PATH whose root can't be told (Homebrew's wrapper script, outside a .NET root): started as it
+        // is when no root that can be told has the runtime, since it may run elsewhere.
+        var wrapper = Path.Combine(_dir, "wrapper-bin");
+        Directory.CreateDirectory(wrapper);
+        File.WriteAllText(Path.Combine(wrapper, exe), "a wrapper");
+        Assert.Same(launch, HostRuntimeCheck.Prepare(launch, Machine(null, homebrew, wrapper)));
+        Assert.Equal(Path.Combine(user, exe), HostRuntimeCheck.Prepare(launch, Machine(null, wrapper, user)).FileName);
+
+        // Not an app (an SDK command), a muxer given by its path, not checked, or the check turned off: as it is.
+        var build = new ProcessLaunchInfo("dotnet", ["build", "x.csproj"]);
+        Assert.Same(build, HostRuntimeCheck.Prepare(build, Machine(user, homebrew)));
+        var rooted = launch with { FileName = Path.Combine(user, exe) };
+        Assert.Same(rooted, HostRuntimeCheck.Prepare(rooted, Machine(null, homebrew)));
+        Assert.Throws<HostRuntimeMissingException>(() => HostRuntimeCheck.Prepare(launch with { FileName = Path.Combine(homebrew, exe) }, Machine(user, user)));
+        var notChecked = launch with { CheckRuntime = false };
+        Assert.Same(notChecked, HostRuntimeCheck.Prepare(notChecked, Machine(other, homebrew)));
+        var skipped = new DotnetRootResolver { ProcessEnvironment = n => n == HostRuntimeCheck.SkipVariable ? "1" : n == "PATH" ? homebrew : null };
+        Assert.Same(launch, HostRuntimeCheck.Prepare(launch, skipped));
+    }
+
+    /// <summary>Makes <paramref name="root"/> a muxer's root: its <c>dotnet</c> (a placeholder) and <c>host/fxr</c>.</summary>
+    private static string Muxer(string root)
+    {
+        File.WriteAllText(Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"), "never started");
+        Directory.CreateDirectory(Path.Combine(root, "host", "fxr"));
+        return root;
+    }
+
+    [Fact]
     public async Task A_host_that_writes_to_stderr_and_exits_at_startup_puts_its_message_in_the_error_and_isnt_restarted()
     {
         // A stand-in host: writes why it can't run to standard error and exits, before any handshake.

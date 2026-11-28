@@ -80,6 +80,7 @@ Neither of the last two exists, so a feature that isn't remote-aware fails at on
 - The copied bundle uses the platform's self-contained server when the install has one, and the framework-dependent one otherwise.
 - **The hosts stay framework-dependent** and run on the target's `dotnet`. The build host must load the target's SDK and roll forward with it (ADR 0025), and a .NET workspace needs that SDK anyway. The server finds `dotnet` itself: its own host, `DOTNET_ROOT`, `~/.dotnet`, the PATH, the usual folders. It reports it in `hello`, and a target without one gets a warning that projects won't load.
 - The server starts after `~/.profile` (its output discarded), with `~/.dotnet` on the PATH.
+  - *Amended 2026-11-28:* the framework-dependent server runs on the first `dotnet` that has the runtime it asks for: on the `PATH` in order (`~/.dotnet` last), then `DOTNET_ROOT` and the usual folders (`RemoteServerBundle.StartScript`, `InstalledServer.Runtime`). Homebrew's .NET 10 first on a Mac's `PATH` ran a server built for .NET 11 that `~/.dotnet` had. When none has it, a line says what it needs and where it looked, then the `PATH`'s first `dotnet` starts it as before. The local server's launch is ADR 0080's amendment of this date.
 - In development and tests, `DAEDALUS_SERVER` points at the framework-dependent build.
 
 **Targets.**

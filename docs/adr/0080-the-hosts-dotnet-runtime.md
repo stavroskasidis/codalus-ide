@@ -1,6 +1,6 @@
 # 0080. The hosts' .NET runtime: checked before they start and before an update
 
-- **Status:** proposed (M49, 2026-10-18), implemented on `claude/m49-host-runtime`; the maintainer accepts it, with D35, by merging the pull request
+- **Status:** proposed (M49, 2026-10-18), implemented on `claude/m49-host-runtime`; the maintainer accepts it, with D35, by merging the pull request; amended 2026-11-28 ([`dotnet app.dll` runs on a root with its runtime](#amendment-2026-11-28-dotnet-appdll-runs-on-a-root-with-its-runtime))
 - **Date:** 2026-10-18
 - **Deciders:** maintainer
 - **Amends:** [ADR 0025](0025-hosts-and-the-users-sdk.md) (the hosts' prerequisite is now checked and offered), [ADR 0029](0029-self-update.md) (the signed feed names each release's runtime)
@@ -44,6 +44,7 @@ The maintainer asked for four things:
   - **What counts as installed:** a version folder needs its `Microsoft.NETCore.App.deps.json`, and `DOTNET_DISABLE_RUNTIME_VERSIONS` removes versions.
 - **The root is the one the host itself would use** (`DotnetRootResolver`):
   - For `dotnet app.dll`: the folder of the `dotnet` on the `PATH`, with its links resolved, when that folder has `host/fxr`. Homebrew's wrapper script and snap's launcher run the real muxer from elsewhere, so the check stands aside for them.
+  - *Amended for 1.1.0 ([below](#amendment-2026-11-28-dotnet-appdll-runs-on-a-root-with-its-runtime)):* a `dotnet app.dll` started by the bare `dotnet` runs on the first root that has its runtime, the hosts' root first.
   - For an app host: `DOTNET_ROOT_<ARCH>`, `DOTNET_ROOT`, then the registered location (`/etc/dotnet/install_location[_<arch>]`, or Windows' registry), then the default one (`/usr/local/share/dotnet`, `/usr/share/dotnet`, `%ProgramFiles%\dotnet`; its `x64` folder for an x64 process on Arm64, which is the win-x64 build on Windows on Arm). A variable whose folder doesn't exist is passed over, as hostfxr does.
 - **It is conservative.** Some programs aren't checked: one without a `runtimeconfig.json`, a self-contained app, a root that doesn't exist, and a setting the host itself would refuse. For them, starting the program tells, and item 3 makes that readable.
 
@@ -99,6 +100,18 @@ The maintainer asked for four things:
 - ADR 0025 already rejected a private runtime for the build host. A bundled runtime for the other hosts only would make two classes of host, and wouldn't avoid the SDK prerequisite.
 
 **Why A:** it costs nothing in size, keeps one runtime for builds and hosts, and turns the failure into an offer to install, before the update and after it. The cost is that a nightly built on a newer release candidate asks for that release candidate once.
+
+## Amendment (2026-11-28): `dotnet app.dll` runs on a root with its runtime
+
+The macOS smoke test (the published shell, develop `607dc3a2`) failed `remote.session`: "The remote server didn't start on Local server: You must install or update .NET … Framework 'Microsoft.NETCore.App' 11.0.0, .NET location: /opt/homebrew/Cellar/dotnet/10.0.300/libexec/". Homebrew's `dotnet`, with only .NET 10, was first on the Mac's `PATH`, and `~/.dotnet` had .NET 11. The hosts are app hosts and found `~/.dotnet` through `DOTNET_ROOT`; the local server, `dotnet codalus-server.dll`, was started with a bare `dotnet` by its own `Process.Start`, so it got the `PATH`'s first one and no check at all. Any user with both installs hit it.
+
+- **`HostRuntimeCheck.Prepare`** replaces the check in `LocalProcessLauncher`, and the local server's launch (`RemoteSession.ConnectAsync`) uses it too, after the login shell's environment is in (M56). A launch with the bare `dotnet` and an app (`dotnet [exec] [options] app.dll`) gets the muxer of the first root that has its runtime:
+  - the root the app hosts use (`ForAppHost`: `DOTNET_ROOT_<ARCH>`, `DOTNET_ROOT`, which `ChooseDotnetRoot` points at a root with the hosts' runtime), so the server runs on the hosts' .NET;
+  - then each `dotnet` on the `PATH`, in order, not just the first.
+- **None has it:** the program isn't started, and `HostRuntimeMissingException` names every root it looked in: "codalus-server needs the .NET runtime Microsoft.NETCore.App 11.0.0 (rollForward Major), which isn't installed in ~/.dotnet (found: 10.0.12) or /opt/homebrew/Cellar/dotnet/10.0.300/libexec (found: 10.0.8)." (`HostRuntimeCheckResult.Elsewhere`). Opening a local server window then shows the runtime's notification (Install .NET), as a host does.
+- **Unchanged:** a muxer given by its path is checked under its own root; an SDK command isn't an app; a `dotnet` on the `PATH` whose root can't be told (a wrapper script) is started as it is when no root that can be told has the runtime; `CheckRuntime = false` and `CODALUS_SKIP_RUNTIME_CHECK=1` leave the launch alone.
+- **A remote machine had the same bug** for the framework-dependent server, which a Mac target gets (only `linux-x64` and `linux-arm64` ship self-contained): its start script ran the `PATH`'s first `dotnet`, with `~/.dotnet` appended last. ADR 0050's amendment of this date has the fix.
+- Tests: `HostRuntimeTests.A_dll_through_the_bare_muxer_runs_on_the_first_root_with_its_runtime_not_the_first_dotnet_on_the_path` (fake roots), `RemoteServerTests.The_local_server_starts_on_a_dotnet_with_its_runtime_not_the_first_one_on_the_path` and `The_start_script_runs_the_server_on_a_dotnet_with_its_runtime_not_the_first_one_on_the_path` (a stand-in `dotnet` with only .NET 10 first on the `PATH`, the real server).
 
 ## Consequences
 

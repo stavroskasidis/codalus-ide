@@ -617,7 +617,8 @@ public sealed class RemoteServerTests
             Assert.False((await bundle.EnsureAsync(target, null, Timeout(300))).Copied);
 
             // It runs there (the framework-dependent build, on the target's dotnet).
-            var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder));
+            Assert.Equal(ServerRuntime(), installed.Runtime); // the start script looks for a dotnet that has it
+            var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, null, installed.Runtime));
             await using var connection = await RemoteConnection.StartAsync(new RemoteTransport(program, arguments, "stand-in"), ServerVersion, Timeout(120));
             Assert.Equal(target is WslTarget || OperatingSystem.IsLinux() ? "linux" : "macos", connection.Server.Os); // the fake ssh runs it here
             // The server names its folder canonically: macOS's /tmp is a link to /private/tmp.
@@ -625,7 +626,7 @@ public sealed class RemoteServerTests
             Assert.Equal(Canonical(installed.Folder + "/server/"), Canonical(connection.Server.ServerFolder.Replace('\\', '/')));
 
             // Resumable there (M21b): the daemon outlives the transport, which is started again.
-            var (relayProgram, relayArguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, ["--relay", Guid.NewGuid().ToString("N"), "--grace", "60"]));
+            var (relayProgram, relayArguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, ["--relay", Guid.NewGuid().ToString("N"), "--grace", "60"], installed.Runtime));
             await using var resumable = await RemoteConnection.StartAsync(new RemoteTransport(relayProgram, relayArguments, "stand-in"), ServerVersion, Timeout(120));
             Assert.True(resumable.IsResumable);
             var daemon = resumable.Server.ProcessId;
@@ -802,6 +803,136 @@ public sealed class RemoteServerTests
                 await process.WaitForExitAsync(CancellationToken.None);
             }
 
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    // ------------------------------------------------------------------ the .NET the server runs on
+
+    /// <summary>The .NET root these tests run on (<c>&lt;root&gt;/shared/Microsoft.NETCore.App/&lt;version&gt;/</c>): it runs the server.</summary>
+    private static string RunningRoot() =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "..", "..", ".."));
+
+    private static string DotnetExe => OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+
+    /// <summary>
+    /// A stand-in .NET root with only an older runtime (Homebrew's .NET 10 on the maintainer's Mac): its <c>dotnet</c>
+    /// lists that runtime and fails as the .NET host does for anything else. A placeholder on Windows, never started.
+    /// </summary>
+    private static string OldDotnet(string folder)
+    {
+        var root = Path.Combine(folder, "old-dotnet");
+        var runtime = Path.Combine(root, "shared", "Microsoft.NETCore.App", "10.0.8");
+        Directory.CreateDirectory(runtime);
+        File.WriteAllText(Path.Combine(runtime, "Microsoft.NETCore.App.deps.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(root, "host", "fxr"));
+        var dotnet = Path.Combine(root, DotnetExe);
+        if (OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(dotnet, "never started");
+        }
+        else
+        {
+            Codalus.Tests.StandInScript.Write(dotnet, $$"""
+                #!/bin/sh
+                if [ "$1" = --list-runtimes ]; then echo "Microsoft.NETCore.App 10.0.8 [{{root}}/shared/Microsoft.NETCore.App]"; exit 0; fi
+                echo "You must install or update .NET to run this application. (the stand-in dotnet, only 10.0.8)" >&2
+                exit 150
+                """.Replace("\r\n", "\n", StringComparison.Ordinal));
+        }
+
+        return root;
+    }
+
+    [Fact]
+    public async Task The_local_server_starts_on_a_dotnet_with_its_runtime_not_the_first_one_on_the_path()
+    {
+        // The macOS smoke (develop 607dc3a2): Homebrew's dotnet with only .NET 10 first on the PATH, ~/.dotnet with
+        // .NET 11. The build host (an app host, DOTNET_ROOT) started on ~/.dotnet; the local server, dotnet
+        // codalus-server.dll, on Homebrew's: "You must install or update .NET… Framework 'Microsoft.NETCore.App' 11.0.0".
+        var folder = TempFolder();
+        try
+        {
+            var real = RunningRoot();
+            var old = OldDotnet(folder);
+            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant();
+            DotnetRootResolver Machine(string dotnetRoot, string path) => new()
+            {
+                // The machine's own DOTNET_ROOT_<ARCH>, CODALUS_SKIP_RUNTIME_CHECK and roll-forward settings don't count.
+                ProcessEnvironment = n => n switch { "PATH" => path, "DOTNET_ROOT" => dotnetRoot, _ => null },
+                WindowsRegisteredLocation = _ => null,
+            };
+            var options = new RemoteSessionOptions(RemoteTargetSpec.Parse("local")!, ServerVersion, Path.Combine(folder, "cache"))
+            {
+                LocalServer = ServerDll,
+                MapLocalPaths = false,
+                // The hosts' root (DOTNET_ROOT, as the shell sets it) has the runtime; the stand-in is first on the PATH.
+                DotnetRoots = Machine(real, old + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH")),
+            };
+            await using (var session = await RemoteSession.ConnectAsync(options, null, null, Timeout(120)))
+            {
+                Assert.Equal(ServerVersion, session.Connection.Server.ServerVersion);
+                // The server names the dotnet it runs on: the hosts' root's, which its own hosts then run on too.
+                Assert.Equal(Platform.RealPath.Resolve(Path.Combine(real, DotnetExe)), Platform.RealPath.Resolve(session.Connection.Server.Dotnet!));
+            }
+
+            // No DOTNET_ROOT that has it: the first dotnet on the PATH that does, behind the stand-in.
+            var described = Machine(Path.Combine(folder, "no-such-root"), old + Path.PathSeparator + real);
+            await using (var session = await RemoteSession.ConnectAsync(options with { DotnetRoots = described }, null, null, Timeout(120)))
+            {
+                Assert.Equal(Platform.RealPath.Resolve(Path.Combine(real, DotnetExe)), Platform.RealPath.Resolve(session.Connection.Server.Dotnet!));
+            }
+
+            // Nowhere: it isn't started, and the error says which runtime it needs and where it looked.
+            var error = await Assert.ThrowsAsync<HostRuntimeMissingException>(() => RemoteSession.ConnectAsync(options with { DotnetRoots = Machine(old, old) }, null, null, Timeout(120)));
+            Assert.Contains($"codalus-server needs the .NET runtime Microsoft.NETCore.App {ServerRuntime()} (rollForward Major), which isn't installed in {old} (found: 10.0.8).", error.Message, StringComparison.Ordinal);
+            Assert.IsAssignableFrom<JsonRpcConnectionLostException>(error); // what ConnectRemoteAsync reports (the runtime's notification)
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task The_start_script_runs_the_server_on_a_dotnet_with_its_runtime_not_the_first_one_on_the_path()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("The fake ssh runs the start script here on Linux and macOS; WSL's PATH isn't the test's to describe.");
+            return;
+        }
+
+        // A Mac over SSH gets the framework-dependent server (no osx-* bundle is shipped): the same Homebrew-first PATH.
+        var folder = TempFolder();
+        try
+        {
+            var target = StandIn(folder)!;
+            var installed = Path.Combine(folder, "installed");
+            Directory.CreateDirectory(installed);
+            Directory.CreateSymbolicLink(Path.Combine(installed, "server"), Path.GetDirectoryName(ServerDll)!);
+            var old = OldDotnet(folder);
+            var real = RunningRoot();
+            RemoteTransport Transport(string? runtime) => target.Shell(RemoteServerBundle.StartScript(installed, null, runtime)) is var (program, arguments)
+                ? new RemoteTransport(program, arguments, "stand-in") { Environment = new Dictionary<string, string> { ["PATH"] = old + ":" + real + ":/usr/bin:/bin", ["DOTNET_ROOT"] = string.Empty } }
+                : throw new InvalidOperationException();
+
+            await using (var connection = await RemoteConnection.StartAsync(Transport(ServerRuntime()), ServerVersion, Timeout(120)))
+            {
+                Assert.Equal(Platform.RealPath.Resolve(Path.Combine(real, DotnetExe)), Platform.RealPath.Resolve(connection.Server.Dotnet!));
+            }
+
+            // Without the runtime to look for, as before: the first dotnet on the PATH, which can't run it.
+            var before = await Assert.ThrowsAsync<InvalidOperationException>(() => RemoteConnection.StartAsync(Transport(null), ServerVersion, Timeout(120)));
+            Assert.Contains("You must install or update .NET", before.Message, StringComparison.Ordinal);
+
+            // None has it: a line says what it needs and where it looked, then the PATH's first dotnet says why it can't.
+            var none = await Assert.ThrowsAsync<InvalidOperationException>(() => RemoteConnection.StartAsync(Transport("99.0.0"), ServerVersion, Timeout(120)));
+            Assert.Contains("codalus-server needs the .NET runtime Microsoft.NETCore.App 99.0.0 or later, which no dotnet has on PATH (" + old + ":" + real, none.Message, StringComparison.Ordinal);
+            Assert.Contains("You must install or update .NET", none.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
             Directory.Delete(folder, recursive: true);
         }
     }
