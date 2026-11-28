@@ -457,50 +457,63 @@ public sealed class DialogViewModel : ObservableObject
 
     private async Task<DialogResult> ShowAfterAsync(Task previous, DialogRequest request)
     {
-        await previous.ConfigureAwait(true);
-        _pending = new TaskCompletionSource<DialogResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _input = request.Input ?? string.Empty;
-        OnPropertyChanged(nameof(InputText));
-        Request = request;
-        Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.DialogShown, [], [("title", request.Title)]);
-        Error = request.Validate?.Invoke(_input);
-        Buttons.Clear();
-        OptionChecked = request.Option?.Checked ?? false;
-        foreach (var label in Order(request.Buttons, DefaultButton, PrimaryLast))
+        // The earlier dialog's failure is its own caller's: this one still shows. Awaiting it as it was rethrew that failure
+        // into every dialog after it (a smoke run's 40 steps after one dialog failed, PR #577's first run).
+        await previous.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        try
         {
-            Buttons.Add(new DialogButtonViewModel(label, label == DefaultButton, new RelayCommand(() => Choose(label))));
+            _pending = new TaskCompletionSource<DialogResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _input = request.Input ?? string.Empty;
+            OnPropertyChanged(nameof(InputText));
+            Request = request;
+            Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.DialogShown, [], [("title", request.Title)]);
+            Error = request.Validate?.Invoke(_input);
+            Buttons.Clear();
+            OptionChecked = request.Option?.Checked ?? false;
+            foreach (var label in Order(request.Buttons, DefaultButton, PrimaryLast))
+            {
+                Buttons.Add(new DialogButtonViewModel(label, label == DefaultButton, new RelayCommand(() => Choose(label))));
+            }
+
+            Choices.Clear();
+            foreach (var choice in request.Choices ?? [])
+            {
+                var row = new DialogChoiceViewModel(choice);
+                row.PropertyChanged += OnChoiceChanged;
+                Choices.Add(row);
+            }
+
+            SelectedChoice = Choices.FirstOrDefault(c => c.Checkable); // a tree's first file, not its solution; none where nothing checks
+            Alternatives.Clear();
+            foreach (var alternative in request.Alternatives ?? [])
+            {
+                var row = new DialogAlternativeViewModel(alternative);
+                row.PropertyChanged += OnAlternativeChanged;
+                Alternatives.Add(row);
+            }
+
+            if (Alternatives.Count > 0 && !Alternatives.Any(a => a.IsSelected))
+            {
+                Alternatives[0].IsSelected = true;
+            }
+
+            OnPropertyChanged(nameof(HasAlternatives));
+            OnPropertyChanged(nameof(HasChoices));
+            OnPropertyChanged(nameof(HasCheckableChoices));
+            OnPropertyChanged(nameof(Reorderable));
+            OnPropertyChanged(nameof(ShowsMoveHint));
+            OnPropertyChanged(nameof(AllChecked));
+            OnPropertyChanged(nameof(CheckedSummary));
+            Opened?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            // A request that fails as it opens (its validation, or a view laying it out, throwing) closes again rather than
+            // stay open half shown, and its caller gets the failure.
+            Close(new DialogResult(null, null));
+            throw;
         }
 
-        Choices.Clear();
-        foreach (var choice in request.Choices ?? [])
-        {
-            var row = new DialogChoiceViewModel(choice);
-            row.PropertyChanged += OnChoiceChanged;
-            Choices.Add(row);
-        }
-
-        SelectedChoice = Choices.FirstOrDefault(c => c.Checkable); // a tree's first file, not its solution; none where nothing checks
-        Alternatives.Clear();
-        foreach (var alternative in request.Alternatives ?? [])
-        {
-            var row = new DialogAlternativeViewModel(alternative);
-            row.PropertyChanged += OnAlternativeChanged;
-            Alternatives.Add(row);
-        }
-
-        if (Alternatives.Count > 0 && !Alternatives.Any(a => a.IsSelected))
-        {
-            Alternatives[0].IsSelected = true;
-        }
-
-        OnPropertyChanged(nameof(HasAlternatives));
-        OnPropertyChanged(nameof(HasChoices));
-        OnPropertyChanged(nameof(HasCheckableChoices));
-        OnPropertyChanged(nameof(Reorderable));
-        OnPropertyChanged(nameof(ShowsMoveHint));
-        OnPropertyChanged(nameof(AllChecked));
-        OnPropertyChanged(nameof(CheckedSummary));
-        Opened?.Invoke(this, EventArgs.Empty);
         return await _pending.Task.ConfigureAwait(true);
     }
 

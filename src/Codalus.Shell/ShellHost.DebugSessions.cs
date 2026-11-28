@@ -529,7 +529,8 @@ public sealed partial class ShellHost
             return await RemoteDebuggers.EnsureAsync(
                 target,
                 Debugger.UsesCodalusAdapter,
-                question => Dialogs.ConfirmAsync(Localizer.Get("msg.debugSessions.copyTheDebugger", "Copy the Debugger"), question, Localizer.Get("msg.debugSessions.copy", "Copy")),
+                // Asked from the service's thread, after its awaits: the dialog is shown on the UI thread.
+                question => Ui.RunAsync(() => Dialogs.ConfirmAsync(Localizer.Get("msg.debugSessions.copyTheDebugger", "Copy the Debugger"), question, Localizer.Get("msg.debugSessions.copy", "Copy"))).Unwrap(),
                 new Progress<string>(line => DebugLog.AppendLine(line)),
                 CancellationToken.None).ConfigureAwait(true);
         }
