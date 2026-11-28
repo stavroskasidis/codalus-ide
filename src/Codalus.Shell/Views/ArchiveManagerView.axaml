@@ -1,0 +1,179 @@
+<local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:controls="using:Codalus.Shell.Controls"
+                   xmlns:vm="using:Codalus.Shell.ViewModels"
+                   xmlns:local="using:Codalus.Shell.Views"
+                   x:Class="Codalus.Shell.Views.ArchiveManagerView"
+                   x:DataType="vm:ArchiveManagerViewModel">
+  <!-- The Archive Manager (ADR 0114): a MAUI app's archives, a new archive with its versions, and Distribute for the selected one. -->
+  <local:LoadingView.Styles>
+    <Style Selector="Border.form">
+      <Setter Property="Padding" Value="12" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    </Style>
+  </local:LoadingView.Styles>
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <ComboBox x:Name="AppBox" MinWidth="200" ItemsSource="{Binding AppChoices}" SelectedIndex="{Binding AppIndex}" AutomationProperties.Name="{l:T archiveManager.app}" />
+      <Border Classes="toolbarSeparator" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T archiveManager.refreshTheArchives}" AutomationProperties.Name="{l:T archiveManager.refreshTheArchives}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="folder-open" Command="{Binding RevealCommand}" ToolTip.Tip="{l:T archiveManager.showTheArchiveInTheFile}" AutomationProperties.Name="{l:T archiveManager.showTheArchiveInTheFile}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="trash" Command="{Binding DeleteCommand}" ToolTip.Tip="{l:T archiveManager.deleteTheArchive}" AutomationProperties.Name="{l:T archiveManager.deleteTheArchive}" />
+    </controls:ToolbarPanel>
+    <Grid ColumnDefinitions="3*,Auto,2*" Margin="0">
+      <!-- A new archive, then the list. -->
+      <DockPanel Grid.Column="0" Margin="16,12,8,12">
+        <StackPanel DockPanel.Dock="Top" Spacing="8">
+          <TextBlock Classes="heading" Text="{Binding Title}" />
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T archiveManager.anArchiveIsAReleaseBuild}" />
+          <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto" IsVisible="{Binding HasApp}">
+            <TextBlock Text="{l:T archiveManager.platform}" VerticalAlignment="Center" />
+            <ComboBox x:Name="PlatformBox" Grid.Column="1" MinWidth="200" ItemsSource="{Binding Platforms}" SelectedItem="{Binding Platform}" AutomationProperties.Name="{l:T archiveManager.platform}" />
+            <TextBlock Grid.Row="1" Text="{l:T archiveManager.applicationId}" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ApplicationId}" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,6" />
+            <TextBlock Grid.Row="2" Text="{l:T archiveManager.version}" VerticalAlignment="Center" />
+            <TextBox Grid.Row="2" Grid.Column="1" MaxWidth="200" HorizontalAlignment="Left" MinWidth="120" Text="{Binding DisplayVersion}" AutomationProperties.Name="{l:T archiveManager.versionApplicationdisplayversion}" />
+            <TextBlock Grid.Row="3" Text="{l:T archiveManager.buildNumber}" VerticalAlignment="Center" />
+            <TextBox Grid.Row="3" Grid.Column="1" MaxWidth="200" HorizontalAlignment="Left" MinWidth="120" Text="{Binding Version}" AutomationProperties.Name="{l:T archiveManager.buildNumberApplicationversion}" Margin="0,4,0,0" />
+          </Grid>
+          <CheckBox Content="{l:T archiveManager.incrementTheBuildNumber}" IsChecked="{Binding IncrementBuild}" IsVisible="{Binding HasApp}" AutomationProperties.Name="{l:T archiveManager.incrementTheBuildNumber}" />
+          <TextBlock Classes="muted" Text="{Binding NextVersionNote}" IsVisible="{Binding IncrementBuild}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Foreground="{DynamicResource ErrorForegroundBrush}" Text="{Binding PlatformProblem}" IsVisible="{Binding HasPlatformProblem}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="ArchiveButton" Classes="accent" Content="{l:T archiveManager.archive}" Command="{Binding ArchiveCommand}" AutomationProperties.Name="{l:T archiveManager.archiveTheApp}" />
+            <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" MaxWidth="420" />
+          </StackPanel>
+          <TextBlock Classes="subheading" Text="{l:T archiveManager.archives}" Margin="0,12,0,0" />
+          <TextBlock Classes="muted" Text="{l:T archiveManager.noArchivesYet}" IsVisible="{Binding HasNoArchives}" />
+        </StackPanel>
+        <ListBox x:Name="ArchiveList" ItemsSource="{Binding Archives}" SelectedItem="{Binding SelectedArchive}" Background="Transparent" AutomationProperties.Name="{l:T archiveManager.archives}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ArchiveRowViewModel">
+              <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <controls:Icon Kind="archive" />
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Version}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Platform}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding Created}" Classes="muted" Margin="8,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="{Binding Location}" Classes="muted" Margin="8,0,0,0" VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <GridSplitter Grid.Column="1" Width="4" ResizeDirection="Columns" />
+      <!-- Distribute the selected archive. -->
+      <ScrollViewer Grid.Column="2">
+        <StackPanel Margin="8,12,16,12" Spacing="8" IsVisible="{Binding HasSelection}">
+          <TextBlock Classes="heading" Text="{l:T archiveManager.distribute}" />
+          <TextBlock Text="{l:T archiveManager.channel}" />
+          <ListBox x:Name="ChannelList" ItemsSource="{Binding Channels}" SelectedItem="{Binding Channel}" Background="Transparent" AutomationProperties.Name="{l:T archiveManager.distributionChannel}" />
+          <TextBlock Classes="muted" Text="{Binding ChannelDescription}" TextWrapping="Wrap" />
+
+          <!-- Android: the user's keystores. -->
+          <StackPanel Spacing="8" IsVisible="{Binding IsAndroid}">
+            <TextBlock Classes="subheading" Text="{l:T archiveManager.signingKey}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ComboBox MinWidth="280" ItemsSource="{Binding Keystores}" SelectedItem="{Binding Keystore}" AutomationProperties.Name="{l:T archiveManager.signingKey}" />
+              <Button Classes="iconText" controls:ButtonIcon.Kind="add" Content="{l:T archiveManager.create}" Command="{Binding ShowCreateKeystoreCommand}" AutomationProperties.Name="{l:T archiveManager.createASigningKey}" />
+              <Button Content="{l:T archiveManager.import}" Command="{Binding ShowImportKeystoreCommand}" AutomationProperties.Name="{l:T archiveManager.importAKeystore}" />
+              <Button Classes="icon" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveKeystoreCommand}" ToolTip.Tip="{l:T archiveManager.removeTheSigningKey}" AutomationProperties.Name="{l:T archiveManager.removeTheSigningKey}" />
+            </StackPanel>
+            <Border Classes="form" IsVisible="{Binding IsCreatingKeystore}">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T archiveManager.aNewKeystoreWithAnUpload}" />
+                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                  <TextBlock Text="{l:T archiveManager.name}" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Text="{Binding KeystoreName}" PlaceholderText="{l:T archiveManager.theKeystoreSFileName}" AutomationProperties.Name="{l:T archiveManager.signingKeyName}" />
+                  <TextBlock Grid.Row="1" Text="{l:T archiveManager.folder}" VerticalAlignment="Center" />
+                  <controls:PathBox Grid.Row="1" Grid.Column="1" Kind="Folder" Text="{Binding KeystoreFolder}" AutomationProperties.Name="{l:T archiveManager.theNewKeystoreSFolder}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="2" Text="{l:T archiveManager.alias}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding KeystoreAlias}" AutomationProperties.Name="{l:T archiveManager.keyAlias}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="3" Text="{l:T archiveManager.password}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="3" Grid.Column="1" PasswordChar="●" Text="{Binding KeystorePassword}" AutomationProperties.Name="{l:T archiveManager.keystorePassword}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="4" Text="{l:T archiveManager.confirmPassword}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="4" Grid.Column="1" PasswordChar="●" Text="{Binding KeystoreConfirmPassword}" AutomationProperties.Name="{l:T archiveManager.confirmTheKeystorePassword}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="5" Text="{l:T archiveManager.yourName}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding KeystoreOwner}" AutomationProperties.Name="{l:T archiveManager.theKeyOwnerSName}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="6" Text="{l:T archiveManager.organization}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding KeystoreOrganization}" PlaceholderText="{l:T archiveManager.optional}" AutomationProperties.Name="{l:T archiveManager.organization}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="7" Text="{l:T archiveManager.countryCode}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="7" Grid.Column="1" MaxWidth="80" HorizontalAlignment="Left" MinWidth="60" Text="{Binding KeystoreCountry}" PlaceholderText="{l:T archiveManager.us}" AutomationProperties.Name="{l:T archiveManager.countryCode}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="8" Text="{l:T archiveManager.validForYears}" VerticalAlignment="Center" />
+                  <NumericUpDown Grid.Row="8" Grid.Column="1" HorizontalAlignment="Left" MinWidth="120" Minimum="1" Maximum="100" FormatString="0" Value="{Binding KeystoreYearsValue}" AutomationProperties.Name="{l:T archiveManager.validForInYears}" Margin="0,4,0,0" />
+                </Grid>
+                <Button Classes="accent" HorizontalAlignment="Left" Content="{l:T archiveManager.createSigningKey}" Command="{Binding CreateKeystoreCommand}" AutomationProperties.Name="{l:T archiveManager.createTheSigningKey}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="form" IsVisible="{Binding IsImportingKeystore}">
+              <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                  <TextBlock Text="{l:T archiveManager.name}" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Text="{Binding KeystoreName}" PlaceholderText="{l:T archiveManager.theKeystoreSFileName}" AutomationProperties.Name="{l:T archiveManager.importedSigningKeyName}" />
+                  <TextBlock Grid.Row="1" Text="{l:T archiveManager.keystoreFile}" VerticalAlignment="Center" />
+                  <controls:PathBox Grid.Row="1" Grid.Column="1" Kind="File" Text="{Binding KeystorePath}" AutomationProperties.Name="{l:T archiveManager.keystoreFileToImport}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="2" Text="{l:T archiveManager.alias}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding KeystoreAlias}" AutomationProperties.Name="{l:T archiveManager.importedKeyAlias}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="3" Text="{l:T archiveManager.keystorePassword}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="3" Grid.Column="1" PasswordChar="●" Text="{Binding KeystorePassword}" AutomationProperties.Name="{l:T archiveManager.importedKeystorePassword}" Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="4" Text="{l:T archiveManager.keyPassword}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="4" Grid.Column="1" PasswordChar="●" Text="{Binding KeyPassword}" PlaceholderText="{l:T archiveManager.theKeystoreSWhenEmpty}" AutomationProperties.Name="{l:T archiveManager.importedKeyPassword}" Margin="0,4,0,0" />
+                </Grid>
+                <Button Classes="accent" HorizontalAlignment="Left" Content="{l:T archiveManager.importSigningKey}" Command="{Binding ImportKeystoreCommand}" AutomationProperties.Name="{l:T archiveManager.importTheSigningKey}" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <!-- Apple: the keychain's certificates and the installed profiles. -->
+          <StackPanel Spacing="8" IsVisible="{Binding IsApple}">
+            <TextBlock Classes="subheading" Text="{l:T archiveManager.signing}" />
+            <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+              <TextBlock Text="{l:T archiveManager.certificate}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" MinWidth="280" ItemsSource="{Binding Identities}" SelectedItem="{Binding Identity}" AutomationProperties.Name="{l:T archiveManager.signingCertificate}" />
+              <TextBlock Grid.Row="1" Text="{l:T archiveManager.provisioningProfile}" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="1" Grid.Column="1" MinWidth="280" ItemsSource="{Binding Profiles}" SelectedItem="{Binding Profile}" AutomationProperties.Name="{l:T archiveManager.provisioningProfile}" Margin="0,4,0,0" />
+              <TextBlock Grid.Row="2" Text="{l:T archiveManager.installerCertificate}" VerticalAlignment="Center" IsVisible="{Binding NeedsInstaller}" />
+              <ComboBox Grid.Row="2" Grid.Column="1" MinWidth="280" ItemsSource="{Binding Installers}" SelectedItem="{Binding Installer}" IsVisible="{Binding NeedsInstaller}" AutomationProperties.Name="{l:T archiveManager.installerCertificate}" Margin="0,4,0,0" />
+            </Grid>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T archiveManager.certificatesComeFromTheKeychainAnd}" />
+          </StackPanel>
+
+          <!-- Windows: the certificate store's certificates and the user's .pfx files. -->
+          <StackPanel Spacing="8" IsVisible="{Binding IsWindowsSigned}">
+            <TextBlock Classes="subheading" Text="{l:T archiveManager.certificate}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ComboBox MinWidth="280" ItemsSource="{Binding Certificates}" SelectedItem="{Binding Certificate}" AutomationProperties.Name="{l:T archiveManager.signingCertificateForThePackage}" />
+              <Button Content="{l:T archiveManager.createTestCertificate}" Command="{Binding CreateTestCertificateCommand}" AutomationProperties.Name="{l:T archiveManager.createATestCertificate}" />
+              <Button Content="{l:T archiveManager.importPfx}" Command="{Binding ShowImportCertificateCommand}" AutomationProperties.Name="{l:T archiveManager.importACertificateFile}" />
+            </StackPanel>
+            <Border Classes="form" IsVisible="{Binding IsImportingCertificate}">
+              <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto">
+                  <TextBlock Text="{l:T archiveManager.certificateFile}" VerticalAlignment="Center" />
+                  <controls:PathBox Grid.Column="1" Kind="File" Text="{Binding CertificatePath}" AutomationProperties.Name="{l:T archiveManager.certificateFileToImport}" />
+                  <TextBlock Grid.Row="1" Text="{l:T archiveManager.password}" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="1" Grid.Column="1" PasswordChar="●" Text="{Binding CertificatePassword}" AutomationProperties.Name="{l:T archiveManager.certificatePassword}" Margin="0,4,0,0" />
+                </Grid>
+                <Button Classes="accent" HorizontalAlignment="Left" Content="{l:T archiveManager.importCertificate}" Command="{Binding ImportCertificateCommand}" AutomationProperties.Name="{l:T archiveManager.importTheCertificate}" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <TextBlock Classes="muted" Text="{Binding SigningStatus}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Foreground="{DynamicResource ErrorForegroundBrush}" Text="{Binding DistributeProblem}" IsVisible="{Binding HasDistributeProblem}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+            <Button x:Name="DistributeButton" Classes="accent" Content="{l:T archiveManager.distribute}" Command="{Binding DistributeCommand}" AutomationProperties.Name="{l:T archiveManager.distributeTheArchive}" />
+            <Button Content="{l:T archiveManager.openFolder}" Command="{Binding OpenDistributionCommand}" IsVisible="{Binding HasDistribution}" AutomationProperties.Name="{l:T archiveManager.openTheDistributionSFolder}" />
+            <Button Content="{l:T archiveManager.openUploadPage}" Command="{Binding OpenUploadPageCommand}" IsVisible="{Binding HasDistribution}" AutomationProperties.Name="{l:T archiveManager.openTheStoreSUploadPage}" />
+          </StackPanel>
+          <TextBlock Classes="muted" Text="{Binding DistributeStatus}" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</local:LoadingView>
