@@ -25,11 +25,14 @@ public class EverydayBenchTests
         // run 43178619011) and the failure said only that number: a collection of the whole test process in those
         // 300 ms, or a probe posted late by a monitor thread that didn't get to run. Neither fails this now: the UI
         // thread is held until a probe has waited that long, and the pauses count. A failure says what the monitor saw.
+        // A stall is a wait over 50 ms without the pauses, so the pauses can leave none: the hold passed the line above
+        // with no stall counted (Windows CI, run 46115292242), the wait without its pauses at 50 ms or less.
         var report = monitor.Report();
         Assert.True(report.LongestMilliseconds + report.LongestGcMilliseconds >= 200, report.Describe());
         Assert.InRange(report.LongestMilliseconds, 0, 60_000);
-        Assert.InRange(report.Stalls, 1, 100);
-        Assert.InRange(report.StalledMilliseconds, report.LongestMilliseconds, 60_000);
+        var longestStalled = report.LongestMilliseconds > UiStallMonitor.StallMilliseconds;
+        Assert.True(report.Stalls is >= 0 and <= 100 && (!longestStalled || report.Stalls >= 1), $"{report.Stalls} stalls: {report.Describe()}");
+        Assert.True(report.StalledMilliseconds >= (longestStalled ? report.LongestMilliseconds : 0) && report.StalledMilliseconds <= 60_000, $"{report.StalledMilliseconds:0} ms stalled: {report.Describe()}");
         Assert.Equal(report.LongestMilliseconds, monitor.LongestMilliseconds);
     }
 
