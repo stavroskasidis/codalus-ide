@@ -453,7 +453,9 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
     {
         var run = RunPlan(dotnet, project, framework, device, configuration);
         var targets = IosDeviceDebugging.WriteTargets(targetsFolder);
-        var arguments = run.ArgumentList!.Concat(IosDeviceDebugging.RunArguments(debugger, targets, port, configuration)).ToList();
+        // The adapter's log, where it is asked for (CODALUS_CLR_DEBUGGER_LOG): on a device, the app's console.
+        var trace = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable(Codalus.Debugging.CoreClrAdapter.LogVariable));
+        var arguments = run.ArgumentList!.Concat(IosDeviceDebugging.RunArguments(debugger, targets, port, configuration, trace)).ToList();
         return run with { Arguments = string.Join(' ', arguments.Select(Quote)), ArgumentList = arguments };
     }
 

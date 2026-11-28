@@ -26,16 +26,23 @@ public static class InAppDebugger
     /// </summary>
     public const string HoldVariable = "CODALUS_DEBUG_HOLD";
 
+    /// <summary>
+    /// <c>1</c>: the in-app debugger writes the session's DAP traffic to the app's console (the run's output), as
+    /// <c>CODALUS_CLR_DEBUGGER_LOG</c> does for the debugger elsewhere. The IDE sets it when that variable is set for it.
+    /// </summary>
+    public const string TraceVariable = "CODALUS_DEBUG_TRACE";
+
     /// <summary>The default hold: below iOS's launch watchdog (20 s), with room for the app's own start.</summary>
     public const int DefaultHoldSeconds = 12;
 
     /// <summary>The app's environment for the in-app debugger: the profiler's three settings, and the port.</summary>
-    public static IReadOnlyList<KeyValuePair<string, string>> Environment(int port, int? holdSeconds = null) =>
+    public static IReadOnlyList<KeyValuePair<string, string>> Environment(int port, int? holdSeconds = null, bool trace = false) =>
     [
         new("DOTNET_ENABLE_PROFILING", "1"),
         new("DOTNET_PROFILER", ProfilerClassId),
         new("DOTNET_PROFILER_PATH", ProfilerPath),
         new(PortVariable, port.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         .. holdSeconds is { } hold ? [new KeyValuePair<string, string>(HoldVariable, hold.ToString(System.Globalization.CultureInfo.InvariantCulture))] : Array.Empty<KeyValuePair<string, string>>(),
+        .. trace ? [new KeyValuePair<string, string>(TraceVariable, "1")] : Array.Empty<KeyValuePair<string, string>>(),
     ];
 }

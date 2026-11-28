@@ -97,5 +97,9 @@ public sealed class InAppDebuggerTests
         Assert.Equal("50123", environment[InAppDebugger.PortVariable]);
         Assert.False(environment.ContainsKey(InAppDebugger.HoldVariable));
         Assert.Equal("5", InAppDebugger.Environment(1, holdSeconds: 5).Single(v => v.Key == InAppDebugger.HoldVariable).Value);
+
+        // The DAP traffic in the app's console, when the IDE's own adapter log is asked for.
+        Assert.DoesNotContain(environment.Keys, k => k == InAppDebugger.TraceVariable);
+        Assert.Equal("1", InAppDebugger.Environment(1, trace: true).Single(v => v.Key == InAppDebugger.TraceVariable).Value);
     }
 }

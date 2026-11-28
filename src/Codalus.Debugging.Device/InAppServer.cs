@@ -21,8 +21,12 @@ internal static class InAppServer
 {
     private static int s_started;
 
-    /// <summary>A line in the app's console (the run's output): <c>[codalus-debugger] …</c>.</summary>
-    public static void Log(string text) => Console.Error.WriteLine("[codalus-debugger] " + text);
+    /// <summary>Since the debugger started, in the profiler's Initialize: the lines say when each step came.</summary>
+    private static readonly System.Diagnostics.Stopwatch s_clock = System.Diagnostics.Stopwatch.StartNew();
+
+    /// <summary>A line in the app's console (the run's output): <c>[codalus-debugger +12 ms] …</c>.</summary>
+    public static void Log(string text) =>
+        Console.Error.WriteLine($"[codalus-debugger +{s_clock.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture)} ms] {text}");
 
     public static void Start()
     {
@@ -51,6 +55,10 @@ internal static class InAppServer
         {
             Log($"the IDE didn't set its breakpoints in {hold.ToString(CultureInfo.InvariantCulture)} s: the app starts, and breakpoints bind when the IDE has connected.");
         }
+        else
+        {
+            Log(hold > 0 ? "the IDE has set its breakpoints: the app starts" : "the app starts (no hold)");
+        }
     }
 
     private static void Serve(TcpListener listener, TaskCompletionSource configured)
@@ -63,8 +71,9 @@ internal static class InAppServer
                 client.NoDelay = true;
                 Log($"the IDE connected from {client.Client.RemoteEndPoint}");
                 using var stream = client.GetStream();
-                NetFxAdapter.RunAsync(stream, stream, Console.Error, new DbgShimDebugger(), trace: null,
-                        configured: session => session.ContinueWith(_ => configured.TrySetResult(), TaskScheduler.Default))
+                var trace = Environment.GetEnvironmentVariable(InAppDebugger.TraceVariable) == "1" ? Console.Error : null;
+                NetFxAdapter.RunAsync(stream, stream, Console.Error, new DbgShimDebugger(), trace,
+                        configured: session => session.ContinueWith(_ => { Log("configurationDone"); configured.TrySetResult(); }, TaskScheduler.Default))
                     .GetAwaiter().GetResult();
                 Log("the IDE disconnected");
             }

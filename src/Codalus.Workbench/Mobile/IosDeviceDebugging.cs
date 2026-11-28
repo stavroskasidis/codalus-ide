@@ -142,10 +142,11 @@ public static class IosDeviceDebugging
     /// the targets file and the framework, and the app's environment for the in-app debugger through mlaunch's
     /// <c>--setenv</c> (one <c>;</c>-separated property, in quotes so MSBuild's command line reads it whole).
     /// </summary>
-    public static IReadOnlyList<string> RunArguments(string framework, string targets, int port, string? configuration)
+    /// <param name="trace">The session's DAP traffic in the app's console (<see cref="InAppDebugger.TraceVariable"/>).</param>
+    public static IReadOnlyList<string> RunArguments(string framework, string targets, int port, string? configuration, bool trace = false)
     {
         var config = string.IsNullOrEmpty(configuration) ? "Debug" : configuration;
-        var environment = string.Join(';', InAppDebugger.Environment(port).Select(v => "--setenv=" + v.Key + "=" + v.Value));
+        var environment = string.Join(';', InAppDebugger.Environment(port, trace: trace).Select(v => "--setenv=" + v.Key + "=" + v.Value));
         return
         [
             $"-p:IntermediateOutputPath=obj/{config}/{OutputFolder}/",
