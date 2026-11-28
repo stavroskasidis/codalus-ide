@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -32,6 +33,32 @@ public class MinimapTests
     private static Point At(ShellFixture f, Minimap minimap, double y) =>
         minimap.TranslatePoint(new Point(minimap.Bounds.Width - 8, y), f.Window)!.Value;
 
+    /// <summary>
+    /// What is over the minimap where the click goes: the element hit, with its ancestors (type, name, classes, what it
+    /// shows) up to the window, and the notifications on screen. Once, in the Mac's full suite (eng/validate.sh,
+    /// 2026-11-24, docs/ci-flakes.md), a Border with the panels' background was hit instead, and the assertion's own
+    /// text didn't say whose.
+    /// </summary>
+    private static string Covered(ShellFixture f, Minimap minimap, object? hit, Point point)
+    {
+        var chain = new List<string>();
+        for (var visual = hit as Visual; visual is not null && chain.Count < 40; visual = visual.GetVisualParent())
+        {
+            var control = visual as Control;
+            var classes = control is { Classes.Count: > 0 } ? "." + string.Join('.', control.Classes) : string.Empty;
+            var name = string.IsNullOrEmpty(control?.Name) ? string.Empty : "#" + control!.Name;
+            var shows = control?.DataContext is { } context ? $" [{context.GetType().Name}]" : string.Empty;
+            chain.Add($"{visual.GetType().Name}{name}{classes}{shows} {visual.Bounds}");
+        }
+
+        // An element behind the minimap (one of its own ancestors) means the minimap itself wasn't hit there, not that
+        // something lies over it.
+        var behind = hit is Visual element && minimap.GetVisualAncestors().Contains(element);
+        var state = $"The minimap: bounds {minimap.Bounds}, visible {minimap.IsEffectivelyVisible}, hit-testable {minimap.IsHitTestVisible}, visible area {minimap.VisibleArea}; the element hit is {(behind ? "one of its ancestors (behind it)" : "not one of its ancestors (over it, or elsewhere)")}.";
+        return $"The click at {point} doesn't reach the minimap. {state} Hit, innermost first:\n  {string.Join("\n  ", chain)}\nNotifications: "
+               + string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
+    }
+
     private static void Settle(ShellFixture f)
     {
         ShellFixture.Pump();
@@ -52,7 +79,8 @@ public class MinimapTests
         // Below the visible area, at the right where the short lines leave nothing drawn.
         var y = Math.Min(minimap.Bounds.Height - 4, lines * Minimap.LineHeight * 0.75);
         var point = At(f, minimap, y);
-        Assert.Same(minimap, f.Window.InputHitTest(point));
+        var hit = f.Window.InputHitTest(point);
+        Assert.True(ReferenceEquals(minimap, hit), Covered(f, minimap, hit, point));
         f.Window.MouseDown(point, MouseButton.Left);
         f.Window.MouseUp(point, MouseButton.Left);
         Settle(f);

@@ -43,7 +43,7 @@ The tools are all command-line tools: `adb`, `emulator`, `avdmanager` and `sdkma
   1. The project's workloads must be installed.
   2. For Android, the SDK and JDK must be there.
   3. The device is the chosen one (an emulator that isn't running is started first).
-  4. Then `dotnet build -t:Run` runs in the project's Run channel. The IDE doesn't build first, since the SDK builds only what the platform needs.
+  4. Then `dotnet build -t:Run` runs in the project's Run channel. The IDE doesn't build first, since the SDK builds only what the platform needs. (On iOS and Mac Catalyst it is `-t:Build;Run` since [ADR 0114](0114-debugging-coreclr-apps-in-ios-simulators.md): .NET 11's `Run` target there starts only an app that is built already.)
 
   Until M20b, Start runs without the debugger and says so.
 - **The UI:**

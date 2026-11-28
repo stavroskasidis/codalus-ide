@@ -383,6 +383,30 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
         return (run with { Arguments = string.Join(' ', arguments.Select(Quote)), ArgumentList = arguments }, debug.Adapter);
     }
 
+    /// <summary>
+    /// The plan that builds, deploys and starts a CoreCLR app in an iOS simulator for the Codalus debugger (ADR 0114),
+    /// and the folder its startup hook reports in; null when such an app can't be debugged on the device yet
+    /// (<see cref="MobileTargets.DebugsCoreClr"/>). The hook is copied next to that folder, under a new temporary
+    /// folder (<c>Folder</c>, the caller's to remove when the session ends): the app reads it from there, and the
+    /// path has none of the IDE's own folder's spaces.
+    /// </summary>
+    /// <param name="hook">The debugger's startup hook (<c>Codalus.Debugging.StartupHook.dll</c>).</param>
+    public (LaunchPlan Run, string WaitFolder, string Folder)? CoreClrDebugPlan(string dotnet, ProjectInfo project, string framework, MobileDevice? device, string? configuration, string hook)
+    {
+        if (!MobileTargets.DebugsCoreClr(framework, device))
+        {
+            return null;
+        }
+
+        var folder = Directory.CreateTempSubdirectory("codalus-debug-app-").FullName;
+        var wait = Directory.CreateDirectory(Path.Combine(folder, "wait")).FullName;
+        var copy = Path.Combine(folder, Path.GetFileName(hook));
+        File.Copy(hook, copy, overwrite: true);
+        var run = RunPlan(dotnet, project, framework, device, configuration);
+        var arguments = run.ArgumentList!.Concat(MobileTargets.CoreClrDebugArguments(copy, wait)).ToList();
+        return (run with { Arguments = string.Join(' ', arguments.Select(Quote)), ArgumentList = arguments }, wait, folder);
+    }
+
     /// <summary>The plan that installs the Android SDK (and a JDK when none is found) through the workload's own target.</summary>
     public LaunchPlan InstallAndroidDependenciesPlan(string dotnet, ProjectInfo project)
     {

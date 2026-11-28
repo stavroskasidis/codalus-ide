@@ -101,7 +101,11 @@ public sealed class DebugDepthTests
         var pixel = f.Shell.Locals.Roots.Single(r => r.Name == "pixel");
         Assert.Equal([VisualizerKind.Image, VisualizerKind.Grid], Visualizers.ForType(pixel.Type));
         await f.Shell.VisualizeAsync(pixel, VisualizerKind.Image);
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is ImageDocument { Path: var image } && image.EndsWith("pixel.png", StringComparison.Ordinal));
+        // What the visualizer's evaluation said, when the image never opens: it timed out here on Linux CI (run
+        // 43587457886) and in the Mac's full suite (2026-11-24), where the wait's own text said nothing (docs/ci-flakes.md).
+        await ShellFixture.PumpUntil(
+            () => f.Shell.Layout.ActiveDocument is ImageDocument { Path: var image } && image.EndsWith("pixel.png", StringComparison.Ordinal),
+            describe: () => $"The image visualizer didn't open pixel.png (the active document: {f.Shell.Layout.ActiveDocument?.GetType().Name}). Notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}\nDebug Console:\n{f.Shell.DebugLog.GetText()}");
 
         // Pinned data tips (M14b): the data tip pins to its line and floats over the editor.
         tip.Pin();

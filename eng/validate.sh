@@ -61,6 +61,11 @@ export CODALUS_DOTNET_COMPAT="$repo/.work/dotnet-compat"
 
 # The fixtures' builds start MSBuild nodes of their own, as on CI (eng/ci-test.sh).
 export MSBUILDDISABLENODEREUSE=1
+# The Codalus debugger's log of every session, and the dump it writes when a func-eval times out, as CI's shards keep
+# them (eng/ci-test.sh): a func-eval that timed out in the Mac's full suite left neither (DebugDepthTests, 2026-11-24,
+# docs/ci-flakes.md).
+export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$repo/artifacts/validate/clr-dap}"
+mkdir -p "$CODALUS_CLR_DEBUGGER_LOG"
 echo "== restore / build / test"
 dotnet restore Codalus.slnx
 dotnet build Codalus.slnx -c Release --no-restore

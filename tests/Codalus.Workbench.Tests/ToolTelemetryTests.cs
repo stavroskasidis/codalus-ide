@@ -118,6 +118,7 @@ public sealed class ToolTelemetryTests
     /// </summary>
     private static readonly Dictionary<string, string> s_notTools = new(StringComparer.Ordinal)
     {
+        ["Codalus.Debugging.Host/CoreClr/AppleRuntime.cs"] = "Xcode's vtool, install_name_tool and codesign, on a simulator app's debugging libraries",
         ["Codalus.Debugging.Host/CoreClr/LaunchedProgram.cs"] = "the user's program, under the debugger",
         ["Codalus.Debugging.Host/CoreClr/RuntimeLocator.cs"] = "lsof, to find a program's runtime",
         ["Codalus.Debugging/DebugAdapter.cs"] = "a debug adapter: the program it launches inherits its environment",

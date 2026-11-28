@@ -62,7 +62,7 @@ public sealed class MobileTests : IDisposable
         var device = MobileTargets.RunArguments("/src/App.csproj", "net10.0-ios", phone, "Debug");
         Assert.Contains("-p:RuntimeIdentifier=ios-arm64", device);
         Assert.Contains("-p:_DeviceName=00008110-001", device);
-        Assert.Equal(["build", "/src/App.csproj", "-t:Run", "-f", "net10.0-maccatalyst"], MobileTargets.RunArguments("/src/App.csproj", "net10.0-maccatalyst", null, null));
+        Assert.Equal(["build", "/src/App.csproj", "-t:Build;Run", "-f", "net10.0-maccatalyst"], MobileTargets.RunArguments("/src/App.csproj", "net10.0-maccatalyst", null, null));
 
         Assert.Equal(
             ["build", "/src/App.csproj", "-t:InstallAndroidDependencies", "-f", "net10.0-android", "-p:AndroidSdkDirectory=/home/u/Android/Sdk", "-p:JavaSdkDirectory=/home/u/Android/jdk", "-p:AcceptAndroidSDKLicenses=True"],
@@ -84,6 +84,56 @@ public sealed class MobileTests : IDisposable
 
         // An iPhone needs mlaunch's tunnel: not yet.
         Assert.Null(MobileTargets.DebugArguments("net10.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true), 50126));
+    }
+
+    [Fact]
+    public void A_CoreClr_app_is_debugged_in_a_simulator_through_the_startup_hook_and_nowhere_else_yet()
+    {
+        // ADR 0114: .NET 11's mobile workloads set UseMonoRuntime to false; the Mono debugger would wait for a runtime
+        // that never connects.
+        var project = Project("/work/App/App.csproj", maui: true, "net11.0-android", "net11.0-ios", "net10.0-ios") with { CoreClrFrameworks = ["net11.0-android", "net11.0-ios"] };
+        Assert.True(MobileTargets.RunsOnCoreClr(project, "net11.0-ios"));
+        Assert.True(MobileTargets.RunsOnCoreClr(project, "NET11.0-Android"));
+        Assert.False(MobileTargets.RunsOnCoreClr(project, "net10.0-ios"));
+
+        var simulator = new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true);
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", simulator));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true)));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true)));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-maccatalyst", null));
+
+        // One property, in quotes: MSBuild's command line would otherwise read the second argument as a property.
+        Assert.Equal(
+            ["-p:MlaunchAdditionalArgumentsProperty=\"--setenv=DOTNET_STARTUP_HOOKS=/tmp/d/Hook.dll;--setenv=CODALUS_DEBUG_WAIT=/tmp/d/wait\""],
+            MobileTargets.CoreClrDebugArguments("/tmp/d/Hook.dll", "/tmp/d/wait"));
+    }
+
+    [Fact]
+    public void A_CoreClr_debug_plan_copies_the_hook_next_to_the_folder_the_app_reports_in()
+    {
+        var hook = Path.Combine(_dir, "ide folder", "Codalus.Debugging.StartupHook.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(hook)!);
+        File.WriteAllText(hook, "hook");
+        var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, _ => null, _dir), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
+        var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-ios") with { CoreClrFrameworks = ["net11.0-ios"] };
+        var simulator = new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true);
+
+        Assert.Null(service.CoreClrDebugPlan("dotnet", project, "net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true), "Debug", hook));
+        var plan = service.CoreClrDebugPlan("dotnet", project, "net11.0-ios", simulator, "Debug", hook)!.Value;
+        try
+        {
+            Assert.True(Directory.Exists(plan.WaitFolder));
+            Assert.Equal(plan.Folder, Path.GetDirectoryName(plan.WaitFolder));
+            var copy = Path.Combine(plan.Folder, "Codalus.Debugging.StartupHook.dll");
+            Assert.Equal("hook", File.ReadAllText(copy));
+            Assert.Contains("-t:Build;Run", plan.Run.ArgumentList!); // .NET 11's Run target doesn't build
+            Assert.Contains("-p:_DeviceName=:v2:udid=8A1F", plan.Run.ArgumentList!);
+            Assert.Equal(MobileTargets.CoreClrDebugArguments(copy, plan.WaitFolder)[0], plan.Run.ArgumentList![^1]);
+        }
+        finally
+        {
+            Directory.Delete(plan.Folder, recursive: true);
+        }
     }
 
     [Fact]

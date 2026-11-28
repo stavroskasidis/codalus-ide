@@ -576,6 +576,25 @@ public sealed class DebugService : IAsyncDisposable
         return 0;
     }
 
+    /// <summary>
+    /// Debugs a program that something else starts with the startup hook (ADR 0114: a CoreCLR app that the iOS SDK's
+    /// <c>Run</c> target builds, installs and starts in a simulator): the Codalus debugger waits for the hook to report
+    /// in <paramref name="waitFolder"/>, the program's <c>CODALUS_DEBUG_WAIT</c>, attaches and lets it go. Stopping the
+    /// session ends the program. Throws when the debugger isn't installed, the program never reports, or
+    /// <paramref name="cancellationToken"/> is cancelled (its start failed).
+    /// </summary>
+    public Task LaunchWaitingAsync(string name, string waitFolder, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await StartCoreClrAdapterAsync(ct).ConfigureAwait(false),
+            adapter => adapter.LaunchAsync(WaitingArguments(name, waitFolder), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
+    /// <summary>The Codalus debugger's launch arguments for a program that reports in <paramref name="waitFolder"/>.</summary>
+    internal NetFxDebugArguments WaitingArguments(string name, string waitFolder) =>
+        new(name, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()) { WaitFolder = waitFolder };
+
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
         LaunchAsync([new DebugLaunch(ProgramName(plan), plan)], cancellationToken, joinable: true);

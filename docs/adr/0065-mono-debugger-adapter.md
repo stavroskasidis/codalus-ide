@@ -3,6 +3,7 @@
 - **Status:** accepted (M20b, 2026-10-15)
 - **Date:** 2026-10-15
 - **Deciders:** maintainer (D6), with the standing go-ahead to complete every milestone
+- **Amended by:** [ADR 0114](0114-debugging-coreclr-apps-in-ios-simulators.md) (2026-11-24: an app on CoreCLR never gets this adapter; in an iOS simulator the Codalus debugger debugs it, elsewhere F5 says it can't yet)
 
 ## Context
 

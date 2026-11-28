@@ -14,6 +14,13 @@ internal interface IClrDebugger
 
     IClrProcess Attach(int processId);
 
+    /// <summary>
+    /// Attaches to the program someone else starts with the startup hook, once it reports in
+    /// <see cref="NetFxDebugArguments.WaitFolder"/> (ADR 0114); CoreCLR's debugger only.
+    /// </summary>
+    IClrProcess AttachWaiting(NetFxDebugArguments arguments, Action<string, string> output) =>
+        throw new DapRequestException($"The {Runtime} debugger doesn't wait for a program that something else starts.");
+
     /// <summary>The runtime it debugs, for messages: ".NET Framework" (the desktop CLR) or ".NET" (CoreCLR, ADR 0086).</summary>
     string Runtime => ".NET Framework";
 }
@@ -769,6 +776,11 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             var id = arguments.ProcessId ?? throw new DapRequestException("Attach needs a process id.");
             log.WriteLine($"Attaching to process {id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime})…");
             _process = debugger.Attach(id);
+        }
+        else if (arguments.WaitFolder is { Length: > 0 })
+        {
+            log.WriteLine($"Waiting for the program that reports in {arguments.WaitFolder} ({debugger.Runtime})…");
+            _process = debugger.AttachWaiting(arguments, (category, text) => _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(text, category), DapJsonContext.Default.OutputEvent));
         }
         else
         {

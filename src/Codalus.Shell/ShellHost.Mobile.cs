@@ -374,6 +374,12 @@ public sealed partial class ShellHost
         }
 
         var platform = MobileTargets.PlatformOf(framework);
+        if (MobileTargets.RunsOnCoreClr(project, framework))
+        {
+            await DebugCoreClrOnDeviceAsync(project, framework, device).ConfigureAwait(true);
+            return;
+        }
+
         if (Mobile.DebugPlan(EnvironmentCheck.FindDotnet() ?? "dotnet", project, framework, device, Solutions.Solution?.Active?.Configuration, port, Debugger.JustMyCode) is not { } plan)
         {
             Workbench.Notifications.Info(Localizer.Get("msg.mobile.noDeviceDebugging", "Debugging on an iPhone or iPad isn't available yet: debug in a simulator, or run on the device without debugging (Ctrl+F5)."));
@@ -421,6 +427,92 @@ public sealed partial class ShellHost
         {
             Workbench.Notifications.Error(Localizer.Format("msg.mobile.couldNotDebug", "Could not debug {0}: {1}", project.Name, ex.Message));
             program.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Debugs an app that runs on CoreCLR (.NET 11's default on mobile, ADR 0114), which the Mono debugger can't: in an
+    /// iOS simulator the app is a process of this Mac, started by the run with the debugger's startup hook, and the
+    /// Codalus debugger attaches to it once the hook reports. Elsewhere (Android, an iPhone, Mac Catalyst) it says at
+    /// once that it can't yet, instead of waiting for a Mono runtime that never connects.
+    /// </summary>
+    private async Task DebugCoreClrOnDeviceAsync(ProjectInfo project, string framework, MobileDevice? device)
+    {
+        var platform = MobileTargets.PlatformOf(framework);
+        if (!MobileTargets.DebugsCoreClr(framework, device))
+        {
+            Workbench.Notifications.Info(platform == MobilePlatform.iOS
+                ? Localizer.Get("msg.mobile.noDeviceDebugging", "Debugging on an iPhone or iPad isn't available yet: debug in a simulator, or run on the device without debugging (Ctrl+F5).")
+                : Localizer.Format("msg.mobile.noCoreClrDebugging", "{0} runs on CoreCLR (.NET 11's default), which can't be debugged on {1} yet. Set <UseMonoRuntime>true</UseMonoRuntime> in the project to debug it on Mono, or run it without debugging (Ctrl+F5).", project.Name, MobileTargets.Title(platform)));
+            return;
+        }
+
+        if (Debugger.StartupHook is not { } hook || !File.Exists(hook))
+        {
+            Workbench.Notifications.Error(Localizer.Get("msg.mobile.noHook", "The debugger's startup hook (Codalus.Debugging.StartupHook.dll) wasn't found next to Codalus IDE."));
+            return;
+        }
+
+        (LaunchPlan Run, string WaitFolder, string Folder) plan;
+        RunningProgram program;
+        try
+        {
+            plan = Mobile.CoreClrDebugPlan(EnvironmentCheck.FindDotnet() ?? "dotnet", project, framework, device, Solutions.Solution?.Active?.Configuration, hook)!.Value;
+            program = Runs.StartPlan(project.Path, project.Name, plan.Run);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.build.couldNotStart", "Could not start {0}: {1}", project.Name, ex.Message));
+            return;
+        }
+
+        var name = $"{project.Name} ({(device?.Name ?? MobileTargets.Title(platform))})";
+        program.Channel?.AppendLine(Localizer.Format("msg.mobile.debugging", "Building and deploying {0} ({1}) to {2} for debugging…", project.Name, framework, device?.Label ?? MobileTargets.Title(platform)));
+        if (program.Channel is { } channel)
+        {
+            Workbench.Output.Show(channel);
+        }
+
+        // A run that ends before the app reported (a build error, a failed install) ends the wait: with an error, or
+        // without one when the app never got to start.
+        using var failed = new CancellationTokenSource();
+        var reported = false;
+        _ = program.Exited.ContinueWith(_ => { if (!Volatile.Read(ref reported)) { failed.Cancel(); } }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+        DebugLog.Clear();
+        DebugLog.AppendLine($"> {name}: the Codalus debugger");
+        try
+        {
+            await Debugger.LaunchWaitingAsync(name, plan.WaitFolder, failed.Token).ConfigureAwait(true);
+            Volatile.Write(ref reported, true);
+        }
+        catch (OperationCanceledException) when (failed.IsCancellationRequested)
+        {
+            Workbench.Notifications.Warning(Localizer.Format("msg.mobile.runFailed", "{0} didn't start, so debugging didn't either. Its Run output has the details.", project.Name));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or Codalus.Debugging.DapException or Codalus.Debugging.DapConnectionLostException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.mobile.couldNotDebug", "Could not debug {0}: {1}", project.Name, ex.Message));
+            program.Stop();
+        }
+        finally
+        {
+            // The app has the hook loaded by now, or never will: the copy and the wait folder go when the run ends.
+            var folder = plan.Folder;
+            _ = program.Exited.ContinueWith(_ => RemoveDebugFolder(folder), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
+    }
+
+    private static void RemoveDebugFolder(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

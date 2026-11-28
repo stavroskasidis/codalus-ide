@@ -185,11 +185,15 @@ public static class MobileTargets
 
     /// <summary>
     /// The arguments of <c>dotnet</c> that build, deploy and start the app on <paramref name="device"/>: the platform
-    /// SDK's <c>Run</c> target (<c>dotnet build -t:Run</c>), with the device as the target expects it.
+    /// SDK's <c>Run</c> target (<c>dotnet build -t:Run</c>), with the device as the target expects it. On iOS and Mac
+    /// Catalyst it is <c>-t:Build;Run</c>: from .NET 11 their <c>Run</c> target starts only an app that is built
+    /// already ("The app must be built before the arguments to launch the app using mlaunch can be computed"), and
+    /// with the older SDKs, whose <c>Run</c> builds, the first target leaves it nothing to do.
     /// </summary>
     public static IReadOnlyList<string> RunArguments(string projectPath, string framework, MobileDevice? device, string? configuration, AndroidToolchain.Locations? android = null)
     {
-        var arguments = new List<string> { "build", projectPath, "-t:Run", "-f", framework };
+        var apple = PlatformOf(framework) is MobilePlatform.iOS or MobilePlatform.MacCatalyst;
+        var arguments = new List<string> { "build", projectPath, apple ? "-t:Build;Run" : "-t:Run", "-f", framework };
         if (!string.IsNullOrEmpty(configuration))
         {
             arguments.Add("-c");
@@ -255,6 +259,33 @@ public static class MobileTargets
             _ => null,
         };
     }
+
+    /// <summary>
+    /// Whether <paramref name="framework"/>'s app runs on CoreCLR, which the Mono debugger can't debug (ADR 0114):
+    /// .NET 11's default on Android, iOS and Mac Catalyst (<see cref="ProjectInfo.CoreClrFrameworks"/>).
+    /// </summary>
+    public static bool RunsOnCoreClr(ProjectInfo project, string framework) =>
+        project.CoreClrFrameworks.Contains(framework, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a CoreCLR app of <paramref name="framework"/> can be debugged on <paramref name="device"/> (ADR 0114):
+    /// in an iOS simulator, where the app is a process of this Mac that the Codalus debugger attaches to. Not yet on
+    /// Android (the app runs on the device or in the emulator's own system), on an iPhone, or on Mac Catalyst (its
+    /// Debug builds are trimmed and sandboxed, which the startup hook doesn't survive).
+    /// TODO(issue): Mac Catalyst, Android and iPhones on CoreCLR (ADR 0114).
+    /// </summary>
+    public static bool DebugsCoreClr(string framework, MobileDevice? device) =>
+        PlatformOf(framework) == MobilePlatform.iOS && device is { Kind: MobileDeviceKind.Simulator };
+
+    /// <summary>
+    /// The run's extra arguments for debugging a CoreCLR app in an iOS simulator (ADR 0114): the app starts with the
+    /// debugger's startup hook (<paramref name="hook"/>) and <paramref name="waitFolder"/> as its
+    /// <c>CODALUS_DEBUG_WAIT</c>, where the hook reports the process and waits for the Codalus debugger. The iOS SDK's
+    /// <c>Run</c> target takes mlaunch's arguments as a <c>;</c>-separated property, which MSBuild's command line reads
+    /// whole only in quotes.
+    /// </summary>
+    public static IReadOnlyList<string> CoreClrDebugArguments(string hook, string waitFolder) =>
+        [$"-p:MlaunchAdditionalArgumentsProperty=\"--setenv=DOTNET_STARTUP_HOOKS={hook};--setenv=CODALUS_DEBUG_WAIT={waitFolder}\""];
 
     /// <summary>
     /// The arguments of <c>dotnet</c> that install the Android SDK (and a JDK when none is found) through the Android

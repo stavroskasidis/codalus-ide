@@ -134,6 +134,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var fingerprint = new Fingerprint(path, global, outer);
             var missingPacks = new SortedSet<string>(MissingWorkloadPacks(outer), StringComparer.OrdinalIgnoreCase);
             string? windowsPackageType = null;
+            var coreClr = new List<string>();
 
             // A project with TargetFrameworks is evaluated per framework even when it lists one (a MAUI project's
             // "net10.0-android" on Linux, its other platforms conditioned out): its outer evaluation has no items.
@@ -144,6 +145,10 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 items.AddRange(Items(outer));
                 test = TestProperties.Of(outer);
                 windowsPackageType = NullIfEmpty(outer.GetPropertyValue("WindowsPackageType").Trim());
+                if (frameworks.Length == 1 && RunsOnCoreClrNotMono(outer))
+                {
+                    coreClr.Add(frameworks[0]);
+                }
             }
             else
             {
@@ -165,6 +170,10 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                         // Package props (Microsoft.NET.Test.Sdk, the testing platform) are imported per framework.
                         test = test.Or(TestProperties.Of(inner));
                         missingPacks.UnionWith(MissingWorkloadPacks(inner));
+                        if (RunsOnCoreClrNotMono(inner))
+                        {
+                            coreClr.Add(framework);
+                        }
 
                         // MAUI's Windows target (M44): the Windows App SDK's targets evaluate it in that framework only.
                         if (windowsPackageType is null && framework.Contains("-windows", StringComparison.OrdinalIgnoreCase))
@@ -200,6 +209,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 UsesWinUI = string.Equals(outer.GetPropertyValue("UseWinUI").Trim(), "true", StringComparison.OrdinalIgnoreCase),
                 WindowsPackageType = windowsPackageType,
                 MissingWorkloadPacks = [.. missingPacks],
+                CoreClrFrameworks = [.. coreClr],
                 Packages = assets is null ? [] : [.. frameworks.SelectMany(assets.Graph)],
             };
             var distinctImports = imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -307,6 +317,13 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             NetFrameworkRestore = restore,
         };
     }
+
+    /// <summary>
+    /// Whether this evaluation's app runs on CoreCLR where its platform also has Mono (ADR 0114): the mobile workloads
+    /// set <c>UseMonoRuntime</c> to <c>false</c> then; other projects leave it unset.
+    /// </summary>
+    private static bool RunsOnCoreClrNotMono(Project project) =>
+        string.Equals(project.GetPropertyValue("UseMonoRuntime").Trim(), "false", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The workload packs the SDK's workload resolver found missing for this evaluation (M20a).</summary>
     private static IEnumerable<string> MissingWorkloadPacks(Project project) =>
