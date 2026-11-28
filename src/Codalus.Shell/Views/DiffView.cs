@@ -23,7 +23,8 @@ namespace Codalus.Shell.Views;
 /// One side of a diff document (#86, D45): a header with the file's icon, name and what the side is ("(Index)"), the
 /// navigation bar's row (the open document's side lists its types and members; the other keeps the row, empty and
 /// disabled, so the lines stay aligned), the code, and a status bar with the caret, the indentation, the line endings
-/// and the encoding (the left side's also has the zoom box).
+/// and the encoding (the left side's also has the zoom box). The new side and the inline view have a minimap at their
+/// right edge, as the editor does (the old side's rows are the new side's, so one maps the whole diff).
 /// </summary>
 internal sealed class DiffPaneView : DockPanel
 {
@@ -39,11 +40,13 @@ internal sealed class DiffPaneView : DockPanel
     private readonly NavigationBar _navigationBar = new();
     private readonly Border _navigationPlaceholder;
 
-    public DiffPaneView(DiffPaneSide side, TextEditor editor, DiffLineNumberMargin numbers, ComboBox? zoom)
+    public DiffPaneView(DiffPaneSide side, TextEditor editor, DiffLineNumberMargin numbers, ComboBox? zoom, (Minimap View, DiffMinimapColors Colors)? minimap = null)
     {
         Side = side;
         Editor = editor;
         Numbers = numbers;
+        Minimap = minimap?.View;
+        MinimapColors = minimap?.Colors;
 
         // The header.
         _label.Classes.Add("muted");
@@ -101,6 +104,12 @@ internal sealed class DiffPaneView : DockPanel
         Children.Add(Header);
         Children.Add(NavigationRow);
         Children.Add(StatusBar);
+        if (Minimap is not null)
+        {
+            DockPanel.SetDock(Minimap, Avalonia.Controls.Dock.Right);
+            Children.Add(Minimap);
+        }
+
         Children.Add(editor);
     }
 
@@ -109,6 +118,12 @@ internal sealed class DiffPaneView : DockPanel
     public TextEditor Editor { get; }
 
     public DiffLineNumberMargin Numbers { get; }
+
+    /// <summary>The minimap at the code's right edge (the new side's and the inline view's), or null.</summary>
+    public Minimap? Minimap { get; }
+
+    /// <summary>What <see cref="Minimap"/> draws: the pane's colors and changed lines.</summary>
+    public DiffMinimapColors? MinimapColors { get; }
 
     public Border Header { get; }
 
@@ -295,6 +310,9 @@ public sealed class DiffView : UserControl, IPaneView
 
     /// <summary>Narrower sides keep only Ln and Ch in their status bars (G1).</summary>
     private const double StatusMinWidth = 300;
+
+    /// <summary>A narrower pane hides its minimap, so its code keeps about 300 px beside the minimap's 96.</summary>
+    private const double MinimapMinWidth = 400;
 
     private readonly DiffViewModel _viewModel;
     private readonly EditorFont _font;
@@ -504,7 +522,7 @@ public sealed class DiffView : UserControl, IPaneView
 
         DiffPaneView? owner = null;
         editor.TextArea.TextView.ElementGenerators.Add(new DiffLensGenerator(editor.TextArea.TextView, index => owner is null ? null : LensAbove(owner, index)));
-        var view = new DiffPaneView(side, editor, numbers, zoom);
+        var view = new DiffPaneView(side, editor, numbers, zoom, side == DiffPaneSide.Old ? null : MinimapOf(editor, colors, pane));
         owner = view;
         editor.TextArea.TextView.PointerMoved += (_, e) => OnHoverMoved(view, e.GetPosition(editor.TextArea.TextView));
         editor.TextArea.TextView.PointerExited += (_, _) => _hoverTimer.Stop();
@@ -541,6 +559,19 @@ public sealed class DiffView : UserControl, IPaneView
         return view;
     }
 
+    /// <summary>A pane's minimap: its words in the pane's colors, its added and removed lines on the diff's fills, each with a stripe.</summary>
+    private static (Minimap View, DiffMinimapColors Colors) MinimapOf(TextEditor editor, SourceLineColorizer colors, Func<DiffPane> pane)
+    {
+        var source = new DiffMinimapColors(pane, colors);
+        var minimap = new Minimap(editor, source);
+        minimap.Bind(Minimap.ForegroundProperty, minimap.GetResourceObservable("Shell.Editor.Foreground"));
+        minimap.Bind(Minimap.AddedLineProperty, minimap.GetResourceObservable("Shell.Diff.Added.Line"));
+        minimap.Bind(Minimap.RemovedLineProperty, minimap.GetResourceObservable("Shell.Diff.Removed.Line"));
+        minimap.Bind(Minimap.AddedMarkProperty, minimap.GetResourceObservable("Shell.Diff.Added"));
+        minimap.Bind(Minimap.RemovedMarkProperty, minimap.GetResourceObservable("Shell.Diff.Removed"));
+        return (minimap, source);
+    }
+
     private DiffPaneView PaneOf(DiffPaneSide side) => side switch
     {
         DiffPaneSide.Old => _left,
@@ -575,6 +606,7 @@ public sealed class DiffView : UserControl, IPaneView
         if (_viewModel.Services is { } services)
         {
             services.Editor.ThemeChanged += OnThemeChanged;
+            services.Editor.Options.PropertyChanged += OnEditorOptionsChanged;
         }
 
         AttachInsights();
@@ -597,6 +629,7 @@ public sealed class DiffView : UserControl, IPaneView
         if (_viewModel.Services is { } services)
         {
             services.Editor.ThemeChanged -= OnThemeChanged;
+            services.Editor.Options.PropertyChanged -= OnEditorOptionsChanged;
         }
 
         foreach (var pane in new[] { _left, _right, _inline })
@@ -801,8 +834,38 @@ public sealed class DiffView : UserControl, IPaneView
         {
             pane.Editor.TextArea.TextView.Redraw();
             pane.Numbers.InvalidateVisual();
+            RefreshMinimap(pane);
         }
     }
+
+    /// <summary>A pane's minimap again: its words' colors read anew (tokens arrived, the theme changed) and its marks.</summary>
+    private static void RefreshMinimap(DiffPaneView pane)
+    {
+        pane.MinimapColors?.Invalidate();
+        pane.Minimap?.Refresh();
+    }
+
+    /// <summary>
+    /// The minimaps shown as the editor's are (Text Editor → Minimap, for the file's language), on a pane wide enough to
+    /// keep the code readable beside one.
+    /// </summary>
+    private void ApplyMinimaps()
+    {
+        var enabled = EditorOptions?.Minimap ?? true;
+        foreach (var pane in new[] { _right, _inline })
+        {
+            if (pane.Minimap is { } minimap)
+            {
+                minimap.IsVisible = enabled && pane.Bounds.Width is 0 or >= MinimapMinWidth;
+            }
+        }
+    }
+
+    /// <summary>The editor options of the file's language, or null without the shell's services (a test).</summary>
+    private EditorOptions? EditorOptions =>
+        _viewModel.Services is { } services ? services.Editor.Options.For(services.LanguageOf(_viewModel.Path)) : null;
+
+    private void OnEditorOptionsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => ApplyMinimaps();
 
     /// <summary>The panes again from the rows: texts, line numbers, headers and status bars; the carets stay on their rows.</summary>
     private void Rebuild()
@@ -850,8 +913,10 @@ public sealed class DiffView : UserControl, IPaneView
         {
             pane.Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
             UpdatePosition(pane);
+            RefreshMinimap(pane);
         }
 
+        ApplyMinimaps();
         _rightStaging?.Rebuild();
         _inlineStaging?.Rebuild();
         ApplyStagingControls();
@@ -1029,6 +1094,7 @@ public sealed class DiffView : UserControl, IPaneView
         _left.SetNarrow(widths.Item1 is > 0 and < StatusMinWidth);
         _right.SetNarrow(widths.Item2 is > 0 and < StatusMinWidth);
         _inline.SetNarrow(widths.Item3 is > 0 and < StatusMinWidth);
+        ApplyMinimaps();
         UpdateNavigation();
     }
 
@@ -1889,6 +1955,9 @@ public sealed class DiffView : UserControl, IPaneView
 
     /// <summary>The editor of a side: the old file's, the new file's, or the inline view's.</summary>
     public TextEditor EditorOf(DiffPaneSide side) => PaneOf(side).Editor;
+
+    /// <summary>A side's minimap, or null for the old side (tests).</summary>
+    internal Minimap? MinimapOf(DiffPaneSide side) => PaneOf(side).Minimap;
 
     /// <summary>A side's header text ("Greeter.cs (Index)").</summary>
     public string HeaderOf(DiffPaneSide side) => PaneOf(side).HeaderText;

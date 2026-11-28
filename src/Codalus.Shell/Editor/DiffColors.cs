@@ -194,6 +194,26 @@ public sealed class SourceLineColorizer(Func<int, (SourceTokens? Tokens, int Lin
         return tokens is null || line < 1 ? -1 : tokens.TypeAt(line - 1, character);
     }
 
+    /// <summary>The brush the character at a 1-based pane line and 0-based character is drawn with, or null (the text color).</summary>
+    public IBrush? BrushAt(int paneLine, int character)
+    {
+        var (tokens, source) = map(paneLine);
+        if (tokens is null || source < 1)
+        {
+            return null;
+        }
+
+        foreach (var token in tokens.Line(source - 1))
+        {
+            if (character >= token.Start && character < token.Start + token.Length)
+            {
+                return token.Argb != 0 ? BrushOf(token.Argb) : Theme.Token(token.Type);
+            }
+        }
+
+        return null;
+    }
+
     protected override void ColorizeLine(DocumentLine line)
     {
         var (tokens, source) = map(line.LineNumber);
@@ -228,5 +248,37 @@ public sealed class SourceLineColorizer(Func<int, (SourceTokens? Tokens, int Lin
         }
 
         return brush;
+    }
+}
+
+/// <summary>
+/// What a diff pane's minimap draws: the pane's words in its grammar's colors, and its changed lines marked. A side's
+/// filler line stands for the other side's line, so the new side marks the old side's removed lines where they were,
+/// and its minimap maps the whole diff.
+/// </summary>
+public sealed class DiffMinimapColors(Func<Codalus.Workbench.Git.DiffPane> pane, SourceLineColorizer colors) : IMinimapColors
+{
+    public int Version { get; private set; }
+
+    /// <summary>The pane's colors changed (its tokens arrived, or the theme changed): the words are read again.</summary>
+    public void Invalidate() => Version++;
+
+    public IBrush? WordBrush(int line, int character) => colors.BrushAt(line + 1, character);
+
+    public MinimapMark MarkOf(int line)
+    {
+        var lines = pane();
+        if ((uint)line >= (uint)lines.Lines.Count)
+        {
+            return MinimapMark.None;
+        }
+
+        return lines.Lines[line].Kind switch
+        {
+            '+' => MinimapMark.Added,
+            '-' => MinimapMark.Removed,
+            'f' => lines.Side == Codalus.Workbench.Git.DiffPaneSide.Old ? MinimapMark.Added : MinimapMark.Removed,
+            _ => MinimapMark.None,
+        };
     }
 }
