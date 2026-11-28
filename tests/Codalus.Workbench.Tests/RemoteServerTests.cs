@@ -856,11 +856,19 @@ public sealed class RemoteServerTests
             var real = RunningRoot();
             var old = OldDotnet(folder);
             var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant();
+            // The machine's own .NET where an app host looks without DOTNET_ROOT doesn't count either: its registered
+            // location (/etc/dotnet/install_location_<arch>, Windows' registry) and its default one, unless that is
+            // the root these tests run on. A Mac with Microsoft's installer and .NET 11 in /usr/local/share/dotnet
+            // ran the server there, ahead of the PATH (the maintainer's Mac, PR 589's validation).
+            var defaultRoot = Path.TrimEndingDirectorySeparator(new DotnetRootResolver().DefaultLocation) + Path.DirectorySeparatorChar;
+            var realIsDefault = (Path.TrimEndingDirectorySeparator(real) + Path.DirectorySeparatorChar).Equals(defaultRoot, StringComparison.OrdinalIgnoreCase);
             DotnetRootResolver Machine(string dotnetRoot, string path) => new()
             {
                 // The machine's own DOTNET_ROOT_<ARCH>, CODALUS_SKIP_RUNTIME_CHECK and roll-forward settings don't count.
                 ProcessEnvironment = n => n switch { "PATH" => path, "DOTNET_ROOT" => dotnetRoot, _ => null },
                 WindowsRegisteredLocation = _ => null,
+                ReadFirstLine = _ => null,
+                FileExists = p => File.Exists(p) && (realIsDefault || !p.StartsWith(defaultRoot, StringComparison.OrdinalIgnoreCase)),
             };
             var options = new RemoteSessionOptions(RemoteTargetSpec.Parse("local")!, ServerVersion, Path.Combine(folder, "cache"))
             {
