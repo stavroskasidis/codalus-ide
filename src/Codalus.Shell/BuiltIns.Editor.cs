@@ -355,8 +355,13 @@ internal static partial class BuiltIns
         Add("editor.action.selectHighlights", "Insert Carets at All Matches", "Edit", OnEditor(c => c.MultiCaret.SelectNextOccurrence(all: true)), Editor);
         Add("editor.action.referenceSearch", "Find All References", "Editor", Ui(shell.FindReferencesAsync), Editor);
 
-        // The C# host's references CodeLens runs VS Code's command (InlineInfoFeatures.ReferencesCommand); the caret is already on the member.
-        Add("editor.action.showReferences", "Show References", "Editor", Ui(shell.FindReferencesAsync), Editor, palette: false);
+        // The C# host's references CodeLens runs VS Code's command (InlineInfoFeatures.ReferencesCommand) with its
+        // [uri, position]: the lens's symbol, in whichever pane was clicked (the split pane's caret isn't the primary's).
+        Add("editor.action.showReferences", "Show References", "Editor", async (args, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => shell.ShowReferencesAsync(args)).ConfigureAwait(false);
+            return null;
+        }, Editor, palette: false);
         Add("editor.action.rename", "Rename…", "Editor", Ui(shell.RenameSymbolAsync), Editor);
         Add("editor.action.quickFix", "Quick Actions and Refactorings…", "Editor", Ui(shell.ShowCodeActionsAsync), Editor);
         Add("editor.action.formatDocument", "Format Document", "Editor", Ui(() => shell.FormatAsync(selectionOnly: false)), Editor);

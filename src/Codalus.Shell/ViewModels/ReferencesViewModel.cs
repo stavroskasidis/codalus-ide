@@ -272,6 +272,7 @@ public sealed class ReferencesViewModel : ObservableObject
     private readonly List<ReferenceRow> _references = [];
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
     private string _symbol = string.Empty;
+    private bool _implementations;
     private string _groupBy = ReferencesGrouping.ProjectThenDefinition;
     private string _scope = ReferencesScope.EntireSolution;
     private string _filter = string.Empty;
@@ -358,9 +359,16 @@ public sealed class ReferencesViewModel : ObservableObject
     /// <summary>The symbol searched for.</summary>
     public string Symbol => _symbol;
 
-    /// <summary>The tab's title: <c>'Circle' references</c>, or References before a search.</summary>
+    /// <summary>
+    /// The tab's title: <c>'Circle' references</c> (<c>'Shape' implementations</c> for a CodeLens's implementations or
+    /// derived types), or References before a search.
+    /// </summary>
     public string Title => _symbol.Length == 0 ? Localizer.Get("toolWindow.references", "References")
+        : _implementations ? Localizer.Format("references.implementationsTitle", "'{0}' implementations", _symbol)
         : Localizer.Format("references.title", "'{0}' references", _symbol);
+
+    /// <summary>Whether the results are implementations (a CodeLens's) rather than references.</summary>
+    public bool ShowsImplementations => _implementations;
 
     /// <summary>The title with the scope, as the classic IDE's caption: <c>'Circle' references - Entire solution</c>.</summary>
     public string Caption => _symbol.Length == 0 ? Title : $"{Title} - {_scope}";
@@ -514,8 +522,10 @@ public sealed class ReferencesViewModel : ObservableObject
     // ------------------------------------------------------------------ results
 
     /// <summary>Shows classified references (<c>codalus/references</c>) to <paramref name="symbol"/>.</summary>
-    public void Show(string symbol, IReadOnlyList<ReferenceItem> items)
+    /// <param name="implementations">The items are implementations or derived types (the title says so).</param>
+    public void Show(string symbol, IReadOnlyList<ReferenceItem> items, bool implementations = false)
     {
+        _implementations = implementations;
         _references.Clear();
         _collapsed.Clear();
         foreach (var item in items)
@@ -547,9 +557,9 @@ public sealed class ReferencesViewModel : ObservableObject
     /// Shows plain locations (another language's server): their lines read from <paramref name="lineText"/>, all under
     /// the one definition, <paramref name="symbol"/>.
     /// </summary>
-    public void ShowLocations(string symbol, IReadOnlyList<Location> locations, Func<string, int, string> lineText, Func<string, string?>? project = null)
+    public void ShowLocations(string symbol, IReadOnlyList<Location> locations, Func<string, int, string> lineText, Func<string, string?>? project = null, bool implementations = false)
     {
-        Show(symbol, [.. locations.Select(l => (Location: l, Path: DocumentUris.ToPath(l.Uri)))
+        Show(symbol, implementations: implementations, items: [.. locations.Select(l => (Location: l, Path: DocumentUris.ToPath(l.Uri)))
             .Where(x => x.Path is not null)
             .Select(x =>
             {

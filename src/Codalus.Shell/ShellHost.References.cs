@@ -122,7 +122,8 @@ public sealed partial class ShellHost
     /// unsaved text) and their projects looked up in one index, off the UI thread: each location looked through every
     /// item of every project on it, seconds for thousands of references in a large solution (M56).
     /// </summary>
-    public async Task<ReferencesViewModel> ShowReferenceLocationsAsync(string symbol, IReadOnlyList<Location> locations)
+    /// <param name="implementations">The locations are implementations or derived types (a CodeLens's), not references.</param>
+    public async Task<ReferencesViewModel> ShowReferenceLocationsAsync(string symbol, IReadOnlyList<Location> locations, bool implementations = false)
     {
         var comparer = Codalus.Workbench.Projects.SolutionService.PathComparer;
         var paths = locations.Select(l => DocumentUris.ToPath(l.Uri)).OfType<string>().Distinct(comparer).ToList();
@@ -141,7 +142,8 @@ public sealed partial class ShellHost
             symbol,
             locations,
             (path, line) => lines.TryGetValue(path, out var text) && line < text.Length ? text[line].TrimEnd('\r') : string.Empty,
-            path => projects.GetValueOrDefault(path));
+            path => projects.GetValueOrDefault(path),
+            implementations);
         return window;
     }
 

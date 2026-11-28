@@ -192,10 +192,12 @@ internal static class CodeLensFeature
             var position = Positions.ToPosition(text, identifier.SpanStart);
             var range = Positions.ToRange(text, identifier.Span);
             lenses.Add(Lens(range, new LensData(uri, position.Line, position.Character, "references")));
+            // Every class something can derive from has a count of its derived types (its inheritors), not only the
+            // abstract ones: a plain class shows it only when it has some ("-" at zero, below).
             var canBeImplemented = node is InterfaceDeclarationSyntax
                 || node.Parent is InterfaceDeclarationSyntax
                 || (node is MemberDeclarationSyntax member && member.Modifiers.Any(m => m.IsKind(SyntaxKind.AbstractKeyword) || m.IsKind(SyntaxKind.VirtualKeyword)))
-                || (node is ClassDeclarationSyntax cls && cls.Modifiers.Any(SyntaxKind.AbstractKeyword));
+                || IsInheritable(node);
             if (canBeImplemented)
             {
                 lenses.Add(Lens(range, new LensData(uri, position.Line, position.Character, "implementations")));
@@ -203,6 +205,31 @@ internal static class CodeLensFeature
         }
 
         return [.. lenses];
+    }
+
+    /// <summary>
+    /// A class or record class that isn't sealed or static: other types can derive from it. Not a class whose
+    /// constructors are all private, with no nested types and no other parts: nothing can, so its lens would only cost a
+    /// search of the solution for derived classes. A record always can, through its copy constructor.
+    /// </summary>
+    private static bool IsInheritable(SyntaxNode node)
+    {
+        if (node is not (ClassDeclarationSyntax or RecordDeclarationSyntax { ClassOrStructKeyword.RawKind: not (int)SyntaxKind.StructKeyword })
+            || node is not TypeDeclarationSyntax type
+            || type.Modifiers.Any(m => m.IsKind(SyntaxKind.SealedKeyword) || m.IsKind(SyntaxKind.StaticKeyword)))
+        {
+            return false;
+        }
+
+        var constructors = type.Members.OfType<ConstructorDeclarationSyntax>().Where(c => !c.Modifiers.Any(SyntaxKind.StaticKeyword)).ToList();
+        // Not a record: one that isn't sealed has a protected copy constructor the compiler adds, which a derived record calls.
+        var closed = type is ClassDeclarationSyntax
+            && type.ParameterList is null // a primary constructor is public
+            && constructors.Count > 0
+            && constructors.All(c => !c.Modifiers.Any(m => m.Kind() is SyntaxKind.PublicKeyword or SyntaxKind.ProtectedKeyword or SyntaxKind.InternalKeyword))
+            && !type.Modifiers.Any(SyntaxKind.PartialKeyword)
+            && !type.Members.OfType<BaseTypeDeclarationSyntax>().Any();
+        return !closed;
     }
 
     private static CodeLens Lens(Protocol.Range range, LensData data) =>
@@ -238,6 +265,11 @@ internal static class CodeLensFeature
                 _ when symbol.ContainingType?.TypeKind == TypeKind.Interface => (await SymbolFinder.FindImplementationsAsync(symbol, solution, cancellationToken: cancellationToken).ConfigureAwait(false)).Count(),
                 _ => (await SymbolFinder.FindOverridesAsync(symbol, solution, cancellationToken: cancellationToken).ConfigureAwait(false)).Count(),
             };
+            if (count == 0 && symbol is INamedTypeSymbol { TypeKind: TypeKind.Class, IsAbstract: false })
+            {
+                return lens with { Command = new Command("-", string.Empty) }; // a plain class nothing derives from
+            }
+
             return lens with { Command = new Command(count == 1 ? "1 implementation" : $"{count} implementations", ImplementationsCommand) { Arguments = arguments } };
         }
 

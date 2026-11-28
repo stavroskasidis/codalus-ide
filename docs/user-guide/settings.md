@@ -38,6 +38,7 @@ Settings you may want first:
 |---|---|
 | Text Editor → Font Family, Font Size, Word Wrap, Minimap, Rulers, Render Whitespace | The editor's look. |
 | Appearance → UI Font Family, UI Font Size, Text Rendering, UI Scale | The look of menus, tool windows, tabs and dialogs ([below](#the-uis-font-text-and-scale)). |
+| Appearance → CodeLens Style | `popup` (the default): counts read `usages` and `inheritors`, and list their results in a popup under the count. `window`: they read `references` and `implementations`, and open in the References window ([CodeLens](editing.md#inline-information)). |
 | Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`, and in C# puts an empty block's opening brace where `.editorconfig` says when you press Enter between its braces. |
 | Text Editor → Completion: Commit on Space | On (the default): Space inserts the completion list's selected item, as `(`, `.` and `;` do. Off: Space just types a space ([IntelliSense](editing.md#intellisense)). |
 | Language Services → Analysis Scope | `openDocuments` (default), `currentProject` or `solution` (also runs analyzers on closed files). Also in the Error List's toolbar. |
