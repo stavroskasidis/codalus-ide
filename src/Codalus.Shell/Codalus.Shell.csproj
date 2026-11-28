@@ -132,11 +132,21 @@
       remote/<rid>/               codalus-server self-contained for a remote platform ($(CodalusServerRids), publish only)
       remote/<rid>/debugger.tar.gz  the Codalus debugger's bundle for that platform (M58b, ADR 0094): codalus-debughost
                                   self-contained and trimmed, as it is copied to SSH, container and WSL targets to
-                                  debug there; debugger.id names its build
+                                  debug there; debugger.id names its build. Also for android-arm64 and
+                                  android-x64 ($(CodalusAndroidDebuggerRids), ADR 0116): copied into an app on an
+                                  Android device or emulator to debug it on CoreCLR
+      remote/ios-arm64/debugger.tar.gz  the in-app debugger for iPhones and iPads (ADR 0117): CodalusDebugger.framework,
+                                  the Codalus debugger compiled ahead of time for iOS, which F5 puts into a CoreCLR app;
+                                  archived, as it is no part of the Mac app that is signed and notarized (macOS packages
+                                  only, $(CodalusIosDebugger)); debugger.id names its build
   -->
   <PropertyGroup>
     <!-- The remote platforms that get a self-contained server in a published install (empty: none; remote machines then need .NET). -->
     <CodalusServerRids Condition="'$(CodalusServerRids)' == ''">linux-x64;linux-arm64</CodalusServerRids>
+    <!-- The Android platforms that get the Codalus debugger's bundle (ADR 0116; empty: none, and CoreCLR apps there aren't debugged). -->
+    <CodalusAndroidDebuggerRids Condition="'$(CodalusAndroidDebuggerRids)' == ''">android-arm64;android-x64</CodalusAndroidDebuggerRids>
+    <!-- The in-app debugger for iPhones and iPads (ADR 0117): in macOS packages, the only ones that build for iOS (false: none, and CoreCLR apps there aren't debugged). -->
+    <CodalusIosDebugger Condition="'$(CodalusIosDebugger)' == '' And $(RuntimeIdentifier.StartsWith('osx-'))">true</CodalusIosDebugger>
   </PropertyGroup>
 
   <Target Name="CodalusRemoteServerForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
@@ -152,6 +162,10 @@
     </PropertyGroup>
     <ItemGroup>
       <_CodalusServerRid Include="$(CodalusServerRids)" />
+      <!-- The debugger's bundles: the servers' platforms, and Android's, built for linux-bionic on Android's runtime (the host's project does that). -->
+      <_CodalusAndroidRid Include="$(CodalusAndroidDebuggerRids)" />
+      <_CodalusDebuggerRid Include="@(_CodalusServerRid)" PublishRid="%(_CodalusServerRid.Identity)" />
+      <_CodalusDebuggerRid Include="@(_CodalusAndroidRid)" PublishRid="$([System.String]::Copy('%(_CodalusAndroidRid.Identity)').Replace('android-', 'linux-bionic-'))" />
     </ItemGroup>
     <!--
       Each server is its own `dotnet publish`, with its own restore phase: in one MSBuild call (or one build's
@@ -175,16 +189,33 @@
     <PropertyGroup>
       <_CodalusDebugHostProject>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', 'Codalus.Debugging.Host', 'Codalus.Debugging.Host.csproj'))</_CodalusDebugHostProject>
     </PropertyGroup>
-    <Exec Condition="'@(_CodalusServerRid)' != ''"
-          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusDebugHostProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) -p:CodalusDebuggerBundle=true -p:Version=$(Version) -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)/debugger-stage/codalus-debugger&quot; -nologo" />
-    <GetFileHash Condition="'@(_CodalusServerRid)' != ''" Files="@(_CodalusServerRid->'$(_CodalusRemoteDir)%(Identity)/debugger-stage/codalus-debugger/codalus-debughost.dll')" Algorithm="SHA256">
+    <Exec Condition="'@(_CodalusDebuggerRid)' != ''"
+          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusDebugHostProject)&quot; -c $(Configuration) -r %(_CodalusDebuggerRid.PublishRid) -p:CodalusDebuggerBundle=true -p:Version=$(Version) -o &quot;$(_CodalusRemoteDir)%(_CodalusDebuggerRid.Identity)/debugger-stage/codalus-debugger&quot; -nologo" />
+    <GetFileHash Condition="'@(_CodalusDebuggerRid)' != ''" Files="@(_CodalusDebuggerRid->'$(_CodalusRemoteDir)%(Identity)/debugger-stage/codalus-debugger/codalus-debughost.dll')" Algorithm="SHA256">
       <Output TaskParameter="Items" ItemName="_CodalusDebuggerHash" />
     </GetFileHash>
     <!-- As it travels to a target: one archive (relative paths, for any tar), named by debugger.id; the unpacked files don't ship. -->
     <WriteLinesToFile Condition="'@(_CodalusDebuggerHash)' != ''" File="%(_CodalusDebuggerHash.RootDir)%(_CodalusDebuggerHash.Directory)bundle.id" Lines="$(Version)-$([System.String]::Copy('%(_CodalusDebuggerHash.FileHash)').Substring(0, 12).ToLowerInvariant())" Overwrite="true" />
     <WriteLinesToFile Condition="'@(_CodalusDebuggerHash)' != ''" File="%(_CodalusDebuggerHash.RootDir)%(_CodalusDebuggerHash.Directory)../../debugger.id" Lines="$(Version)-$([System.String]::Copy('%(_CodalusDebuggerHash.FileHash)').Substring(0, 12).ToLowerInvariant())" Overwrite="true" />
-    <Exec Condition="'@(_CodalusServerRid)' != ''" Command="tar -czf ../debugger.tar.gz codalus-debugger" WorkingDirectory="$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)/debugger-stage" />
-    <RemoveDir Condition="'@(_CodalusServerRid)' != ''" Directories="@(_CodalusServerRid->'$(_CodalusRemoteDir)%(Identity)/debugger-stage')" />
+    <Exec Condition="'@(_CodalusDebuggerRid)' != ''" Command="tar -czf ../debugger.tar.gz codalus-debugger" WorkingDirectory="$(_CodalusRemoteDir)%(_CodalusDebuggerRid.Identity)/debugger-stage" />
+    <RemoveDir Condition="'@(_CodalusDebuggerRid)' != ''" Directories="@(_CodalusDebuggerRid->'$(_CodalusRemoteDir)%(Identity)/debugger-stage')" />
+    <!--
+      The in-app debugger (ADR 0117): CodalusDebugger.framework, which the IDE's build for an iPhone or iPad puts into the
+      app (the app's build signs it). Compiled ahead of time for iOS, which needs Xcode's iOS SDK: macOS only. It ships
+      archived, unpacked by the IDE on first use (IosDeviceDebugging): no part of the Mac app's own signed code.
+    -->
+    <PropertyGroup Condition="'$(CodalusIosDebugger)' == 'true'">
+      <_CodalusDeviceProject>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', 'Codalus.Debugging.Device', 'Codalus.Debugging.Device.csproj'))</_CodalusDeviceProject>
+    </PropertyGroup>
+    <!-- The library's link runs dsymutil, whose notes on the NativeAOT runtime's own objects aren't the build's warnings. -->
+    <Exec Condition="'$(CodalusIosDebugger)' == 'true'" IgnoreStandardErrorWarningFormat="true"
+          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusDeviceProject)&quot; -c $(Configuration) -p:Version=$(Version) -o &quot;$(_CodalusRemoteDir)ios-arm64/stage&quot; -nologo" />
+    <GetFileHash Condition="'$(CodalusIosDebugger)' == 'true'" Files="$(_CodalusRemoteDir)ios-arm64/stage/CodalusDebugger.framework/CodalusDebugger" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_CodalusInAppDebuggerHash" />
+    </GetFileHash>
+    <WriteLinesToFile Condition="'$(CodalusIosDebugger)' == 'true'" File="$(_CodalusRemoteDir)ios-arm64/debugger.id" Lines="$(Version)-$(_CodalusInAppDebuggerHash.Substring(0, 12).ToLowerInvariant())" Overwrite="true" />
+    <Exec Condition="'$(CodalusIosDebugger)' == 'true'" Command="tar -czf ../debugger.tar.gz CodalusDebugger.framework" WorkingDirectory="$(_CodalusRemoteDir)ios-arm64/stage" />
+    <RemoveDir Condition="'$(CodalusIosDebugger)' == 'true'" Directories="$(_CodalusRemoteDir)ios-arm64/stage" />
   </Target>
   <!--
     The WPF previewer and the Live Visual Tree's agent for WPF apps (M40b, ADR 0072): WPF code (net8.0-windows), built on

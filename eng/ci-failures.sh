@@ -90,7 +90,7 @@ job_failures() {
     grep "lost communication with the server\|exceeded the maximum execution time" <<< "$notes" | head -1 | sed 's/^/runner\t/'
   fi
   if [[ ! -s "$log" ]]; then
-    api "repos/$repo/actions/jobs/$job/logs" "${log_options[@]}" 2> /dev/null | awk '{ sub(/^[0-9T:.-]+Z /, ""); gsub(/\033\[[0-9;]*m/, ""); print }' > "$log" || true
+    api "repos/$repo/actions/jobs/$job/logs" ${log_options[@]+"${log_options[@]}"} 2> /dev/null | awk '{ sub(/^[0-9T:.-]+Z /, ""); gsub(/\033\[[0-9;]*m/, ""); print }' > "$log" || true
     grep -q "BlobNotFound" "$log" && : > "$log"
   fi
   [[ -s "$log" ]] || return 0

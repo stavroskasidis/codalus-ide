@@ -472,9 +472,31 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
         var wsl = OperatingSystem.IsLinux() && File.Exists("/proc/version") && File.ReadAllText("/proc/version").Contains("microsoft", StringComparison.OrdinalIgnoreCase);
         if (Environment.GetEnvironmentVariable("CI") != "true" && !wsl)
         {
-            Assert.True(overhead < 0.5, $"Sampling overhead {overhead:P1}: {plain} primes alone, {traced} traced");
+            // The machine's load goes with the numbers: on the Mac it failed once at 55.6 % while the load average was 36
+            // on 10 cores (another Xcode being unpacked, a simulator starting; 2026-11-28, docs/ci-flakes.md), which the
+            // message didn't say.
+            Assert.True(overhead < 0.5, $"Sampling overhead {overhead:P1}: {plain} primes alone, {traced} traced. {MachineLoad()}");
         }
     }
+
+    /// <summary>The machine's load average over the last minute against its processors, where the OS has one.</summary>
+    private static string MachineLoad()
+    {
+        try
+        {
+            var averages = new double[3];
+            return !OperatingSystem.IsWindows() && getloadavg(averages, 3) >= 1
+                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"The machine's load average: {averages[0]:0.0} on {Environment.ProcessorCount} processors (above that count, this measures the machine, not the sampler).")
+                : $"{Environment.ProcessorCount} processors.";
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return $"{Environment.ProcessorCount} processors.";
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern int getloadavg([System.Runtime.InteropServices.Out] double[] averages, int count);
 
     /// <summary>
     /// M63b (ADR 0102): a runtime started with <c>DOTNET_DiagnosticPorts</c> naming a socket (as a compose service in

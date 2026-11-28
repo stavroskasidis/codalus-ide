@@ -14,6 +14,20 @@ internal interface IClrDebugger
 
     IClrProcess Attach(int processId);
 
+    /// <summary>
+    /// Attaches to the process the debugger itself runs in (<see cref="NetFxDebugArguments.InProcess"/>, ADR 0117: a
+    /// library in an app on an iPhone or iPad); CoreCLR's debugger there only.
+    /// </summary>
+    IClrProcess AttachInProcess(NetFxDebugArguments arguments) =>
+        throw new DapRequestException($"The {Runtime} debugger doesn't run inside the program it debugs here.");
+
+    /// <summary>
+    /// Attaches to the program someone else starts with the startup hook, once it reports in
+    /// <see cref="NetFxDebugArguments.WaitFolder"/> (ADR 0115); CoreCLR's debugger only.
+    /// </summary>
+    IClrProcess AttachWaiting(NetFxDebugArguments arguments, Action<string, string> output) =>
+        throw new DapRequestException($"The {Runtime} debugger doesn't wait for a program that something else starts.");
+
     /// <summary>The runtime it debugs, for messages: ".NET Framework" (the desktop CLR) or ".NET" (CoreCLR, ADR 0086).</summary>
     string Runtime => ".NET Framework";
 }
@@ -122,6 +136,9 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
 
     /// <summary>Completes when the program has ended or the client disconnected.</summary>
     public Task Ended => _ended.Task;
+
+    /// <summary>Completes on the client's <c>configurationDone</c>: its breakpoints are set (ADR 0117 holds the app's start until then).</summary>
+    public Task Configured => _configured.Task;
 
     private sealed class BreakpointState(int id, string? path, int line, string? condition, string? function = null)
     {
@@ -769,6 +786,17 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             var id = arguments.ProcessId ?? throw new DapRequestException("Attach needs a process id.");
             log.WriteLine($"Attaching to process {id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime})…");
             _process = debugger.Attach(id);
+        }
+        else if (arguments.InProcess)
+        {
+            // ADR 0117: the debugger is a library in the app; "launching" it is attaching to this very process.
+            log.WriteLine($"Attaching to this process, the app {arguments.Program} ({debugger.Runtime})…");
+            _process = debugger.AttachInProcess(arguments);
+        }
+        else if (arguments.WaitFolder is { Length: > 0 })
+        {
+            log.WriteLine($"Waiting for the program that reports in {arguments.WaitFolder} ({debugger.Runtime})…");
+            _process = debugger.AttachWaiting(arguments, (category, text) => _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(text, category), DapJsonContext.Default.OutputEvent));
         }
         else
         {

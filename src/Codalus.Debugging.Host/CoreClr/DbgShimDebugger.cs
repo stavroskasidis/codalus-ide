@@ -131,6 +131,22 @@ internal sealed class DbgShimDebugger : IClrDebugger
             ? HookTimeoutWithHooks
             : HookTimeout;
 
+    /// <summary>
+    /// Milliseconds a held start waits between the program's start and the attach: for the tests, which end the
+    /// program in between (a program that isn't held can end there by itself).
+    /// </summary>
+    public const string AttachDelayVariable = "CODALUS_DEBUG_HELD_ATTACH_DELAY_MS";
+
+    /// <summary>How long a failed attach waits for the word that the program has ended (the launcher's, right after its exit).</summary>
+    internal static readonly TimeSpan EndedWait = TimeSpan.FromSeconds(2);
+
+    /// <summary>What a held start says of a program that ended before it was attached to.</summary>
+    internal static string EndedBeforeAttach(string program, int? exitCode)
+    {
+        var code = exitCode is { } exit ? $" (exit code {exit.ToString(CultureInfo.InvariantCulture)})" : string.Empty;
+        return $"{Path.GetFileName(program)} ended{code} before the debugger could attach to it: the startup hook that holds a program at its start didn't run in it. .NET Core 2.0 and 2.1 run no startup hooks; a program that isn't .NET's doesn't either.";
+    }
+
     /// <summary>The startup hook's file, next to this host (and in the debugger's bundle).</summary>
     private const string HookFile = "Codalus.Debugging.StartupHook.dll";
 
@@ -190,8 +206,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
                 {
                     // Not "is it a .NET program?": a program of .NET Core 2.0 or 2.1 ends here too, having run without
                     // the hook (the old-.NET matrix through this start, 2026-11-12).
-                    var code = launched.Exited.Result is { } exit ? $" (exit code {exit.ToString(CultureInfo.InvariantCulture)})" : string.Empty;
-                    throw new ClrException($"{Path.GetFileName(program)} ended{code} before the debugger could attach to it: the startup hook that holds a program at its start didn't run in it. .NET Core 2.0 and 2.1 run no startup hooks; a program that isn't .NET's doesn't either.");
+                    throw new ClrException(EndedBeforeAttach(program, launched.Exited.Result));
                 }
 
                 if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program) is [var loaded, ..] && started.Elapsed >= HookWait(loaded))
@@ -206,6 +221,11 @@ internal sealed class DbgShimDebugger : IClrDebugger
                 }
 
                 Thread.Sleep(20);
+            }
+
+            if (int.TryParse(Environment.GetEnvironmentVariable(AttachDelayVariable), NumberStyles.None, CultureInfo.InvariantCulture, out var delay) && delay > 0)
+            {
+                Thread.Sleep(delay); // the tests' way to end the program between its start and the attach
             }
 
             var (corDebug, runtime) = CorDebugByPath(shim, pid, Path.GetFileName(program), program);
@@ -228,6 +248,18 @@ internal sealed class DbgShimDebugger : IClrDebugger
         catch (Exception ex)
         {
             target?.Dispose();
+
+            // A program that wasn't held can end while the debugger attaches: its runtime was there a moment ago, and
+            // dbgshim then answers for a process that is gone (ERROR_INVALID_PARAMETER, reported as "couldn't load the
+            // debugging API"; an x64 .NET Core 2.1 program under Rosetta 2 in the Mac's full suite, 2026-11-24,
+            // docs/ci-flakes.md). That is the program's end before the attach, and is said so.
+            if (ex is not OperationCanceledException && launched.Exited.Wait(EndedWait))
+            {
+                var ended = launched.Exited.Result;
+                launched.Dispose();
+                throw new ClrException(EndedBeforeAttach(program, ended), ex);
+            }
+
             if (target is null)
             {
                 // The launcher ends the program when its pipe closes.
@@ -256,8 +288,21 @@ internal sealed class DbgShimDebugger : IClrDebugger
         }
     }
 
+    /// <summary>
+    /// Attaches to the process this debugger runs in (ADR 0117): on an iPhone or iPad, where it is a library in the app.
+    /// </summary>
+    public IClrProcess AttachInProcess(NetFxDebugArguments arguments) =>
+        OperatingSystem.IsIOS() || OperatingSystem.IsTvOS()
+            ? IosDeviceRuntime.AttachToSelf(arguments.JustMyCode, arguments.Program)
+            : throw new ClrException("The debugger runs inside the app it debugs only on an iPhone or iPad.");
+
     public IClrProcess Attach(int processId)
     {
+        if (OperatingSystem.IsAndroid())
+        {
+            return AndroidRuntime.Attach(processId, justMyCode: true);
+        }
+
         System.Diagnostics.Process process;
         try
         {
@@ -268,27 +313,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
             throw new ClrException($"There's no process {processId.ToString(CultureInfo.InvariantCulture)}.");
         }
 
-        var shim = DbgShimLibrary.Shim;
-        CorDebug corDebug;
-        string runtime;
-        if (RuntimeLocator.StartsHeld)
-        {
-            (corDebug, runtime) = CorDebugByPath(shim, processId, process.ProcessName, ProgramOf(process));
-        }
-        else
-        {
-            runtime = LoadedRuntime(shim, processId) ?? throw new ClrException($"Process {processId.ToString(CultureInfo.InvariantCulture)} ({process.ProcessName}) isn't running .NET.");
-            try
-            {
-                corDebug = shim.CreateDebuggingInterfaceFromVersion(shim.CreateVersionStringFromModule(processId, runtime));
-                corDebug.Initialize();
-            }
-            catch (DebugException ex)
-            {
-                throw new ClrException($"The debugger couldn't load the debugging API of {process.ProcessName}'s runtime: {ex.Message}", ex);
-            }
-        }
-
+        var (corDebug, runtime) = CorDebugOf(process);
         var target = new CorDebugTarget(corDebug, VersionOf(runtime), justMyCode: true);
         try
         {
@@ -299,6 +324,27 @@ internal sealed class DbgShimDebugger : IClrDebugger
         {
             target.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>The ICorDebug of the runtime a running process loaded, and that runtime's path.</summary>
+    private static (CorDebug CorDebug, string Runtime) CorDebugOf(System.Diagnostics.Process process)
+    {
+        var processId = process.Id;
+        var shim = DbgShimLibrary.Shim;
+        if (RuntimeLocator.StartsHeld)
+        {
+            return CorDebugByPath(shim, processId, process.ProcessName, ProgramOf(process));
+        }
+
+        var runtime = LoadedRuntime(shim, processId) ?? throw new ClrException($"Process {processId.ToString(CultureInfo.InvariantCulture)} ({process.ProcessName}) isn't running .NET.");
+        try
+        {
+            return (CreateCorDebug(shim, processId, runtime), runtime);
+        }
+        catch (DebugException ex)
+        {
+            throw new ClrException($"The debugger couldn't load the debugging API of {process.ProcessName}'s runtime: {ex.Message}", ex);
         }
     }
 
@@ -319,9 +365,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
         {
             try
             {
-                var corDebug = shim.CreateDebuggingInterfaceFromVersion(shim.CreateVersionStringFromModule(processId, runtime));
-                corDebug.Initialize();
-                return (corDebug, runtime);
+                return (CreateCorDebug(shim, processId, runtime), runtime);
             }
             catch (DebugException ex)
             {
@@ -330,6 +374,142 @@ internal sealed class DbgShimDebugger : IClrDebugger
         }
 
         throw new ClrException($"The debugger couldn't load the debugging API of {name}'s runtime ({string.Join(", ", candidates)}): {last!.Message}", last);
+    }
+
+    /// <summary>
+    /// The ICorDebug of the runtime at <paramref name="runtime"/> in a running process. An app in an iOS simulator or a
+    /// Mac Catalyst app (ADR 0115) gets its debugging libraries from copies macOS loads; and a process whose temporary
+    /// folder isn't this one's (such an app's container, a sandbox's) is looked for there, where its runtime made the
+    /// debugger's pipes.
+    /// </summary>
+    private static CorDebug CreateCorDebug(DbgShim shim, int processId, string runtime)
+    {
+        var version = shim.CreateVersionStringFromModule(processId, runtime);
+        var libraries = AppleRuntime.IsForeign(runtime) ? AppleRuntime.DebugLibraries(runtime) : null;
+        if (AppleRuntime.TempFolder(processId) is { Length: > 0 } temp && !SameFolder(temp, Path.GetTempPath()))
+        {
+            AppleRuntime.UseTempFolder(temp);
+        }
+
+        var corDebug = libraries is null
+            ? shim.CreateDebuggingInterfaceFromVersion(version)
+            : shim.CreateDebuggingInterfaceFromVersion3(CorDebugInterfaceVersion.CorDebugVersion_4_0, version, null!, new DebugLibraryProvider(libraries));
+        corDebug.Initialize();
+        return corDebug;
+    }
+
+    private static bool SameFolder(string a, string b) =>
+        string.Equals(a.TrimEnd('/'), b.TrimEnd('/'), StringComparison.Ordinal);
+
+    /// <summary>How long a program someone else starts may take to report (<see cref="AttachWaiting"/>): a build and a deploy.</summary>
+    internal static readonly TimeSpan WaitTimeout = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// A launch of a program someone else starts (ADR 0115: a mobile app that the platform's <c>Run</c> target builds,
+    /// installs and starts in a simulator or on this Mac), with the startup hook and
+    /// <see cref="NetFxDebugArguments.WaitFolder"/> as its <c>CODALUS_DEBUG_WAIT</c>: the hook reports the process id
+    /// there before <c>Main</c> and waits; the debugger attaches by the runtime's path and lets the hook go once the
+    /// program is stopped for it, as <see cref="LaunchHeld"/> does. The breakpoints set meanwhile bind as the program's
+    /// modules load. A folder that is removed meanwhile is the start given up.
+    /// </summary>
+    public IClrProcess AttachWaiting(NetFxDebugArguments arguments, Action<string, string> output)
+    {
+        var wait = arguments.WaitFolder!;
+        var timeout = arguments.WaitSeconds is > 0 and var seconds ? TimeSpan.FromSeconds(seconds) : WaitTimeout;
+        var name = arguments.Program is { Length: > 0 } program ? Path.GetFileName(program) : "The app";
+        output("console", "Waiting for the app to start…\n");
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        int pid;
+        while (!TryReadProcessId(Path.Combine(wait, "pid"), out pid))
+        {
+            if (!Directory.Exists(wait))
+            {
+                throw new ClrException($"{name} wasn't started, so there is nothing to debug.");
+            }
+
+            if (started.Elapsed >= timeout)
+            {
+                throw new ClrException($"{name} didn't reach the debugger's startup hook in {timeout.TotalSeconds:0} seconds: it didn't start, or it runs no startup hooks (a trimmed or Release build turns them off).");
+            }
+
+            Thread.Sleep(50);
+        }
+
+        if (OperatingSystem.IsAndroid())
+        {
+            // On the device (ADR 0116): the app's own debugging library, and no OS process object to hold.
+            var attached = AndroidRuntime.Attach(pid, arguments.JustMyCode, name);
+            try
+            {
+                attached.Events.WaitToReadAsync().AsTask().Wait(RuntimeStartTimeout);
+                File.WriteAllText(Path.Combine(wait, "go"), string.Empty);
+                return attached;
+            }
+            catch
+            {
+                attached.Dispose();
+                throw;
+            }
+        }
+
+        System.Diagnostics.Process process;
+        try
+        {
+            process = System.Diagnostics.Process.GetProcessById(pid);
+        }
+        catch (ArgumentException)
+        {
+            throw new ClrException($"{name} ended before the debugger could attach to it.");
+        }
+
+        CorDebugTarget? target = null;
+        try
+        {
+            var (corDebug, runtime) = CorDebugOf(process);
+            target = new CorDebugTarget(corDebug, VersionOf(runtime), arguments.JustMyCode);
+            target.Attach(process);
+            // As in LaunchHeld: the hook may go once the program is stopped for the debugger.
+            target.Events.WaitToReadAsync().AsTask().Wait(RuntimeStartTimeout);
+            File.WriteAllText(Path.Combine(wait, "go"), string.Empty);
+            return target;
+        }
+        catch (Exception ex)
+        {
+            target?.Dispose();
+            if (Ended(process))
+            {
+                // dbgshim answers for a process that is gone with an error about its debugging API (see LaunchHeld).
+                throw new ClrException($"{name} ended before the debugger could attach to it.", ex);
+            }
+
+            throw ex is AggregateException { InnerException: { } inner } ? inner : ex is DebugException debug ? new ClrException($"{name} couldn't be debugged: {debug.Message}", debug) : ex;
+        }
+    }
+
+    private static bool Ended(System.Diagnostics.Process process)
+    {
+        try
+        {
+            return process.HasExited;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The process id the startup hook wrote (whole: it writes the file aside and renames it).</summary>
+    private static bool TryReadProcessId(string file, out int processId)
+    {
+        processId = 0;
+        try
+        {
+            return File.Exists(file) && int.TryParse(File.ReadAllText(file).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out processId) && processId > 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>A process's executable, when it can be read.</summary>

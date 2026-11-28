@@ -576,6 +576,55 @@ public sealed class DebugService : IAsyncDisposable
         return 0;
     }
 
+    /// <summary>
+    /// Debugs a program that something else starts with the startup hook (ADR 0115: a CoreCLR app that the iOS SDK's
+    /// <c>Run</c> target builds, installs and starts in a simulator): the Codalus debugger waits for the hook to report
+    /// in <paramref name="waitFolder"/>, the program's <c>CODALUS_DEBUG_WAIT</c>, attaches and lets it go. Stopping the
+    /// session ends the program. Throws when the debugger isn't installed, the program never reports, or
+    /// <paramref name="cancellationToken"/> is cancelled (its start failed).
+    /// </summary>
+    public Task LaunchWaitingAsync(string name, string waitFolder, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await StartCoreClrAdapterAsync(ct).ConfigureAwait(false),
+            adapter => adapter.LaunchAsync(WaitingArguments(name, waitFolder), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
+    /// <summary>
+    /// The Codalus debugger of an app on an Android device or emulator (ADR 0116): <paramref name="adapter"/> starts it
+    /// there (through adb), and it waits for the app that reports in <paramref name="waitFolder"/>, a folder of the
+    /// device's. The sources and the symbol options are this machine's, as for a remote target.
+    /// </summary>
+    public Task LaunchWaitingAsync(string name, string waitFolder, DebugAdapterStartInfo adapter, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await DebugAdapter.StartAsync(adapter, ct, terminal: null, ExpressionCompiler).ConfigureAwait(false),
+            started => started.LaunchAsync(WaitingArguments(name, waitFolder) with { Symbols = null, SourcesOnClient = true }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
+    /// <summary>
+    /// Debugs an app with the in-app debugger in it (ADR 0117: on an iPhone or iPad), over <paramref name="connection"/>
+    /// to it: the session is the Codalus debugger's, its launch attaches to the app's own process, and the app's
+    /// sources are this machine's. Stopping the session ends the app. Throws when the launch fails.
+    /// </summary>
+    public Task LaunchInAppAsync(string name, InAppConnection connection, string device, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await DebugAdapter.StartAsync(connection.Adapter(device), ct, terminal: null, ExpressionCompiler).ConfigureAwait(false),
+            adapter => adapter.LaunchAsync(InAppArguments(name), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
+    /// <summary>The in-app debugger's launch arguments for the app <paramref name="name"/>.</summary>
+    internal NetFxDebugArguments InAppArguments(string name) =>
+        new(name, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()) { InProcess = true, SourcesOnClient = true };
+
+    /// <summary>The Codalus debugger's launch arguments for a program that reports in <paramref name="waitFolder"/>.</summary>
+    internal NetFxDebugArguments WaitingArguments(string name, string waitFolder) =>
+        new(name, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()) { WaitFolder = waitFolder };
+
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
         LaunchAsync([new DebugLaunch(ProgramName(plan), plan)], cancellationToken, joinable: true);

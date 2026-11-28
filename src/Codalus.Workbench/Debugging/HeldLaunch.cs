@@ -13,6 +13,11 @@ public sealed class HeldLaunch
 {
     public const string HookFileName = "Codalus.Debugging.StartupHook.dll";
     public const string WaitVariable = "CODALUS_DEBUG_WAIT";
+
+    /// <summary><c>1</c>: the startup hook makes <see cref="WaitVariable"/>'s folder first (an Android app's, ADR 0116).</summary>
+    public const string CreateVariable = "CODALUS_DEBUG_WAIT_CREATE";
+
+    public const string TimeoutVariable = "CODALUS_DEBUG_WAIT_SECONDS";
     public const string StartupHooksVariable = "DOTNET_STARTUP_HOOKS";
     public const string EnvironmentVariable = "CODALUS_STARTUP_HOOK";
 

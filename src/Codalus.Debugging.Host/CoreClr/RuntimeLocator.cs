@@ -39,7 +39,7 @@ internal static partial class RuntimeLocator
         var name = OperatingSystem.IsMacOS() ? "libcoreclr.dylib" : OperatingSystem.IsWindows() ? "coreclr.dll" : "libcoreclr.so";
         try
         {
-            if (OperatingSystem.IsLinux())
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsAndroid())
             {
                 return FromMaps(File.ReadLines($"/proc/{processId.ToString(CultureInfo.InvariantCulture)}/maps"), name) is { } mapped ? [mapped] : [];
             }

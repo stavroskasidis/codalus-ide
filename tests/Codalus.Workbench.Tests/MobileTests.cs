@@ -62,7 +62,7 @@ public sealed class MobileTests : IDisposable
         var device = MobileTargets.RunArguments("/src/App.csproj", "net10.0-ios", phone, "Debug");
         Assert.Contains("-p:RuntimeIdentifier=ios-arm64", device);
         Assert.Contains("-p:_DeviceName=00008110-001", device);
-        Assert.Equal(["build", "/src/App.csproj", "-t:Run", "-f", "net10.0-maccatalyst"], MobileTargets.RunArguments("/src/App.csproj", "net10.0-maccatalyst", null, null));
+        Assert.Equal(["build", "/src/App.csproj", "-t:Build;Run", "-f", "net10.0-maccatalyst"], MobileTargets.RunArguments("/src/App.csproj", "net10.0-maccatalyst", null, null));
 
         Assert.Equal(
             ["build", "/src/App.csproj", "-t:InstallAndroidDependencies", "-f", "net10.0-android", "-p:AndroidSdkDirectory=/home/u/Android/Sdk", "-p:JavaSdkDirectory=/home/u/Android/jdk", "-p:AcceptAndroidSDKLicenses=True"],
@@ -84,6 +84,249 @@ public sealed class MobileTests : IDisposable
 
         // An iPhone needs mlaunch's tunnel: not yet.
         Assert.Null(MobileTargets.DebugArguments("net10.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true), 50126));
+    }
+
+    [Fact]
+    public void A_CoreClr_app_is_debugged_in_a_simulator_on_an_iphone_and_on_a_running_android_device_and_nowhere_else_yet()
+    {
+        // ADR 0115: .NET 11's mobile workloads set UseMonoRuntime to false; the Mono debugger would wait for a runtime
+        // that never connects.
+        var project = Project("/work/App/App.csproj", maui: true, "net11.0-android", "net11.0-ios", "net10.0-ios") with { CoreClrFrameworks = ["net11.0-android", "net11.0-ios"] };
+        Assert.True(MobileTargets.RunsOnCoreClr(project, "net11.0-ios"));
+        Assert.True(MobileTargets.RunsOnCoreClr(project, "NET11.0-Android"));
+        Assert.False(MobileTargets.RunsOnCoreClr(project, "net10.0-ios"));
+
+        var simulator = new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true);
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", simulator));
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true))); // the in-app debugger, ADR 0117
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-maccatalyst", null));
+
+        // ADR 0116: on Android the debugger runs on the device, so it has to be up (F5 starts an emulator first).
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true)));
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("0a1b2c3d", "Pixel 8 Pro", MobilePlatform.Android, MobileDeviceKind.Device, true)));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-android", new MobileDevice("avd:Pixel_8", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, false)));
+
+        // One property, in quotes: MSBuild's command line would otherwise read the second argument as a property.
+        Assert.Equal(
+            ["-p:MlaunchAdditionalArgumentsProperty=\"--setenv=DOTNET_STARTUP_HOOKS=/tmp/d/Hook.dll;--setenv=CODALUS_DEBUG_WAIT=/tmp/d/wait\""],
+            MobileTargets.CoreClrDebugArguments("/tmp/d/Hook.dll", "/tmp/d/wait"));
+    }
+
+    [Fact]
+    public void F5_on_an_iphone_builds_the_in_app_debugger_into_folders_of_its_own_and_launches_it_as_a_profiler()
+    {
+        // ADR 0117: a paired iPhone or iPad debugs a CoreCLR app; an unpaired one doesn't.
+        var phone = new MobileDevice("00008110-001", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true);
+        Assert.True(MobileTargets.DebugsCoreClr("net11.0-ios", phone));
+        Assert.False(MobileTargets.DebugsCoreClr("net11.0-ios", phone with { Problem = "Pair the device" }));
+
+        var framework = Path.Combine(_dir, "CodalusDebugger.framework");
+        var targets = IosDeviceDebugging.WriteTargets(Path.Combine(_dir, "targets"));
+        Assert.Contains("<NativeReference Include=\"$(CodalusInAppDebuggerFramework)\" Kind=\"Framework\" />", File.ReadAllText(targets), StringComparison.Ordinal);
+        var written = File.GetLastWriteTimeUtc(targets);
+        Assert.Equal(targets, IosDeviceDebugging.WriteTargets(Path.Combine(_dir, "targets")));
+        Assert.Equal(written, File.GetLastWriteTimeUtc(targets)); // the same file, not written again
+
+        // F5's build has folders of its own: the app of the user's own builds and of Ctrl+F5 stays as it was.
+        Assert.Equal(
+            [
+                "-p:IntermediateOutputPath=obj/Debug/codalus-device/",
+                "-p:OutputPath=bin/Debug/codalus-device/",
+                "-p:CustomAfterMicrosoftCommonTargets=" + targets,
+                "-p:CodalusInAppDebuggerFramework=" + framework,
+                "-p:MlaunchAdditionalArgumentsProperty=\"--setenv=DOTNET_ENABLE_PROFILING=1;--setenv=DOTNET_PROFILER=" + Codalus.Debugging.InAppDebugger.ProfilerClassId
+                    + ";--setenv=DOTNET_PROFILER_PATH=@executable_path/Frameworks/CodalusDebugger.framework/CodalusDebugger;--setenv=CODALUS_DEBUG_PORT=50123\"",
+            ],
+            IosDeviceDebugging.RunArguments(framework, targets, 50123, configuration: null));
+        Assert.StartsWith("-p:IntermediateOutputPath=obj/Release/", IosDeviceDebugging.RunArguments(framework, targets, 1, "Release")[0], StringComparison.Ordinal);
+
+        var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, _ => null, _dir), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
+        var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-ios") with { CoreClrFrameworks = ["net11.0-ios"] };
+        var plan = service.IosDevicePlan("dotnet", project, "net11.0-ios", phone, "Debug", framework, Path.Combine(_dir, "targets"), 50123);
+        Assert.Contains("-p:_DeviceName=00008110-001", plan.ArgumentList!);
+        Assert.Contains("-p:RuntimeIdentifier=ios-arm64", plan.ArgumentList!);
+        Assert.Contains("-p:CodalusInAppDebuggerFramework=" + framework, plan.ArgumentList!);
+
+        Assert.InRange(IosDeviceDebugging.PickPort(), 49152, 65535);
+    }
+
+    [Fact]
+    public async Task The_in_app_debugger_is_the_variables_the_shipped_archive_unpacked_once_or_a_checkouts_build()
+    {
+        string Framework(string folder)
+        {
+            var framework = Directory.CreateDirectory(Path.Combine(folder, "CodalusDebugger.framework")).FullName;
+            File.WriteAllText(Path.Combine(framework, "CodalusDebugger"), "library");
+            return framework;
+        }
+
+        var cache = Path.Combine(_dir, "cache");
+        var none = Directory.CreateDirectory(Path.Combine(_dir, "none")).FullName;
+        Assert.Null(IosDeviceDebugging.Framework(cache, none, _ => null));
+
+        // The variable's folder.
+        var given = Framework(Path.Combine(_dir, "given"));
+        Assert.Equal(given, IosDeviceDebugging.Framework(cache, none, v => v == IosDeviceDebugging.FrameworkVariable ? Path.Combine(_dir, "given") : null));
+
+        // A published install: the archive next to the shell, unpacked into the cache, once per build of it.
+        var install = Directory.CreateDirectory(Path.Combine(_dir, "install")).FullName;
+        var shipped = Directory.CreateDirectory(Path.Combine(install, "remote", "ios-arm64")).FullName;
+        Framework(Path.Combine(_dir, "stage"));
+        await using (var archive = File.Create(Path.Combine(shipped, IosDeviceDebugging.Archive)))
+        await using (var gzip = new System.IO.Compression.GZipStream(archive, System.IO.Compression.CompressionLevel.Fastest))
+        {
+            await System.Formats.Tar.TarFile.CreateFromDirectoryAsync(Path.Combine(_dir, "stage"), gzip, includeBaseDirectory: false, Ct);
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(shipped, IosDeviceDebugging.ArchiveId), "1.1.0-abc\n", Ct);
+        var unpacked = IosDeviceDebugging.Framework(cache, install, _ => null);
+        Assert.Equal(Path.Combine(cache, "1.1.0-abc", "CodalusDebugger.framework"), unpacked);
+        Assert.Equal("library", await File.ReadAllTextAsync(Path.Combine(unpacked!, "CodalusDebugger"), Ct));
+        File.Delete(Path.Combine(shipped, IosDeviceDebugging.Archive));
+        await File.WriteAllTextAsync(Path.Combine(shipped, IosDeviceDebugging.Archive), "not read again", Ct);
+        Assert.Equal(unpacked, IosDeviceDebugging.Framework(cache, install, _ => null));
+
+        // A source checkout: .work/codalus-debugger-ios-arm64 at the repository's root.
+        var checkout = Directory.CreateDirectory(Path.Combine(_dir, "checkout")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(checkout, "Codalus.slnx"), "<Solution />", Ct);
+        var built = Framework(Path.Combine(checkout, ".work", "codalus-debugger-ios-arm64"));
+        var bin = Directory.CreateDirectory(Path.Combine(checkout, "src", "bin")).FullName;
+        Assert.Equal(built, IosDeviceDebugging.Framework(cache, bin, _ => null));
+    }
+
+    [Fact]
+    public void A_CoreClr_debug_plan_copies_the_hook_next_to_the_folder_the_app_reports_in()
+    {
+        var hook = Path.Combine(_dir, "ide folder", "Codalus.Debugging.StartupHook.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(hook)!);
+        File.WriteAllText(hook, "hook");
+        var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, _ => null, _dir), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
+        var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-ios") with { CoreClrFrameworks = ["net11.0-ios"] };
+        var simulator = new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true);
+
+        Assert.Null(service.CoreClrDebugPlan("dotnet", project, "net11.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true), "Debug", hook));
+        var plan = service.CoreClrDebugPlan("dotnet", project, "net11.0-ios", simulator, "Debug", hook)!.Value;
+        try
+        {
+            Assert.True(Directory.Exists(plan.WaitFolder));
+            Assert.Equal(plan.Folder, Path.GetDirectoryName(plan.WaitFolder));
+            var copy = Path.Combine(plan.Folder, "Codalus.Debugging.StartupHook.dll");
+            Assert.Equal("hook", File.ReadAllText(copy));
+            Assert.Contains("-t:Build;Run", plan.Run.ArgumentList!); // .NET 11's Run target doesn't build
+            Assert.Contains("-p:_DeviceName=:v2:udid=8A1F", plan.Run.ArgumentList!);
+            Assert.Equal(MobileTargets.CoreClrDebugArguments(copy, plan.WaitFolder)[0], plan.Run.ArgumentList![^1]);
+        }
+        finally
+        {
+            Directory.Delete(plan.Folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_CoreClr_android_app_is_started_held_by_dotnet_run_and_debugged_on_the_device_through_adb()
+    {
+        // ADR 0116: dotnet run's -e reaches the app's environment, and its startup hook is put into the app.
+        var service = new MobileService(PlatformKind.MacOS, new AndroidToolchain(PlatformKind.MacOS, n => n == "ANDROID_HOME" ? "/sdk" : null, _dir, p => p == Path.Combine("/sdk", "platform-tools", "adb")), (_, _, _, _) => Task.FromResult((1, "unexpected")), (_, _, _) => false);
+        var project = Project(Path.Combine(_dir, "App", "App.csproj"), maui: true, "net11.0-android") with { CoreClrFrameworks = ["net11.0-android"] };
+        var emulator = new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true);
+        var wait = AndroidDebugging.WaitFolder("com.contoso.app", "run1");
+        Assert.Equal("/data/data/com.contoso.app/cache/codalus-debug-run1", wait);
+        var plan = service.AndroidCoreClrDebugPlan("dotnet", project, "net11.0-android", emulator, "Debug", "/ide/Codalus.Debugging.StartupHook.dll", wait);
+        Assert.Equal(
+            ["run", "--project", project.Path, "-f", "net11.0-android", "-c", "Debug", "--device", "emulator-5554", "-p:AndroidSdkDirectory=/sdk",
+             "-e", "DOTNET_STARTUP_HOOKS=/ide/Codalus.Debugging.StartupHook.dll", "-e", "CODALUS_DEBUG_WAIT=" + wait, "-e", "CODALUS_DEBUG_WAIT_CREATE=1", "-e", "CODALUS_DEBUG_WAIT_SECONDS=900"],
+            plan.ArgumentList);
+
+        // The debugger starts as the app's user, with the app's temporary folder (its runtime's pipes are there).
+        var adapter = AndroidDebugging.Adapter("/sdk/platform-tools/adb", "emulator-5554", "com.contoso.app", "1.1.0-abc");
+        Assert.True(adapter.IsCodalus);
+        Assert.Equal(
+            ["-s", "emulator-5554", "shell", "-T", "run-as", "com.contoso.app", "env", "TMPDIR=/data/data/com.contoso.app/cache", "/data/data/com.contoso.app/code_cache/codalus-debugger-1.1.0-abc/codalus-debughost", "--clr-dap"],
+            adapter.Arguments);
+
+        Assert.Equal("android-arm64", AndroidDebugging.Platform("arm64-v8a\n"));
+        Assert.Equal("android-x64", AndroidDebugging.Platform("x86_64"));
+        Assert.Null(AndroidDebugging.Platform("armeabi-v7a"));
+        Assert.Null(AndroidDebugging.Platform("x86"));
+    }
+
+    [Fact]
+    public async Task The_debugger_is_pushed_to_the_device_once_per_build_and_copied_into_the_app_once_per_install()
+    {
+        var bundle = new Codalus.Workbench.Debugging.Remote.CodalusDebuggerBundle(Path.Combine(_dir, "bundle"), IsArchive: false, "1.1.0-abc");
+        var commands = new List<string>();
+        var inApp = false;
+        var staged = false;
+        var android = new AndroidDebugging((arguments, _, _) =>
+        {
+            var command = string.Join(' ', arguments);
+            commands.Add(command);
+            return Task.FromResult<(int, string)>(command switch
+            {
+                _ when command.EndsWith("code_cache/codalus-debugger-1.1.0-abc/bundle.id", StringComparison.Ordinal) => inApp ? (0, "bundle.id") : (1, "No such file"),
+                "-s emulator-5554 shell ls /data/local/tmp/codalus-debugger-1.1.0-abc/bundle.id" => staged ? (0, "bundle.id") : (1, "No such file"),
+                "-s emulator-5554 shell ls /data/local/tmp" => (0, "codalus-debugger-1.0.0-old\nother\n"),
+                _ => (0, string.Empty),
+            });
+        }, _dir);
+
+        // Neither on the device nor in the app: pushed (an older build's copy removed first), then copied in.
+        await android.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken);
+        Assert.Contains("-s emulator-5554 shell rm -rf /data/local/tmp/codalus-debugger-1.0.0-old", commands);
+        Assert.DoesNotContain(commands, c => c.Contains("rm -rf /data/local/tmp/other", StringComparison.Ordinal));
+        Assert.Contains($"-s emulator-5554 push {bundle.Path} /data/local/tmp/codalus-debugger-1.1.0-abc", commands);
+        Assert.Contains("-s emulator-5554 shell run-as com.contoso.app cp -r /data/local/tmp/codalus-debugger-1.1.0-abc/. /data/data/com.contoso.app/code_cache/codalus-debugger-1.1.0-abc/", commands);
+        Assert.Contains("-s emulator-5554 shell run-as com.contoso.app chmod 700 /data/data/com.contoso.app/code_cache/codalus-debugger-1.1.0-abc/codalus-debughost", commands);
+
+        // Installed again (code_cache emptied) with the build on the device: only copied in.
+        commands.Clear();
+        staged = true;
+        await android.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(commands, c => c.Contains(" push ", StringComparison.Ordinal));
+        Assert.Contains(commands, c => c.Contains(" cp -r ", StringComparison.Ordinal));
+
+        // In the app already: nothing to do.
+        commands.Clear();
+        inApp = true;
+        await android.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken);
+        Assert.Single(commands);
+
+        // A step that fails says adb's words.
+        inApp = staged = false;
+        var failing = new AndroidDebugging((arguments, _, _) => Task.FromResult<(int, string)>(arguments.Contains("push") ? (1, "adb: error: failed to copy: No space left on device") : arguments[^1].EndsWith("bundle.id", StringComparison.Ordinal) ? (1, "") : (0, "")), _dir);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => failing.EnsureDebuggerAsync("emulator-5554", "com.contoso.app", bundle, null, TestContext.Current.CancellationToken));
+        Assert.Contains("No space left on device", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_app_reports_its_process_in_its_wait_folder_and_a_shipped_archive_is_unpacked_once()
+    {
+        var android = new AndroidDebugging((arguments, _, _) => Task.FromResult<(int, string)>(string.Join(' ', arguments) switch
+        {
+            "-s emulator-5554 shell run-as com.contoso.app cat /data/data/com.contoso.app/cache/codalus-debug-a/pid" => (0, "11458\n"),
+            "-s emulator-5554 shell pidof com.contoso.app" => (0, "11458\n"),
+            _ => (1, "run-as: unknown package: com.contoso.app"),
+        }), _dir);
+        Assert.Equal(11458, await android.ReportedProcessAsync("emulator-5554", "com.contoso.app", "/data/data/com.contoso.app/cache/codalus-debug-a", TestContext.Current.CancellationToken));
+        Assert.Null(await android.ReportedProcessAsync("emulator-5554", "com.contoso.app", "/data/data/com.contoso.app/cache/codalus-debug-b", TestContext.Current.CancellationToken));
+        Assert.Equal(11458, await android.RunningProcessAsync("emulator-5554", "com.contoso.app", TestContext.Current.CancellationToken));
+
+        // The archive a published install ships (remote/android-arm64/debugger.tar.gz): its top folder is codalus-debugger/.
+        var source = Directory.CreateDirectory(Path.Combine(_dir, "pack", "codalus-debugger")).FullName;
+        File.WriteAllText(Path.Combine(source, "codalus-debughost"), "host");
+        var archive = Path.Combine(_dir, "debugger.tar.gz");
+        using (var file = File.Create(archive))
+        using (var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionLevel.Fastest))
+        {
+            System.Formats.Tar.TarFile.CreateFromDirectory(Path.Combine(_dir, "pack"), gzip, includeBaseDirectory: false);
+        }
+
+        var bundle = new Codalus.Workbench.Debugging.Remote.CodalusDebuggerBundle(archive, IsArchive: true, "1.1.0-abc");
+        var unpacked = android.Unpack(bundle);
+        Assert.Equal("host", File.ReadAllText(Path.Combine(unpacked, "codalus-debughost")));
+        File.WriteAllText(Path.Combine(unpacked, "codalus-debughost"), "kept");
+        Assert.Equal(unpacked, android.Unpack(bundle));
+        Assert.Equal("kept", File.ReadAllText(Path.Combine(unpacked, "codalus-debughost")));
     }
 
     [Fact]
@@ -127,13 +370,17 @@ public sealed class MobileTests : IDisposable
 
         var phones = MobileDevices.ParseAppleDevices("""
             {"result":{"devices":[
-              {"identifier":"X","deviceProperties":{"name":"Jane's iPhone","osVersionNumber":"18.1"},"hardwareProperties":{"udid":"00008110-001","platform":"iOS","deviceType":"iPhone"},"connectionProperties":{"pairingState":"paired"}},
+              {"identifier":"X","deviceProperties":{"name":"Jane's iPhone","osVersionNumber":"18.1"},"hardwareProperties":{"udid":"00008110-001","platform":"iOS","deviceType":"iPhone"},"connectionProperties":{"pairingState":"paired","tunnelIPAddress":"fdb0:1:2::1","tunnelState":"connected"}},
               {"identifier":"Y","deviceProperties":{"name":"Living Room"},"hardwareProperties":{"udid":"TV1","platform":"tvOS"}},
-              {"identifier":"Z","deviceProperties":{"name":"New iPad"},"hardwareProperties":{"udid":"00008027-002","platform":"iOS"},"connectionProperties":{"pairingState":"unpaired"}}]}}
+              {"identifier":"Z","deviceProperties":{"name":"New iPad"},"hardwareProperties":{"udid":"00008027-002","platform":"iOS"},"connectionProperties":{"pairingState":"unpaired","tunnelIPAddress":"fdb0:3:4::1","tunnelState":"disconnected"}}]}}
             """);
         Assert.Equal(["Jane's iPhone", "New iPad"], phones.Select(p => p.Name));
         Assert.True(phones[0].IsUsable);
         Assert.Contains("Pair the device", phones[1].Problem, StringComparison.Ordinal);
+
+        // Where the in-app debugger is reached (ADR 0117): the tunnel's address, while the tunnel is up.
+        Assert.Equal("fdb0:1:2::1", phones[0].TunnelAddress);
+        Assert.Null(phones[1].TunnelAddress);
     }
 
     [Fact]

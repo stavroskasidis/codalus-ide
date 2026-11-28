@@ -5,9 +5,12 @@
 # (remote/<rid>/debugger/, built by Codalus.Shell's publish); this is for a source checkout: remote debugging there, and
 # the tests of it (RemoteTests), which skip without the bundle locally and fail without it in CI.
 #
-# Usage: eng/get-codalus-debugger.sh [rid…]     default: this machine's; any of linux-x64, linux-arm64, osx-arm64, and
-#        the two a package offers as components: osx-x64 (x64 programs on Apple silicon) and win-x86 (32-bit .NET
-#        Framework programs). A bundle builds on any OS.
+# Usage: eng/get-codalus-debugger.sh [rid…]     default: this machine's; any of linux-x64, linux-arm64, osx-arm64, the
+#        two a package offers as components: osx-x64 (x64 programs on Apple silicon) and win-x86 (32-bit .NET
+#        Framework programs), and android-arm64 and android-x64 (CoreCLR apps on Android devices and emulators, ADR
+#        0116: built for linux-bionic on Android's runtime pack), and ios-arm64: the in-app debugger for iPhones and
+#        iPads (ADR 0117), CodalusDebugger.framework, which F5 puts into the app (src/Codalus.Debugging.Device, compiled
+#        ahead of time for iOS: it builds on macOS with Xcode only). The other bundles build on any OS.
 # It builds in .work/debugger-build (its own obj and bin: the solution's aren't touched), and does nothing for a bundle
 # that is already built from the same sources (bundle.id).
 set -euo pipefail
@@ -28,19 +31,40 @@ version="$(tr -d '[:space:]' < VERSION)"
 # them, new files too) is another bundle. The index's blobs count too: eng/wsl-test.sh's mirror has no commit, only
 # every file added, so neither HEAD nor a diff against it changed with an edit there, and a stale bundle was taken as up
 # to date (an adapter fix that the WSL container test didn't run, 2026-11-19).
-paths=(src/Codalus.Debugging.Host src/Codalus.Debugging src/Codalus.Debugging.StartupHook src/Codalus.Rpc src/ThirdParty Directory.Packages.props)
+paths=(src/Codalus.Debugging.Host src/Codalus.Debugging.Device src/Codalus.Debugging src/Codalus.Debugging.StartupHook src/Codalus.Rpc src/ThirdParty Directory.Packages.props)
 sources="$(git rev-parse HEAD 2> /dev/null || echo none)$(git status --porcelain -- "${paths[@]}" 2> /dev/null || true)$(git diff HEAD -- "${paths[@]}" 2> /dev/null | sha256sum | cut -c1-16)$(git ls-files -s -- "${paths[@]}" 2> /dev/null | sha256sum | cut -c1-16)$(git ls-files -o --exclude-standard -z -- "${paths[@]}" 2> /dev/null | xargs -0 cat 2> /dev/null | sha256sum | cut -c1-16)"
 id="$version-$(printf '%s' "$sources" | sha256sum | cut -c1-12)"
 
 for rid in "$@"; do
   out="$repo/.work/codalus-debugger-$rid"
+  if [ "$rid" = ios-arm64 ]; then
+    # The in-app debugger (ADR 0117): CodalusDebugger.framework, NativeAOT for iOS, which needs Xcode's iOS SDK.
+    if [ -f "$out/CodalusDebugger.framework/CodalusDebugger" ] && [ "$(cat "$out/bundle.id" 2> /dev/null)" = "$id" ]; then
+      echo "codalus-debugger $id ($rid) -> $out (up to date)"
+      continue
+    fi
+
+    rm -rf "$out.tmp"
+    dotnet publish src/Codalus.Debugging.Device -c Release --artifacts-path "$repo/.work/debugger-build" -o "$out.tmp" -nologo -v quiet
+    mkdir -p "$out.next"
+    mv "$out.tmp/CodalusDebugger.framework" "$out.next/"
+    rm -rf "$out.tmp"
+    printf '%s\n' "$id" > "$out.next/bundle.id"
+    rm -rf "$out"
+    mv "$out.next" "$out"
+    echo "codalus-debugger $id ($rid) -> $out ($(du -sm "$out" | cut -f1) MB)"
+    continue
+  fi
+
   if { [ -x "$out/codalus-debughost" ] || [ -f "$out/codalus-debughost.exe" ]; } && [ "$(cat "$out/bundle.id" 2> /dev/null)" = "$id" ]; then
     echo "codalus-debugger $id ($rid) -> $out (up to date)"
     continue
   fi
 
   rm -rf "$out.tmp"
-  dotnet publish src/Codalus.Debugging.Host -c Release -r "$rid" -p:CodalusDebuggerBundle=true \
+  publish_rid="$rid"
+  case "$rid" in android-*) publish_rid="linux-bionic-${rid#android-}" ;; esac
+  dotnet publish src/Codalus.Debugging.Host -c Release -r "$publish_rid" -p:CodalusDebuggerBundle=true \
     --artifacts-path "$repo/.work/debugger-build" -o "$out.tmp" -nologo -v quiet
   printf '%s\n' "$id" > "$out.tmp/bundle.id"
   rm -rf "$out"

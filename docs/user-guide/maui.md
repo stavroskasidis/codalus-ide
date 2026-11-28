@@ -33,7 +33,7 @@ When the startup project is a MAUI app, the toolbar shows the **device** it runs
 
 Choosing a device of another platform switches the project to that platform's framework (`net10.0-android`, `net10.0-ios`…). Each solution remembers its choices.
 
-**Start Without Debugging** (`Ctrl+F5`) builds, deploys and starts the app on the device with the platform SDK's own run target, `dotnet build -t:Run -f <framework>`. Its output is in the Run channel of the Output window, and **Stop** ends it.
+**Start Without Debugging** (`Ctrl+F5`) builds, deploys and starts the app on the device with the platform SDK's own run target, `dotnet build -t:Run -f <framework>` (`-t:Build;Run` on iOS and Mac Catalyst). Its output is in the Run channel of the Output window, and **Stop** ends it.
 
 A device that can't be used yet says why:
 - **unauthorized:** allow USB debugging on the phone when it asks;
@@ -42,7 +42,7 @@ A device that can't be used yet says why:
 
 ## Debugging on a device
 
-**Start** (`F5`) builds and deploys the app the same way, and debugs it on Android devices and emulators, iOS simulators and Mac Catalyst. The app runs on the Mono runtime there, so Codalus IDE debugs it with its own Mono debugger:
+**Start** (`F5`) builds and deploys the app the same way, and debugs it on Android devices and emulators, iOS simulators and Mac Catalyst. Up to .NET 10 the app runs on the Mono runtime there, so Codalus IDE debugs it with its own Mono debugger:
 - **Breakpoints** bind when their code loads. A line without code moves to the next line that has some.
 - **Stepping:** Step Over, Into and Out. With Just My Code on (the default), stepping into framework code steps out again.
 - **The Call Stack and Threads windows.**
@@ -50,9 +50,17 @@ A device that can't be used yet says why:
 - **Watch and the Debug Console** take names and member paths (`item.Title`, `this.Count`, `items[0]`).
 - **Exceptions:** set in the Exception Settings, with the exception's message when it stops.
 
-**Stop** ends the app. Debugging on an iPhone or iPad isn't available yet (debug in a simulator, or run on the device with `Ctrl+F5`). Neither are conditional breakpoints, changing values, or evaluating calls and operators.
+**Stop** ends the app. A Mono app can't be debugged on an iPhone or iPad yet (debug it in a simulator, or run it on the device with `Ctrl+F5`); a .NET 11 app can (below). The Mono debugger doesn't do conditional breakpoints, changing values, or evaluating calls and operators.
 
-.NET 11 runs MAUI apps on CoreCLR, which has no open-source debugger for mobile yet. To debug a .NET 11 MAUI app, set `<UseMonoRuntime>true</UseMonoRuntime>` in its project, as Microsoft's release notes suggest.
+### .NET 11 apps
+
+.NET 11 runs Android, iOS and Mac Catalyst apps on CoreCLR, .NET's own runtime, which the Mono debugger can't debug.
+
+- **In an iOS simulator, `F5` debugs the app with the Codalus debugger,** the one that debugs every other .NET program, with everything in [Debugging](debugging.md): conditional breakpoints, hit counts and logpoints, calls and operators in Watch, changing values, Set Next Statement. The app waits at its start until the debugger has attached, so breakpoints in its first page stop too. The Debug Console says "Waiting for the app to start…" while it builds and deploys. It needs Xcode's command line tools, and a Debug build (a Release build doesn't wait for the debugger).
+- **On an Android device or emulator, `F5` debugs the app with the Codalus debugger too,** which runs on the device, as your app's user. Codalus IDE copies it there the first time (about 45 MB, once per version of Codalus IDE) and into the app after each install, so the first `F5` on a device takes a little longer. The app waits at its start, as in a simulator, so breakpoints in its first page stop. It needs a running 64-bit device or emulator (arm64 or x86_64; `F5` starts a stopped emulator first), the project's `ApplicationId`, and a Debug build, which Android lets the debugger reach (`run-as`). A Release build doesn't wait: `F5` says so. Android may say the app "isn't responding" while it waits for the debugger or is stopped at a breakpoint: choose **Wait**.
+- **On an iPhone or iPad, `F5` debugs the app with the Codalus debugger too,** which goes into the app: iOS doesn't let an app start another program. `F5` builds the app with the debugger in it (about 12 MB more, in build folders of its own: `obj/Debug/codalus-device/` and `bin/Debug/codalus-device/`, so the app your own builds and `Ctrl+F5` make stays as it was, and nothing is added to your project), installs it and launches it. The app waits at its start, for up to 12 seconds, until the debugger has set your breakpoints, so breakpoints in its first page stop. Codalus IDE reaches it over the cable, through the connection Xcode keeps to the device. It needs a paired device with Developer Mode on, a Debug build signed for it (your team in Xcode), and Codalus IDE for macOS. The first `F5` after a `Ctrl+F5` builds the app again, and the other way round.
+- **On Mac Catalyst** a CoreCLR app can't be debugged yet: `F5` says so at once. Set `<UseMonoRuntime>true</UseMonoRuntime>` in the project to debug it on Mono, as Microsoft's release notes suggest, or run it with `Ctrl+F5`.
+- Hot Reload and Edit and Continue aren't available in these sessions yet, and neither are x64 simulator apps on Apple silicon, iPhones and iPads paired over Wi-Fi only, 32-bit Android devices, or apps in an Android work profile.
 
 ## Running on Windows
 
@@ -172,7 +180,7 @@ With the MAUI workload installed, File → New Project lists **.NET MAUI App**, 
 
 ## Not available yet
 
-- Debugging on iPhones and iPads, and debugging .NET 11 apps on CoreCLR.
+- Debugging Mono apps on iPhones and iPads, and debugging .NET 11 apps on CoreCLR on Mac Catalyst.
 - A XAML previewer and XAML Hot Reload for MAUI: no open-source ones exist.
 - Changing an emulator's device profile after it's created (create a new one), and the log of a physical iPhone or iPad.
 - Running the Windows target from Linux and macOS (through a Windows machine), and breakpoints in a packaged Windows app's start-up code.

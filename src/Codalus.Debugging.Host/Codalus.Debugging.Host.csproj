@@ -35,6 +35,36 @@
     <UseAppHost>true</UseAppHost>
   </PropertyGroup>
 
+  <!--
+    The bundle for Android (ADR 0116): built for linux-bionic-<arch> (its app host and host libraries), on the Android
+    runtime pack's runtime (Microsoft.NETCore.App.Runtime.android-<arch>), which the app being debugged runs on too:
+    the linux-bionic pack's CoreCLR crashed at its start on an Android 16 emulator, its first call to JIT-compiled
+    code. The pack is swapped before trimming, so what is trimmed is what runs. eng/get-codalus-debugger.sh names it
+    android-<arch>.
+  -->
+  <PropertyGroup Condition="'$(CodalusDebuggerBundle)' == 'true' And $(RuntimeIdentifier.StartsWith('linux-bionic-'))">
+    <_CodalusAndroidRid>$(RuntimeIdentifier.Replace('linux-bionic-', 'android-'))</_CodalusAndroidRid>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_CodalusAndroidRid)' != ''">
+    <PackageDownload Include="Microsoft.NETCore.App.Runtime.$(_CodalusAndroidRid)" Version="[$(BundledNETCoreAppPackageVersion)]" />
+  </ItemGroup>
+  <Target Name="CodalusAndroidRuntimePack" AfterTargets="ResolveFrameworkReferences" Condition="'$(_CodalusAndroidRid)' != ''">
+    <ItemGroup>
+      <_CodalusBionicPack Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'" />
+      <ResolvedRuntimePack Update="@(_CodalusBionicPack)" PackageDirectory="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(_CodalusAndroidRid)/$(BundledNETCoreAppPackageVersion)" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_CodalusBionicNative>@(_CodalusBionicPack->'%(PackageDirectory)')/runtimes/$(RuntimeIdentifier)/native/</_CodalusBionicNative>
+    </PropertyGroup>
+  </Target>
+  <!-- The Android pack has no host libraries (an app's own host starts its runtime): the app host's come from the linux-bionic pack. -->
+  <Target Name="CodalusAndroidHostLibraries" BeforeTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CodalusAndroidRuntimePack" Condition="'$(_CodalusAndroidRid)' != ''">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(_CodalusBionicNative)libhostfxr.so" RelativePath="libhostfxr.so" CopyToPublishDirectory="PreserveNewest" />
+      <ResolvedFileToPublish Include="$(_CodalusBionicNative)libhostpolicy.so" RelativePath="libhostpolicy.so" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
     <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />

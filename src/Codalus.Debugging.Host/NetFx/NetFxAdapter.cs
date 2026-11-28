@@ -9,7 +9,8 @@ internal static class NetFxAdapter
 {
     /// <param name="debugger">CoreCLR's (<see cref="CoreClr.DbgShimDebugger"/>); the desktop CLR's when null.</param>
     /// <param name="trace">A log of the DAP traffic and the session's messages (<see cref="CoreClrAdapter.LogVariable"/>).</param>
-    public static async Task<int> RunAsync(Stream input, Stream output, TextWriter log, IClrDebugger? debugger = null, TextWriter? trace = null)
+    /// <param name="configured">Given the session's <see cref="NetFxDebugSession.Configured"/>, as it starts: the in-app debugger holds the app's start until then (ADR 0117).</param>
+    public static async Task<int> RunAsync(Stream input, Stream output, TextWriter log, IClrDebugger? debugger = null, TextWriter? trace = null, Action<Task>? configured = null)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -32,6 +33,7 @@ internal static class NetFxAdapter
             using var server = new DapServer(input, output) { Trace = trace };
             using var session = new NetFxDebugSession(server, trace is null ? log : new CoreClr.TeeWriter(log, trace), debugger ?? CreateDebugger()) { Trace = trace };
             server.Handler = session.HandleAsync;
+            configured?.Invoke(session.Configured);
             using var stop = new CancellationTokenSource();
             var reading = server.RunAsync(stop.Token);
             await Task.WhenAny(reading, session.Ended).ConfigureAwait(false);
