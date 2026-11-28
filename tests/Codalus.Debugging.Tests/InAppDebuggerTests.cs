@@ -32,10 +32,18 @@ public sealed class InAppDebuggerTests
         var configured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var asked = 0;
 
-        // The IDE starts trying before the app serves: its build and install come first.
+        // The IDE starts trying before the app serves: its build and install come first. It asks for the address again on
+        // each try (a device's tunnel comes up with the install). The app serves only once a try
+        // has been refused and another begun: on Windows a refusal on the loopback takes about 2 s (its SYN retries), and
+        // a listener started during the first try was found by it (CI, PR #581's run 46140083626).
         var connecting = InAppConnection.ConnectAsync(_ => { Interlocked.Increment(ref asked); return Task.FromResult<string?>("127.0.0.1"); }, port, TimeSpan.FromMilliseconds(50), TimeSpan.FromMinutes(1), Ct);
-        await Task.Delay(300, Ct);
-        Assert.False(connecting.IsCompleted);
+        var refused = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref asked) < 2)
+        {
+            Assert.True(refused.Elapsed < TimeSpan.FromSeconds(30), "The first try wasn't refused in 30 s.");
+            Assert.False(connecting.IsCompleted, "It connected with nothing listening.");
+            await Task.Delay(20, Ct);
+        }
 
         var listener = new TcpListener(IPAddress.Loopback, port);
         listener.Start();
@@ -49,7 +57,6 @@ public sealed class InAppDebuggerTests
         try
         {
             var connection = await connecting.WaitAsync(TimeSpan.FromSeconds(30), Ct);
-            Assert.True(Volatile.Read(ref asked) > 1, "The address is asked again on each try: a device's tunnel comes up with the install.");
             await using var debug = new DebugService(() => null);
             await debug.LaunchInAppAsync("App", connection, "iPhone", Ct).WaitAsync(TimeSpan.FromSeconds(30), Ct);
 
@@ -81,10 +88,12 @@ public sealed class InAppDebuggerTests
     [Fact]
     public void The_runtimes_debugging_libraries_are_beside_it_as_frameworks_on_a_device_and_files_in_a_simulator()
     {
+        // In this OS's own separators (it runs on iOS; Windows CI wrote back slashes, run 46140083626).
+        var app = Path.Combine(Path.GetTempPath(), "App.app");
         Assert.Equal(
-            Path.Combine("/App.app/Frameworks", "libmscordaccore.framework", "libmscordaccore"),
-            IosDeviceRuntime.Sibling("/App.app/Frameworks/libcoreclr.framework/libcoreclr", "libmscordaccore"));
-        Assert.Equal(Path.Combine("/App.app", "libmscordbi.dylib"), IosDeviceRuntime.Sibling("/App.app/libcoreclr.dylib", "libmscordbi"));
+            Path.Combine(app, "Frameworks", "libmscordaccore.framework", "libmscordaccore"),
+            IosDeviceRuntime.Sibling(Path.Combine(app, "Frameworks", "libcoreclr.framework", "libcoreclr"), "libmscordaccore"));
+        Assert.Equal(Path.Combine(app, "libmscordbi.dylib"), IosDeviceRuntime.Sibling(Path.Combine(app, "libcoreclr.dylib"), "libmscordbi"));
     }
 
     [Fact]
