@@ -580,6 +580,10 @@ internal sealed class CorDebugTarget : IClrProcess
         }
         else
         {
+            // Said before the session can continue it: the program is stopped until then, so the session's continue
+            // follows this line (Linux CI, run 46055339275: a thread's exit between an exception's two stages came
+            // between the first stage's line and the second's continue, which the log didn't name).
+            Continuing?.Invoke("[clr] to the session: " + EventName(e));
             _events.Writer.TryWrite(clrEvent);
         }
     }
@@ -627,12 +631,16 @@ internal sealed class CorDebugTarget : IClrProcess
         }
     }
 
+    /// <summary>A callback's name in the adapter's log: <c>LoadModule</c>, <c>Exception2</c>.</summary>
+    private static string EventName(CorDebugManagedCallbackEventArgs e) =>
+        e.GetType().Name.Replace("CorDebugManagedCallbackEventArgs", string.Empty, StringComparison.Ordinal);
+
     private void ContinueFromCallback(CorDebugManagedCallbackEventArgs e)
     {
         try
         {
             Generation++;
-            Continuing?.Invoke("[clr] continue after " + e.GetType().Name.Replace("CorDebugManagedCallbackEventArgs", string.Empty, StringComparison.Ordinal));
+            Continuing?.Invoke("[clr] continue after " + EventName(e));
             (e.Controller ?? (CorDebugController?)_process)?.Continue(false);
         }
         catch (COMException)
