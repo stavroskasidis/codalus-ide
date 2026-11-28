@@ -114,6 +114,10 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// <item>When it is, the app hosts (which don't look on <c>PATH</c>) are pointed at it only when that helps: when it
     /// has the hosts' runtime, or the root they'd use otherwise doesn't. A runtime-only install in the default or the
     /// registered location (a distribution's <c>dotnet-runtime-11.0</c>, Microsoft's runtime package) keeps its hosts.</item>
+    /// <item>Either way, when the <c>dotnet</c> first on <c>PATH</c> (links resolved) is another root's, the chosen root
+    /// goes first on <c>PATH</c> too: a <c>DOTNET_ROOT</c> at <c>~/.dotnet</c> serves the app hosts, but every bare
+    /// <c>dotnet</c> the IDE and its tools start (VSTest's console, <c>dotnet build</c>, a program) would take
+    /// Homebrew's, first on the login shell's <c>PATH</c>, whatever it lacks.</item>
     /// </list>
     /// </summary>
     public DotnetRootChoice? ChooseDotnetRoot()
@@ -132,6 +136,43 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
             return new DotnetRootChoice(root, AddToPath: true, PointHostsAt(root), $"Using the .NET SDK in {root} (DOTNET_ROOT).");
         }
 
+        var choice = ChooseHostsOf(root);
+        return FindOnPath("dotnet") is { } first && !IsDotnetOf(first, root)
+            ? choice with
+            {
+                AddToPath = true,
+                Log = (choice.Log is { } log ? log + " " : string.Empty) + $"The PATH's first dotnet ({first}) is another .NET's: {root} goes first on the PATH.",
+            }
+            : choice;
+    }
+
+    /// <summary>
+    /// Whether the <c>dotnet</c> at <paramref name="dotnet"/> (on the <c>PATH</c>) runs <paramref name="root"/>'s: its real
+    /// folder (<see cref="RealPath"/>, then <see cref="RealFolder"/>) is the root's, or the real folder of the root's own
+    /// <c>dotnet</c>. Snap's launcher (<c>/snap/bin/dotnet</c>, a link to <c>/usr/bin/snap</c>) counts as the snap's root.
+    /// </summary>
+    private bool IsDotnetOf(string dotnet, string root)
+    {
+        var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
+        if (platform == PlatformKind.Linux && dotnet.StartsWith("/snap/", StringComparison.Ordinal) && root.StartsWith("/snap/", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var folder = System.IO.Path.GetDirectoryName(RealPath(dotnet)) ?? string.Empty;
+        var rootFolder = System.IO.Path.GetDirectoryName(RealPath(System.IO.Path.Combine(root, exe))) ?? root;
+        return SameRoot(folder, root) || SameRoot(folder, rootFolder) || SameRoot(RealFolder(folder), RealFolder(rootFolder));
+    }
+
+    /// <summary>
+    /// A folder with the links in every part of it resolved (Homebrew's <c>/opt/homebrew/opt/dotnet</c> is a link into
+    /// its Cellar), where <see cref="RealPath"/> resolves only the file's own; tests describe a machine.
+    /// </summary>
+    public Func<string, string> RealFolder { get; init; } = Codalus.Platform.RealPath.Resolve;
+
+    /// <summary>What <see cref="ChooseDotnetRoot"/> sets for the app hosts when <paramref name="root"/> is already in use.</summary>
+    private DotnetRootChoice ChooseHostsOf(string root)
+    {
         var hostsRoot = HostsRoot();
         if (!HostsCanUse(root))
         {

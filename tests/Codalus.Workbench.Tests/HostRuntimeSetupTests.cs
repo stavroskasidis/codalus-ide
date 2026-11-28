@@ -66,6 +66,12 @@ public sealed class HostRuntimeSetupTests : IDisposable
 
         public string? InstallLocation { get; set; }
 
+        /// <summary>Symbolic links to files (a <c>dotnet</c> on the PATH into Homebrew's Cellar): where each resolves.</summary>
+        public Dictionary<string, string> Links { get; } = [];
+
+        /// <summary>Folders reached through a link (Homebrew's <c>opt/dotnet</c>): their real folder.</summary>
+        public Dictionary<string, string> FolderLinks { get; } = [];
+
         private string? Variable(string name) => Variables.GetValueOrDefault(name);
 
         private bool IsRoot(string folder) => Sdks.ContainsKey(N(folder).TrimEnd('/')) || Runtimes.ContainsKey(N(folder).TrimEnd('/'));
@@ -76,7 +82,8 @@ public sealed class HostRuntimeSetupTests : IDisposable
             SdkVersions = folder => Sdks.GetValueOrDefault(N(folder).TrimEnd('/')) ?? [],
             InstalledFrameworks = (root, _) => Versions([.. Runtimes.GetValueOrDefault(N(root).TrimEnd('/')) ?? []]),
             DirectoryExists = IsRoot,
-            RealPath = path => path,
+            RealPath = path => Links.GetValueOrDefault(N(path)) ?? path,
+            RealFolder = folder => FolderLinks.GetValueOrDefault(N(folder).TrimEnd('/')) ?? folder,
             Roots = new DotnetRootResolver
             {
                 OS = platform switch { PlatformKind.Windows => "windows", PlatformKind.MacOS => "macos", _ => "linux" },
@@ -90,12 +97,17 @@ public sealed class HostRuntimeSetupTests : IDisposable
             },
         };
 
-        /// <summary>What the shell's UseUserDotnet does with a choice.</summary>
+        /// <summary>What the shell's UseUserDotnet does with a choice (<c>ApplyDotnetRoot</c>).</summary>
         public void Apply(DotnetRootChoice choice)
         {
             foreach (var (name, value) in choice.Variables)
             {
                 Variables[name] = value;
+            }
+
+            if (choice.AddToPath)
+            {
+                Variables["PATH"] = choice.Root + (platform == PlatformKind.Windows ? ';' : ':') + Variables.GetValueOrDefault("PATH");
             }
         }
     }
@@ -337,6 +349,90 @@ public sealed class HostRuntimeSetupTests : IDisposable
         Assert.Equal(("C:/pf/dotnet", true), (N(choice.Root), choice.AddToPath));
         windows.Apply(choice);
         Assert.Equal(ToolState.Found, windows.Check().HostRuntimeStatus().State);
+    }
+
+    /// <summary>
+    /// The maintainer's Mac (2026-11-28 smoke: <c>testing.run</c>, <c>ai.externalChat</c>, <c>debug.remote</c>): Homebrew's
+    /// <c>dotnet</c> (SDK 10.0.300, runtime 10.0.8) first on the login shell's PATH, <c>DOTNET_ROOT</c> at <c>~/.dotnet</c>
+    /// (SDK 11.0.100, runtime 11.0.0), the registered location <c>/usr/local/share/dotnet</c> (8 to 11). The app hosts
+    /// follow <c>DOTNET_ROOT</c>; every bare <c>dotnet</c> took Homebrew's, until <c>~/.dotnet</c> went first on the PATH.
+    /// </summary>
+    [Fact]
+    public void A_dotnet_root_already_set_goes_first_on_the_path_when_the_paths_dotnet_is_another_roots()
+    {
+        const string User = "/Users/ada/.dotnet";
+        const string Cellar = "/opt/homebrew/Cellar/dotnet/10.0.300/libexec";
+        Machine Mac(string linkedTo)
+        {
+            var mac = new Machine(PlatformKind.MacOS, Architecture.Arm64) { InstallLocation = "/usr/local/share/dotnet" };
+            mac.Variables["PATH"] = $"/opt/homebrew/bin:/usr/bin:/bin:{User}";
+            mac.Variables["HOME"] = "/Users/ada";
+            mac.Variables["DOTNET_ROOT"] = User;
+            mac.Sdks[User] = ["11.0.100"];
+            mac.Runtimes[User] = ["11.0.0"];
+            mac.Sdks[Cellar] = ["10.0.300"];
+            mac.Runtimes[Cellar] = ["10.0.8"];
+            mac.Sdks["/usr/local/share/dotnet"] = ["10.0.109"];
+            mac.Runtimes["/usr/local/share/dotnet"] = ["8.0.20", "9.0.9", "10.0.9", "11.0.0"];
+            mac.Dotnets.UnionWith(["/opt/homebrew/bin", User, "/usr/local/share/dotnet"]);
+            mac.Links["/opt/homebrew/bin/dotnet"] = linkedTo;
+            return mac;
+        }
+
+        // Homebrew's link into its Cellar's libexec (the real muxer), and the older formula's wrapper script in its
+        // Cellar's bin (no SDKs next to it): either way, another .NET's dotnet.
+        foreach (var homebrew in new[] { Cellar + "/dotnet", "/opt/homebrew/Cellar/dotnet/10.0.300/bin/dotnet" })
+        {
+            var mac = Mac(homebrew);
+            Assert.Equal((ToolState.Found, User), (mac.Check().HostRuntimeStatus().State, N(mac.Check().HostRuntimeStatus().Path!)));
+            var choice = mac.Check().ChooseDotnetRoot()!;
+            Assert.Equal((User, true), (N(choice.Root), choice.AddToPath));
+            Assert.Empty(choice.Variables); // the app hosts already follow DOTNET_ROOT
+            Assert.Equal($"The PATH's first dotnet (/opt/homebrew/bin/dotnet) is another .NET's: {User} goes first on the PATH.", N(choice.Log!));
+            mac.Apply(choice);
+            Assert.Equal(User + "/dotnet", N(mac.Check().FindOnPath("dotnet")!));
+            // Chosen again (Check Again, after an install): nothing more to do.
+            Assert.Equal((false, null), (mac.Check().ChooseDotnetRoot()!.AddToPath, mac.Check().ChooseDotnetRoot()!.Log));
+        }
+
+        // With the hosts to point too (DOTNET_ROOT_ARM64 at the Cellar's .NET 10): both happen, and the log says both.
+        var arch = Mac(Cellar + "/dotnet");
+        arch.Variables["DOTNET_ROOT_ARM64"] = Cellar;
+        var both = arch.Check().ChooseDotnetRoot()!;
+        Assert.True(both.AddToPath);
+        Assert.Equal([("DOTNET_ROOT", User), ("DOTNET_ROOT_ARM64", User)], both.Variables.Select(v => (v.Key, N(v.Value))));
+        Assert.Equal($"The helper processes use the .NET in {User} (DOTNET_ROOT). The PATH's first dotnet (/opt/homebrew/bin/dotnet) is another .NET's: {User} goes first on the PATH.", N(both.Log!));
+
+        // Unchanged: the PATH's first dotnet is the root's own, by a link to it, through a folder link (Homebrew's own
+        // caveat sets DOTNET_ROOT to its opt/dotnet/libexec, a link to the Cellar), or snap's launcher; no dotnet on the PATH.
+        var linked = Mac(Cellar + "/dotnet");
+        linked.Variables["DOTNET_ROOT"] = "/usr/local/share/dotnet";
+        linked.Variables["PATH"] = "/usr/local/bin:/usr/bin";
+        linked.Dotnets.Add("/usr/local/bin");
+        linked.Links["/usr/local/bin/dotnet"] = "/usr/local/share/dotnet/dotnet";
+        linked.Sdks["/usr/local/share/dotnet"] = ["11.0.100"];
+        Assert.Equal(("/usr/local/share/dotnet", false, null), (N(linked.Check().ChooseDotnetRoot()!.Root), linked.Check().ChooseDotnetRoot()!.AddToPath, linked.Check().ChooseDotnetRoot()!.Log));
+
+        var brew = Mac(Cellar + "/dotnet");
+        brew.Variables["DOTNET_ROOT"] = "/opt/homebrew/opt/dotnet/libexec";
+        brew.Sdks["/opt/homebrew/opt/dotnet/libexec"] = ["11.0.100"];
+        brew.Runtimes["/opt/homebrew/opt/dotnet/libexec"] = ["11.0.0"];
+        brew.FolderLinks["/opt/homebrew/opt/dotnet/libexec"] = Cellar;
+        Assert.Equal(("/opt/homebrew/opt/dotnet/libexec", false), (N(brew.Check().ChooseDotnetRoot()!.Root), brew.Check().ChooseDotnetRoot()!.AddToPath));
+
+        var snap = new Machine(PlatformKind.Linux);
+        snap.Variables["PATH"] = "/snap/bin:/usr/bin";
+        snap.Variables["HOME"] = "/home/u";
+        snap.Variables["DOTNET_ROOT"] = "/snap/dotnet-sdk/current";
+        snap.Sdks["/snap/dotnet-sdk/current"] = ["11.0.100"];
+        snap.Runtimes["/snap/dotnet-sdk/current"] = ["11.0.0"];
+        snap.Dotnets.UnionWith(["/snap/bin", "/snap/dotnet-sdk/current"]);
+        snap.Links["/snap/bin/dotnet"] = "/usr/bin/snap";
+        Assert.Equal(("/snap/dotnet-sdk/current", false), (N(snap.Check().ChooseDotnetRoot()!.Root), snap.Check().ChooseDotnetRoot()!.AddToPath));
+
+        var none = Mac(Cellar + "/dotnet");
+        none.Variables["PATH"] = "/usr/bin:/bin";
+        Assert.Equal((User, false), (N(none.Check().ChooseDotnetRoot()!.Root), none.Check().ChooseDotnetRoot()!.AddToPath));
     }
 
     [Fact]
