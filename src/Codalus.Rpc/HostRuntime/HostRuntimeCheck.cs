@@ -321,10 +321,25 @@ public sealed record HostRuntimeCheckResult(string Program, string RuntimeConfig
 
     public IEnumerable<FrameworkResolution> Missing => Frameworks.Where(f => f.Resolved is null);
 
-    /// <summary>"codalus-pluginhost needs Microsoft.NETCore.App 11.0.0-rc.2… (rollForward Major), which isn't installed in /usr/local/share/dotnet (found: 8.0.20, 10.0.0–10.0.9)."</summary>
+    /// <summary>
+    /// The other roots that were looked in and can't run it either (<see cref="HostRuntimeCheck.Prepare"/>: a
+    /// <c>dotnet app.dll</c> looks under the hosts' root and every <c>dotnet</c> on <c>PATH</c>).
+    /// </summary>
+    public IReadOnlyList<HostRuntimeCheckResult> Elsewhere { get; init; } = [];
+
+    /// <summary>
+    /// "codalus-pluginhost needs Microsoft.NETCore.App 11.0.0-rc.2… (rollForward Major), which isn't installed in
+    /// /usr/local/share/dotnet (found: 8.0.20, 10.0.0–10.0.9)", with "or &lt;root&gt; (found: …)" for each root of
+    /// <see cref="Elsewhere"/>.
+    /// </summary>
     public string Describe() =>
         string.Join(" ", Missing.Select(m =>
-            $"{Path.GetFileNameWithoutExtension(Program)} needs the .NET runtime {m.Reference}, which isn't installed in {DotnetRoot} (found: {(m.Installed.Count == 0 ? "none" : FrameworkResolver.Describe(m.Installed))})."));
+            $"{Path.GetFileNameWithoutExtension(Program)} needs the .NET runtime {m.Reference}, which isn't installed in {In(DotnetRoot, m.Installed)}"
+            + string.Concat(Elsewhere.Select(e => " or " + In(e.DotnetRoot, e.Frameworks.FirstOrDefault(f => f.Reference.Name == m.Reference.Name)?.Installed ?? [])))
+            + "."));
+
+    private static string In(string root, IReadOnlyList<FrameworkVersion> installed) =>
+        $"{root} (found: {(installed.Count == 0 ? "none" : FrameworkResolver.Describe(installed))})";
 }
 
 /// <summary>
@@ -343,6 +358,125 @@ public static class HostRuntimeCheck
         "--runtimeconfig", "--depsfile", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward",
     };
 
+    /// <summary>
+    /// A launch ready to start on this machine (M49): checked as <see cref="Check(ProcessLaunchInfo, DotnetRootResolver?)"/>
+    /// does, and a framework-dependent app started by the bare <c>dotnet</c> (<c>dotnet app.dll</c>) given the muxer of
+    /// the first root that can run it, not just the first <c>dotnet</c> on <c>PATH</c>: the root the IDE's app hosts
+    /// use (<see cref="DotnetRootResolver.ForAppHost"/>: <c>DOTNET_ROOT_&lt;ARCH&gt;</c>, <c>DOTNET_ROOT</c>, which the
+    /// shell points at a root with the hosts' runtime), then each <c>dotnet</c> on <c>PATH</c> in order. Homebrew's
+    /// <c>dotnet</c> first on <c>PATH</c> with only .NET 10, and <c>~/.dotnet</c> with .NET 11, start a .NET 11 app on
+    /// <c>~/.dotnet</c>. A <c>dotnet</c> whose root can't be told (a wrapper script) is started as it is when no root
+    /// that can be told has the runtime.
+    /// </summary>
+    /// <exception cref="HostRuntimeMissingException">No root it looked in has the runtime: every one of them is named.</exception>
+    public static ProcessLaunchInfo Prepare(ProcessLaunchInfo launch, DotnetRootResolver? roots = null)
+    {
+        roots ??= DotnetRootResolver.Default;
+        if (!launch.CheckRuntime || roots.ProcessEnvironment(SkipVariable) == "1")
+        {
+            return launch;
+        }
+
+        if (Path.IsPathRooted(launch.FileName) || !IsMuxer(launch.FileName) || ParseMuxer(launch.Arguments) is not { } app)
+        {
+            return Check(launch, roots) is { IsSatisfied: false } missing ? throw new HostRuntimeMissingException(missing) : launch;
+        }
+
+        string? Env(string name) => launch.Environment is { } overrides && overrides.TryGetValue(name, out var value) ? value : roots.ProcessEnvironment(name);
+        if (!roots.FileExists(app.ConfigPath) || RuntimeConfig.Read(app.ConfigPath, Env, app.RollForward, app.FxVersion) is not { IsFrameworkDependent: true } config)
+        {
+            return launch;
+        }
+
+        var exe = roots.OS == "windows" ? "dotnet.exe" : "dotnet";
+        var candidates = new List<string>();
+        if (roots.ForAppHost(Env) is { } hostsRoot && roots.FileExists(Path.Combine(hostsRoot, exe)))
+        {
+            candidates.Add(Path.TrimEndingDirectorySeparator(hostsRoot));
+        }
+
+        var unknown = false;
+        foreach (var folder in (roots.ProcessEnvironment("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var onPath = Path.Combine(folder.Trim('"'), exe);
+            if (!roots.FileExists(onPath))
+            {
+                continue;
+            }
+
+            if (roots.ForMuxer(onPath) is { } muxerRoot)
+            {
+                candidates.Add(Path.TrimEndingDirectorySeparator(muxerRoot));
+            }
+            else
+            {
+                unknown = true; // Homebrew's wrapper script, snap's launcher: only starting it tells
+            }
+        }
+
+        var results = new List<HostRuntimeCheckResult>();
+        foreach (var root in candidates.Distinct(roots.OS == "linux" ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase))
+        {
+            if (!roots.DirectoryExists(root))
+            {
+                continue;
+            }
+
+            var result = Check(app.Program, config, root, Env);
+            if (result.IsSatisfied)
+            {
+                return launch with { FileName = Path.Combine(root, exe) };
+            }
+
+            results.Add(result);
+        }
+
+        return results.Count == 0 || unknown ? launch : throw new HostRuntimeMissingException(results[0] with { Elsewhere = [.. results.Skip(1)] });
+    }
+
+    private static bool IsMuxer(string fileName) => string.Equals(Path.GetFileNameWithoutExtension(fileName), "dotnet", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary><c>dotnet [exec] [host options] app.dll [arguments]</c>: the app and the options that change its runtime; null for anything else (an SDK command, an option the host would refuse).</summary>
+    private static (string Program, string ConfigPath, RollForwardPolicy? RollForward, string? FxVersion)? ParseMuxer(IReadOnlyList<string> arguments)
+    {
+        string? runtimeConfig = null;
+        string? fxVersion = null;
+        RollForwardPolicy? rollForward = null;
+        var i = arguments.Count > 0 && arguments[0] == "exec" ? 1 : 0;
+        for (; i < arguments.Count && arguments[i].StartsWith("--", StringComparison.Ordinal); i += 2)
+        {
+            var option = arguments[i];
+            if (!s_muxerOptionsWithValue.Contains(option) || i + 1 >= arguments.Count)
+            {
+                return null;
+            }
+
+            var value = arguments[i + 1];
+            switch (option)
+            {
+                case "--runtimeconfig":
+                    runtimeConfig = value;
+                    break;
+                case "--fx-version":
+                    fxVersion = value;
+                    break;
+                case "--roll-forward" when RuntimeConfig.TryParsePolicy(value, out var policy):
+                    rollForward = policy;
+                    break;
+                case "--roll-forward":
+                    return null;
+            }
+        }
+
+        if (i >= arguments.Count || !arguments[i].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var program = arguments[i];
+        return (program, runtimeConfig ?? Path.ChangeExtension(program, ".runtimeconfig.json"), rollForward, fxVersion);
+    }
+
     /// <summary>The check for a launch on this machine; null when it doesn't apply or can't tell.</summary>
     public static HostRuntimeCheckResult? Check(ProcessLaunchInfo launch, DotnetRootResolver? roots = null)
     {
@@ -356,48 +490,15 @@ public static class HostRuntimeCheck
         string program, configPath, root;
         RollForwardPolicy? rollForward = null;
         string? fxVersion = null;
-        if (string.Equals(Path.GetFileNameWithoutExtension(launch.FileName), "dotnet", StringComparison.OrdinalIgnoreCase))
+        if (IsMuxer(launch.FileName))
         {
             // dotnet [exec] [host options] app.dll [arguments]; anything else (an SDK command) isn't an app.
-            string? runtimeConfig = null;
-            var i = launch.Arguments.Count > 0 && launch.Arguments[0] == "exec" ? 1 : 0;
-            for (; i < launch.Arguments.Count && launch.Arguments[i].StartsWith("--", StringComparison.Ordinal); i += 2)
-            {
-                var option = launch.Arguments[i];
-                if (!s_muxerOptionsWithValue.Contains(option) || i + 1 >= launch.Arguments.Count)
-                {
-                    return null;
-                }
-
-                var value = launch.Arguments[i + 1];
-                switch (option)
-                {
-                    case "--runtimeconfig":
-                        runtimeConfig = value;
-                        break;
-                    case "--fx-version":
-                        fxVersion = value;
-                        break;
-                    case "--roll-forward" when RuntimeConfig.TryParsePolicy(value, out var policy):
-                        rollForward = policy;
-                        break;
-                    case "--roll-forward":
-                        return null;
-                }
-            }
-
-            if (i >= launch.Arguments.Count || !launch.Arguments[i].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            if (ParseMuxer(launch.Arguments) is not { } app || roots.ForMuxer(launch.FileName) is not { } muxerRoot)
             {
                 return null;
             }
 
-            program = launch.Arguments[i];
-            configPath = runtimeConfig ?? Path.ChangeExtension(program, ".runtimeconfig.json");
-            if (roots.ForMuxer(launch.FileName) is not { } muxerRoot)
-            {
-                return null;
-            }
-
+            (program, configPath, rollForward, fxVersion) = app;
             root = muxerRoot;
         }
         else

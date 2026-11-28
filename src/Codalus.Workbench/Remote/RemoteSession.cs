@@ -80,6 +80,9 @@ public sealed record RemoteSessionOptions(RemoteTargetSpec Spec, string ClientVe
     /// <summary>The local stand-in's server (a <c>.dll</c> or executable); by default the bundle's.</summary>
     public string? LocalServer { get; init; }
 
+    /// <summary>How the local stand-in's server finds the .NET it runs on (<see cref="HostRuntimeCheck.Prepare"/>); tests describe a machine.</summary>
+    public DotnetRootResolver? DotnetRoots { get; init; }
+
     /// <summary>Where the bundles go on the target (a shell expression; tests use a folder of their own).</summary>
     public string ServerHome { get; init; } = RemoteServerBundle.DefaultHome;
 
@@ -180,13 +183,17 @@ public sealed class RemoteSession : IAsyncDisposable
             var bundle = new RemoteServerBundle(options.CacheFolder, options.ClientVersion, options.Hosts, RemoteServerBundle.LocateServer, options.ServerHome);
             progress?.Report($"Checking the Codalus server on {spec.Display}…");
             installed = await bundle.EnsureAsync(target, progress, cancellationToken).ConfigureAwait(false);
-            var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, mode));
+            var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, mode, installed.Runtime));
             transport = new RemoteTransport(program, arguments, spec.Display);
         }
         else
         {
             var server = options.LocalServer ?? LocalServerPath() ?? throw new InvalidOperationException("The remote server (codalus-server) isn't part of this installation.");
-            var launch = ProcessLaunchInfo.FromPath(server, mode);
+            // The hosts' runtime lookup (M49): codalus-server.dll on a root that has the .NET it needs, not the PATH's
+            // first dotnet (Homebrew's .NET 10 before ~/.dotnet's .NET 11 on the maintainer's Mac). Once the login
+            // shell's PATH and DOTNET_ROOT are in (M56), as for every host.
+            await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
+            var launch = HostRuntimeCheck.Prepare(ProcessLaunchInfo.FromPath(server, mode), options.DotnetRoots);
             transport = new RemoteTransport(launch.FileName, launch.Arguments, spec.Display);
         }
 

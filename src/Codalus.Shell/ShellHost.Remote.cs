@@ -154,6 +154,11 @@ public sealed partial class ShellHost
             RemoteLog.AppendLine($"[error] {spec.Display}: {ex}");
             StatusBar.ClearMessage();
             Workbench.StatusBar.Remove(RemoteStatusItem);
+            if (ex is HostRuntimeMissingException missing && ReportHostRuntimeMissing(missing))
+            {
+                return false; // the local server's .NET runtime isn't installed: the runtime's notification offers it
+            }
+
             Workbench.Notifications.Error(Localizer.Format("msg.remote.couldntConnectTo", "Couldn't connect to {0}: {1}", spec.Display, ex.Message));
             return false;
         }

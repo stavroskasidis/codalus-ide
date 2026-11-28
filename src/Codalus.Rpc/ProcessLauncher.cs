@@ -44,8 +44,8 @@ public interface IProcessLauncher
 
 /// <summary>
 /// Starts processes on this machine, with their stdio redirected. A framework-dependent .NET program is checked first
-/// (M49, <see cref="HostRuntimeCheck"/>): when the runtime it needs isn't under the .NET root it would use, it isn't
-/// started, and <see cref="HostRuntimeMissingException"/> says what's missing.
+/// (M49, <see cref="HostRuntimeCheck.Prepare"/>): <c>dotnet app.dll</c> runs on the first root that has its runtime;
+/// when no root it would use has it, it isn't started, and <see cref="HostRuntimeMissingException"/> says what's missing.
 /// </summary>
 public sealed class LocalProcessLauncher : IProcessLauncher
 {
@@ -58,10 +58,8 @@ public sealed class LocalProcessLauncher : IProcessLauncher
     {
         // The login shell's PATH and DOTNET_ROOT, while they're still being taken (M56): the runtime check reads them too.
         await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
-        if (launch.CheckRuntime && HostRuntimeCheck.Check(launch, Roots) is { IsSatisfied: false } missing)
-        {
-            throw new HostRuntimeMissingException(missing);
-        }
+        // A dotnet app.dll gets the muxer of a root that has its runtime, as the app hosts do (not the PATH's first).
+        launch = HostRuntimeCheck.Prepare(launch, Roots);
 
         var psi = new ProcessStartInfo(launch.FileName)
         {
